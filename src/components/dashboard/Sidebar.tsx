@@ -1,4 +1,7 @@
+"use client";
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { 
   BarChart, Boxes, Calendar, FileText, LayoutDashboard, Settings, 
@@ -8,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function Sidebar() {
-  const currentPath = '/platforms/instagram/accounts'; // Hardcoded for demo/v1
+  const currentPath = usePathname();
   
   return (
     <div className="flex h-full w-[260px] flex-col border-r bg-card/50 backdrop-blur-sm">
