@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-23 (sync 2)
+Last synced: 2026-04-23 (sync 3)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Obsidian mirrors it at `02-Architecture/PROJECT_STATE.md`.
 
@@ -174,7 +174,7 @@ PK (creator_id, label_id)
 | `/content` | `(dashboard)/content/page.tsx` | ⬜ Placeholder |
 | `/trends` | `(dashboard)/trends/page.tsx` | ⬜ Mock — UI built, no live data |
 | `/admin` | `(dashboard)/admin/page.tsx` | ⬜ Placeholder |
-| `/platforms/instagram/accounts` | — | ⬜ Mock data |
+| `/platforms/instagram/accounts` | `platforms/instagram/accounts/page.tsx` + `InstagramAccountsClient.tsx` | ✅ Live — real `profiles` query, stat cards, tracking tab URL filter, rank chip client filter, empty state, Unlinked badge |
 | `/platforms/instagram/outliers` | — | ⬜ Placeholder |
 | `/platforms/instagram/classification` | — | ⬜ Placeholder |
 | `/platforms/instagram/analytics` | — | ⬜ Placeholder |

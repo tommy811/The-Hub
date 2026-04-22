@@ -9,32 +9,39 @@ interface StatCardProps {
   colorClass: string;
 }
 
-export function StatCardRow() {
+interface StatCardRowProps {
+  total: number;
+  withContent: number;
+  avgFollowers: string;
+  llmScored: number;
+}
+
+export function StatCardRow({ total, withContent, avgFollowers, llmScored }: StatCardRowProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <StatCard 
-        label="In This Tab" 
-        value="142" 
-        icon={Users} 
-        colorClass="text-indigo-500 bg-indigo-500/10 border-indigo-500/20" 
+      <StatCard
+        label="In This View"
+        value={total}
+        icon={Users}
+        colorClass="text-indigo-500 bg-indigo-500/10 border-indigo-500/20"
       />
-      <StatCard 
-        label="With Reels" 
-        value="87" 
-        icon={Video} 
-        colorClass="text-emerald-500 bg-emerald-500/10 border-emerald-500/20" 
+      <StatCard
+        label="With Content"
+        value={withContent}
+        icon={Video}
+        colorClass="text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
       />
-      <StatCard 
-        label="Avg Followers" 
-        value="450K" 
-        icon={Activity} 
-        colorClass="text-blue-500 bg-blue-500/10 border-blue-500/20" 
+      <StatCard
+        label="Avg Followers"
+        value={avgFollowers}
+        icon={Activity}
+        colorClass="text-blue-500 bg-blue-500/10 border-blue-500/20"
       />
-      <StatCard 
-        label="LLM Scored" 
-        value="112" 
-        icon={FileText} 
-        colorClass="text-amber-500 bg-amber-500/10 border-amber-500/20" 
+      <StatCard
+        label="LLM Scored"
+        value={llmScored}
+        icon={FileText}
+        colorClass="text-amber-500 bg-amber-500/10 border-amber-500/20"
       />
     </div>
   );

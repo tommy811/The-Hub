@@ -1,105 +1,154 @@
-"use client";
+import { createClient } from "@/lib/supabase/server";
+import { InstagramAccountsClient } from "./InstagramAccountsClient";
 
-import { useState } from "react";
-import { StatCardRow } from "@/components/accounts/StatCardRow";
-import { TrackingTabBar } from "@/components/accounts/TrackingTabBar";
-import { RankFilterChips } from "@/components/accounts/RankFilterChips";
-import { AccountCard } from "@/components/accounts/AccountCard";
-import { AddAccountDialog } from "@/components/accounts/AddAccountDialog";
-import { type RankTier } from "@/lib/ranks";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Search, SlidersHorizontal } from "lucide-react";
+export type AccountRowData = {
+  id: string;
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  profileUrl: string | null;
+  followerCount: number | null;
+  postCount: number | null;
+  trackingType: string;
+  isClean: boolean;
+  analysisVersion: string | null;
+  creatorId: string | null;
+  currentScore: number | null;
+  currentRank: string | null;
+  scoredContentCount: number;
+  medianViews: number | null;
+  outlierCount: number;
+  hasContent: boolean;
+};
 
-const MOCK_DATA = [
-  {
-    id: '1', handle: '@viking.barbie', displayName: 'Viking Barbie', avatarUrl: 'https://i.pravatar.cc/300?u=viking',
-    rank: 'diamond' as RankTier, score: 92.4, archetype: 'the_rebel', vibe: 'edgy', category: 'comedy_entertainment',
-    analysisVersion: 'V2', isClean: true, followers: '1.2M', postCount: '450', medianViews: '350K', outliers: 3, fanArchetype: 'the_admirer'
-  },
-  {
-    id: '2', handle: '@jessica.fit', displayName: 'Jessica Fitness', avatarUrl: 'https://i.pravatar.cc/300?u=jess',
-    rank: 'platinum' as RankTier, score: 78.1, archetype: 'the_hero', vibe: 'body_worship', category: 'fitness',
-    analysisVersion: 'V2', isClean: true, followers: '850K', postCount: '210', medianViews: '120K', outliers: 0, fanArchetype: 'the_learner'
-  },
-  {
-    id: '3', handle: '@luxury.life', displayName: 'Lux Lifestyle', avatarUrl: 'https://i.pravatar.cc/300?u=lux',
-    rank: 'gold' as RankTier, score: 65.0, vibe: 'luxury', category: 'lifestyle',
-    analysisVersion: 'V1', isClean: false, followers: '2.5M', postCount: '1.1K', medianViews: '80K', outliers: 1
-  },
-  {
-    id: '4', handle: '@kitchen.hacks', displayName: 'Chef Dave', avatarUrl: 'https://i.pravatar.cc/300?u=chef',
-    rank: 'silver' as RankTier, score: 45.5, archetype: 'the_sage', category: 'food',
-    analysisVersion: 'V2', isClean: true, followers: '120K', postCount: '80', medianViews: '15K', outliers: 0
-  },
-  {
-    id: '5', handle: '@crypto.bro', displayName: 'Web3 Dave', avatarUrl: 'https://i.pravatar.cc/300?u=web3',
-    rank: 'plastic' as RankTier, score: 12.0, archetype: 'the_jester', vibe: 'confident', category: 'education',
-    analysisVersion: 'V2', isClean: false, followers: '15K', postCount: '400', medianViews: '2K', outliers: 0
+export default async function InstagramAccountsPage({
+  searchParams,
+}: {
+  searchParams: { type?: string };
+}) {
+  const supabase = await createClient();
+  const activeType = searchParams?.type ?? "all";
+
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("id")
+    .limit(1)
+    .single();
+
+  if (!ws) {
+    return <InstagramAccountsClient accounts={[]} activeType={activeType} />;
   }
-];
 
-export default function InstagramAccountsPage() {
-  const [activeTab, setActiveTab] = useState("all");
-  const [selectedRanks, setSelectedRanks] = useState<RankTier[]>([]);
-  
-  const handleRankToggle = (rank: RankTier | 'all') => {
-    if (rank === 'all') {
-      setSelectedRanks([]);
-    } else {
-      setSelectedRanks(prev => 
-        prev.includes(rank) ? prev.filter(r => r !== rank) : [...prev, rank]
-      );
+  const wsId = ws.id;
+
+  // Profiles + scores in one query
+  const { data: rawProfiles } = await supabase
+    .from("profiles")
+    .select(`
+      id, handle, display_name, avatar_url, profile_url,
+      follower_count, post_count, tracking_type, is_clean,
+      analysis_version, creator_id,
+      profile_scores ( current_score, current_rank, scored_content_count )
+    `)
+    .eq("workspace_id", wsId)
+    .eq("platform", "instagram")
+    .eq("account_type", "social");
+
+  if (!rawProfiles || rawProfiles.length === 0) {
+    return <InstagramAccountsClient accounts={[]} activeType={activeType} />;
+  }
+
+  const profileIds = rawProfiles.map((p) => p.id);
+
+  // Snapshots + scraped content in parallel
+  const [snapshotsRes, contentRes] = await Promise.all([
+    supabase
+      .from("profile_metrics_snapshots")
+      .select("profile_id, median_views, snapshot_date")
+      .in("profile_id", profileIds)
+      .order("snapshot_date", { ascending: false }),
+
+    supabase
+      .from("scraped_content")
+      .select("profile_id, is_outlier, view_count, posted_at")
+      .in("profile_id", profileIds),
+  ]);
+
+  // Latest snapshot per profile
+  const snapshotMap = new Map<string, number>();
+  for (const snap of snapshotsRes.data ?? []) {
+    if (!snapshotMap.has(snap.profile_id)) {
+      snapshotMap.set(snap.profile_id, snap.median_views);
     }
-  };
+  }
 
-  const rankCounts = { all: 142, diamond: 4, platinum: 18, gold: 45, silver: 40, bronze: 22, plastic: 13 };
+  // Content stats: has_content, outlier counts, view arrays for live fallback
+  const contentSet = new Set<string>();
+  const outlierCountMap = new Map<string, number>();
+  const viewsByProfile = new Map<string, number[]>();
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-  return (
-    <div className="flex flex-col gap-8 pb-10">
-      
-      {/* Header Row */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Instagram Accounts</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Manage tracking types, ranks, and intelligent routing for IG profiles.</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input type="search" placeholder="Filter handles..." className="pl-9 bg-card border-border/50" />
-          </div>
-          <Select defaultValue="quality">
-            <SelectTrigger className="w-[180px] bg-card border-border/50">
-              <SlidersHorizontal className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="quality">Quality Score</SelectItem>
-              <SelectItem value="followers">Followers</SelectItem>
-              <SelectItem value="outliers">Outlier Count</SelectItem>
-              <SelectItem value="recent">Recently Scraped</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+  for (const row of contentRes.data ?? []) {
+    contentSet.add(row.profile_id);
+    if (row.is_outlier) {
+      outlierCountMap.set(row.profile_id, (outlierCountMap.get(row.profile_id) ?? 0) + 1);
+    }
+    // Collect view_counts for the live median fallback (profiles missing a snapshot)
+    if (!snapshotMap.has(row.profile_id) && row.view_count != null && row.posted_at) {
+      if (new Date(row.posted_at) >= cutoff) {
+        if (!viewsByProfile.has(row.profile_id)) viewsByProfile.set(row.profile_id, []);
+        viewsByProfile.get(row.profile_id)!.push(row.view_count);
+      }
+    }
+  }
 
-      <StatCardRow />
+  // Compute live median for profiles with content but no snapshot
+  for (const [profileId, views] of viewsByProfile) {
+    if (views.length > 0) {
+      const sorted = [...views].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median =
+        sorted.length % 2 === 0
+          ? (sorted[mid - 1] + sorted[mid]) / 2
+          : sorted[mid];
+      snapshotMap.set(profileId, Math.round(median));
+    }
+  }
 
-      <div className="flex flex-col gap-5 mt-2">
-        <TrackingTabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <RankFilterChips selectedRanks={selectedRanks} counts={rankCounts} onToggle={handleRankToggle} />
-      </div>
+  // Assemble typed rows
+  const accounts: AccountRowData[] = rawProfiles.map((p) => {
+    const scores = Array.isArray(p.profile_scores)
+      ? (p.profile_scores[0] ?? null)
+      : (p.profile_scores ?? null);
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-4">
-        {MOCK_DATA.map((account) => (
-          <AccountCard key={account.id} platform="instagram" {...account} />
-        ))}
-      </div>
+    return {
+      id: p.id,
+      handle: p.handle ?? "",
+      displayName: p.display_name ?? p.handle ?? "",
+      avatarUrl: p.avatar_url ?? null,
+      profileUrl: p.profile_url ?? null,
+      followerCount: p.follower_count ?? null,
+      postCount: p.post_count ?? null,
+      trackingType: p.tracking_type ?? "unreviewed",
+      isClean: p.is_clean ?? false,
+      analysisVersion: p.analysis_version ?? null,
+      creatorId: p.creator_id ?? null,
+      currentScore: scores?.current_score ?? null,
+      currentRank: scores?.current_rank ?? null,
+      scoredContentCount: scores?.scored_content_count ?? 0,
+      medianViews: snapshotMap.get(p.id) ?? null,
+      outlierCount: outlierCountMap.get(p.id) ?? 0,
+      hasContent: contentSet.has(p.id),
+    };
+  });
 
-      <AddAccountDialog />
-    </div>
-  );
+  // Default sort: quality score desc, unscored last
+  accounts.sort((a, b) => {
+    if (a.currentScore === null && b.currentScore === null) return 0;
+    if (a.currentScore === null) return 1;
+    if (b.currentScore === null) return -1;
+    return b.currentScore - a.currentScore;
+  });
+
+  return <InstagramAccountsClient accounts={accounts} activeType={activeType} />;
 }
