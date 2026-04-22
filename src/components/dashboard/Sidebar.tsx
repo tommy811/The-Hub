@@ -45,6 +45,16 @@ export function Sidebar() {
             <NavItem href="#" icon={Wallet} label="Finance" disabled />
           </div>
 
+          {/* CREATORS */}
+          <div className="flex flex-col gap-1 mb-4">
+            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Creators</h4>
+            <NavItem href="/creators" icon={Users} label="All Creators" currentPath={currentPath} badgeCount={2} badgeLabel="Discovering" />
+            <NavItem href="/creators?type=managed" icon={Users} label="Managed" currentPath={currentPath} />
+            <NavItem href="/creators?type=candidate" icon={Users} label="Candidates" currentPath={currentPath} />
+            <NavItem href="/creators?type=competitor" icon={Users} label="Competitors" currentPath={currentPath} />
+            <NavItem href="/creators?type=inspiration" icon={Users} label="Inspiration" currentPath={currentPath} />
+          </div>
+
           {/* PLATFORMS */}
           <div className="flex flex-col gap-1">
             <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Platforms</h4>
@@ -87,7 +97,7 @@ export function Sidebar() {
   );
 }
 
-function NavItem({ href, icon: Icon, label, disabled, currentPath }: { href: string; icon: any; label: string; disabled?: boolean; currentPath?: string }) {
+function NavItem({ href, icon: Icon, label, disabled, currentPath, badgeCount, badgeLabel }: { href: string; icon: any; label: string; disabled?: boolean; currentPath?: string; badgeCount?: number; badgeLabel?: string }) {
   const isActive = currentPath === href && !disabled;
   
   if (disabled) {
@@ -115,6 +125,14 @@ function NavItem({ href, icon: Icon, label, disabled, currentPath }: { href: str
         <Icon className={cn("h-4 w-4", isActive ? "text-indigo-400" : "group-hover:text-foreground")} />
         <span className={isActive ? "font-semibold" : ""}>{label}</span>
       </div>
+      {badgeCount !== undefined && badgeCount > 0 && (
+         <div className="flex items-center gap-1.5">
+           {badgeLabel && <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 opacity-70 group-hover:opacity-100 transition-opacity">{badgeLabel}</span>}
+           <Badge className="h-5 px-1.5 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 border-indigo-500/30 font-bold tabular-nums">
+             {badgeCount}
+           </Badge>
+         </div>
+      )}
     </Link>
   );
 }

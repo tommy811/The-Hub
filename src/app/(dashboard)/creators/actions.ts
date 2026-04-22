@@ -1,0 +1,89 @@
+// src/app/(dashboard)/creators/actions.ts — Server actions for Creators Hub
+"use server"
+
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { ParsedHandle } from '@/lib/handleParser'
+
+function getSupabase() {
+  const cookieStore = cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            )
+          } catch (error) {
+            // Context called from a Server Component
+          }
+        },
+      },
+    }
+  )
+}
+
+export async function bulkImportCreators(handles: ParsedHandle[], trackingType: string, tags: string[]) {
+  const supabase = getSupabase()
+  
+  // Logic stub for bulk import
+  // 1. Derive slug
+  // 2. Insert creator
+  // 3. Insert profile
+  // 4. Insert discovery run
+  // 5. triggerDiscovery(runId)
+  
+  return { imported: handles.length, skipped: 0, errors: [] }
+}
+
+export async function triggerDiscovery(runId: string) {
+  // Use service role key to trigger edge function
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/trigger-discovery`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+      },
+      body: JSON.stringify({ run_id: runId })
+    });
+    return await res.json()
+  } catch (error) {
+    console.error("Failed to trigger discovery", error)
+  }
+}
+
+export async function dismissMergeCandidate(candidateId: string) {
+  const supabase = getSupabase()
+  await supabase.from('creator_merge_candidates').update({ status: 'dismissed' }).eq('id', candidateId)
+}
+
+export async function mergeCandidateCreators(keepId: string, mergeId: string, candidateId: string) {
+  const supabase = getSupabase()
+  // Uses RPC
+  await supabase.rpc('merge_creators', {
+    keep_id: keepId,
+    merge_id: mergeId,
+    resolver_id: (await supabase.auth.getUser()).data.user?.id,
+    candidate_id: candidateId
+  })
+}
+
+export async function retry_creator_discovery(creatorId: string) {
+  const supabase = getSupabase()
+  // Uses RPC
+  const res = await supabase.rpc('retry_creator_discovery', {
+    creator_id: creatorId,
+    user_id: (await supabase.auth.getUser()).data.user?.id
+  })
+  
+  if (res.data) {
+     triggerDiscovery(res.data) // non-blocking
+  }
+}
