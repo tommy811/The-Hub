@@ -66,21 +66,21 @@ export async function dismissMergeCandidate(candidateId: string) {
 
 export async function mergeCandidateCreators(keepId: string, mergeId: string, candidateId: string) {
   const supabase = getSupabase()
-  // Uses RPC
+  // TODO: resolver_id will be null until Supabase Auth session is wired — anon key has no auth.uid()
   await supabase.rpc('merge_creators', {
-    keep_id: keepId,
-    merge_id: mergeId,
-    resolver_id: (await supabase.auth.getUser()).data.user?.id,
-    candidate_id: candidateId
+    p_keep_id: keepId,
+    p_merge_id: mergeId,
+    p_resolver_id: (await supabase.auth.getUser()).data.user?.id,
+    p_candidate_id: candidateId
   })
 }
 
 export async function retry_creator_discovery(creatorId: string) {
   const supabase = getSupabase()
-  // Uses RPC
+  // TODO: p_user_id will be null until Supabase Auth session is wired — anon key has no auth.uid()
   const res = await supabase.rpc('retry_creator_discovery', {
-    creator_id: creatorId,
-    user_id: (await supabase.auth.getUser()).data.user?.id
+    p_creator_id: creatorId,
+    p_user_id: (await supabase.auth.getUser()).data.user?.id
   })
   
   if (res.data) {

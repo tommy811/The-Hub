@@ -53,7 +53,6 @@ export default async function CreatorsHubPage({ searchParams }: { searchParams: 
     hybrid_ai: allStats?.filter(c => c.tracking_type === 'hybrid_ai').length || 0,
     coach: allStats?.filter(c => c.tracking_type === 'coach').length || 0,
     unreviewed: allStats?.filter(c => c.tracking_type === 'unreviewed').length || 0,
-    scored: allStats?.filter(c => c.tracking_type === 'scored').length || 0,
   };
 
   const { count: mergeCount } = await supabase.from('creator_merge_candidates').select('*', { count: 'exact', head: true }).eq('workspace_id', wsId).eq('status', 'pending');

@@ -74,6 +74,13 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     icon: Briefcase,
     accountType: "social",
   },
+  patreon: {
+    label: "Patreon",
+    color: "#FF424D",
+    bgColor: "rgba(255, 66, 77, 0.1)",
+    icon: DollarSign,
+    accountType: "monetization",
+  },
   onlyfans: {
     label: "OnlyFans",
     color: "#00AFF0",

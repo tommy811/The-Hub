@@ -89,7 +89,7 @@ export default async function CommandCenter() {
         <Card className="col-span-1 shadow-sm border-border/50">
           <CardHeader>
             <CardTitle className="text-lg">Recent Outliers</CardTitle>
-            <CardDescription>Posts performing &gt;2x above their median average.</CardDescription>
+            <CardDescription>Posts performing &gt;3× above their median average.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <OutlierItem handle="@viking.barbie" score="94.2" median="350K" views="1.2M" />

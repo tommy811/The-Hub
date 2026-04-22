@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 // 'managed', 'inspiration', 'competitor', 'candidate', 'hybrid_ai', 'coach', 'unreviewed'
-export type TrackingType = 'managed' | 'inspiration' | 'competitor' | 'candidate' | 'hybrid_ai' | 'coach' | 'unreviewed' | 'scored';
+export type TrackingType = 'managed' | 'inspiration' | 'competitor' | 'candidate' | 'hybrid_ai' | 'coach' | 'unreviewed';
 
 const TABS: { id: TrackingType | 'all'; label: string; color?: string }[] = [
   { id: 'all', label: 'All' },
@@ -12,7 +12,6 @@ const TABS: { id: TrackingType | 'all'; label: string; color?: string }[] = [
   { id: 'hybrid_ai', label: 'Hybrid AI', color: 'bg-emerald-500' },
   { id: 'coach', label: 'Coach', color: 'bg-teal-500' },
   { id: 'unreviewed', label: 'Unreviewed', color: 'bg-slate-500' },
-  { id: 'scored', label: 'Scored', color: 'bg-cyan-500' },
 ];
 
 interface TrackingTabBarProps {
