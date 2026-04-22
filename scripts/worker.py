@@ -23,7 +23,7 @@ def process_single(row: dict):
     )
     run(inp)
 
-async def poll_loop():
+async def poll_loop(args=None):
     sb = get_supabase()
     console.log(f"[green]Worker started. Polling every {POLL_INTERVAL_SECONDS}s. Max concurrency: {MAX_CONCURRENT_RUNS}.[/green]")
     
@@ -56,7 +56,17 @@ async def poll_loop():
             except Exception as e:
                 console.log(f"[red]Error in polling loop: {e}[/red]")
             
+            if getattr(args, 'once', False):
+                break
+                
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
 if __name__ == "__main__":
-    asyncio.run(poll_loop())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true", help="Run one iteration and exit")
+    args = parser.parse_args()
+    
+    # Inject args into the loop scope or make it global
+    global_args = args
+    asyncio.run(poll_loop(args))

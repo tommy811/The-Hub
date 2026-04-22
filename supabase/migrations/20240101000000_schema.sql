@@ -13,7 +13,6 @@ CREATE TYPE content_category AS ENUM (
     'travel', 'food', 'music', 'gaming', 'education', 'other'
 );
 CREATE TYPE workspace_role AS ENUM ('owner', 'admin', 'member');
-CREATE TYPE signal_type AS ENUM ('velocity_spike', 'outlier_post', 'emerging_archetype', 'hook_pattern', 'cadence_change');
 
 -- Tables
 CREATE TABLE workspaces (
@@ -148,41 +147,6 @@ CREATE TABLE profile_scores (
     PRIMARY KEY (profile_id)
 );
 
-CREATE TABLE trend_signals (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-    signal_type signal_type NOT NULL,
-    profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    content_id UUID REFERENCES scraped_content(id) ON DELETE CASCADE,
-    score NUMERIC(5,2),
-    detected_at TIMESTAMPTZ DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'::jsonb,
-    is_dismissed BOOLEAN DEFAULT false
-);
-
-CREATE TABLE alerts_config (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    rule_type TEXT NOT NULL,
-    threshold_json JSONB DEFAULT '{}'::jsonb,
-    target_profile_ids UUID[] DEFAULT '{}',
-    is_enabled BOOLEAN DEFAULT true,
-    notify_emails TEXT[] DEFAULT '{}',
-    created_by UUID REFERENCES auth.users(id)
-);
-
-CREATE TABLE alerts_feed (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-    config_id UUID REFERENCES alerts_config(id) ON DELETE CASCADE,
-    content_id UUID REFERENCES scraped_content(id) ON DELETE CASCADE,
-    profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
-    triggered_at TIMESTAMPTZ DEFAULT NOW(),
-    is_read BOOLEAN DEFAULT false,
-    payload JSONB DEFAULT '{}'::jsonb
-);
-
 -- Functions
 CREATE OR REPLACE FUNCTION flag_outliers(p_profile_id uuid) RETURNS void AS $$
 DECLARE
@@ -232,9 +196,6 @@ ALTER TABLE content_metrics_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profile_metrics_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE content_analysis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profile_scores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trend_signals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alerts_config ENABLE ROW LEVEL SECURITY;
-ALTER TABLE alerts_feed ENABLE ROW LEVEL SECURITY;
 
 -- Helper to check workspace membership
 CREATE OR REPLACE FUNCTION public.is_workspace_member(ws_id UUID)
@@ -269,10 +230,6 @@ CREATE POLICY "Users view profile scores" ON profile_scores FOR SELECT USING (
   EXISTS (SELECT 1 FROM profiles WHERE profiles.id = profile_scores.profile_id AND public.is_workspace_member(profiles.workspace_id))
 );
 
-CREATE POLICY "Users view trend signals" ON trend_signals FOR SELECT USING (public.is_workspace_member(workspace_id));
-CREATE POLICY "Users view alerts config" ON alerts_config FOR SELECT USING (public.is_workspace_member(workspace_id));
-CREATE POLICY "Users view alerts feed" ON alerts_feed FOR SELECT USING (public.is_workspace_member(workspace_id));
-
 -- Indexes
 CREATE INDEX idx_workspace_members_user ON workspace_members(user_id);
 CREATE INDEX idx_profiles_workspace_platform_tracking ON profiles(workspace_id, platform, tracking_type);
@@ -280,7 +237,6 @@ CREATE INDEX idx_scraped_content_profile_posted_desc ON scraped_content(profile_
 CREATE INDEX idx_snapshots_content_date ON content_metrics_snapshots(content_id, snapshot_date);
 CREATE INDEX idx_snapshots_profile_date ON profile_metrics_snapshots(profile_id, snapshot_date);
 CREATE INDEX idx_scraped_content_outliers ON scraped_content(profile_id) WHERE is_outlier = true;
-CREATE INDEX idx_trend_signals_workspace ON trend_signals(workspace_id);
 
 -- SEED BLOCK
 /*

@@ -1,77 +1,82 @@
 // src/app/(dashboard)/creators/page.tsx — Creators Hub page
-"use client";
-
-import { useState } from "react";
 import { Plus, Users2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MergeAlertBanner } from "@/components/creators/MergeAlertBanner";
-import { StatusTabBar } from "@/components/creators/StatusTabBar";
 import { CreatorCard } from "@/components/creators/CreatorCard";
 import { BulkImportDialog } from "@/components/creators/BulkImportDialog";
-import { TrackingTabBar } from "@/components/accounts/TrackingTabBar";
 
-// Mock data until Supabase realtime is hooked up
-const MOCK_CREATORS = [
-  {
-    id: "1",
-    canonicalName: "Sunny Rose",
-    slug: "sunnyrose",
-    avatarUrl: "https://i.pravatar.cc/300?u=sunnyrose",
-    primaryPlatform: "instagram",
-    status: 'ready' as const,
-    trackingType: "managed",
-    monetizationModel: "subscription",
-    tags: ["top_tier", "fitness"],
-    knownUsernames: ["@sunnyrose.ig", "@sunny.tv", "of:sunnyrose"],
-    accountCounts: { social: 3, monetization: 2, link_in_bio: 1 },
-    totalFollowers: "4.2M",
-    updatedAgo: "2H AGO",
-    hasMergeCandidate: true
-  },
-  {
-    id: "2",
-    canonicalName: "Viking Barbie",
-    slug: "vikingbarbie",
-    primaryPlatform: "tiktok",
-    status: 'processing' as const,
-    trackingType: "competitor",
-    tags: ["model"],
-    accountCounts: {} as Record<string, number>,
-    totalFollowers: "0",
-    updatedAgo: "JUST NOW",
-    hasMergeCandidate: false
-  },
-  {
-    id: "3",
-    canonicalName: "Dark Knight",
-    slug: "darkknight",
-    primaryPlatform: "youtube",
-    status: 'failed' as const,
-    trackingType: "candidate",
-    tags: ["gaming"],
-    accountCounts: {} as Record<string, number>,
-    totalFollowers: "0",
-    updatedAgo: "1D AGO",
-    hasMergeCandidate: false,
-    errorMessage: "Could not resolve bio link domain target."
+import { createClient } from "@/lib/supabase/server";
+
+import { CreatorsFilters } from "@/components/creators/CreatorsFilters";
+
+export default async function CreatorsHubPage({ searchParams }: { searchParams: { status?: string, tracking?: string } }) {
+  const supabase = await createClient();
+  const activeStatus = searchParams?.status || "all";
+  const activeTracking = searchParams?.tracking || "all";
+
+  // Enforce workspace
+  const { data: ws } = await supabase.from('workspaces').select('id').limit(1).single();
+  const wsId = ws?.id;
+
+  let query = supabase.from('creators').select(`
+    *,
+    profiles(count),
+    creator_merge_candidates!creator_a_id(id)
+  `).eq('workspace_id', wsId);
+
+  if (activeStatus !== "all") {
+    query = query.eq('onboarding_status', activeStatus);
   }
-];
+  if (activeTracking !== "all") {
+    query = query.eq('tracking_type', activeTracking);
+  }
 
-export default function CreatorsHubPage() {
-  const [activeStatus, setActiveStatus] = useState("all");
-  const [trackingType, setTrackingType] = useState("all");
+  const { data: rawCreators } = await query.order('created_at', { ascending: false });
   
-  // Realtime count mock
+  // Also get the status & tracking counts
+  const { data: allStats } = await supabase.from('creators').select('onboarding_status, tracking_type').eq('workspace_id', wsId);
   const counts = {
-    all: 124,
-    processing: 1,
-    ready: 115,
-    failed: 1,
-    archived: 7
+    all: allStats?.length || 0,
+    processing: allStats?.filter(c => c.onboarding_status === 'processing').length || 0,
+    ready: allStats?.filter(c => c.onboarding_status === 'ready').length || 0,
+    failed: allStats?.filter(c => c.onboarding_status === 'failed').length || 0,
+    archived: allStats?.filter(c => c.onboarding_status === 'archived').length || 0,
   };
 
-  const mergeCandidatesCount = 1;
+  const trackingCounts = {
+    all: allStats?.length || 0,
+    managed: allStats?.filter(c => c.tracking_type === 'managed').length || 0,
+    inspiration: allStats?.filter(c => c.tracking_type === 'inspiration').length || 0,
+    competitor: allStats?.filter(c => c.tracking_type === 'competitor').length || 0,
+    candidate: allStats?.filter(c => c.tracking_type === 'candidate').length || 0,
+    hybrid_ai: allStats?.filter(c => c.tracking_type === 'hybrid_ai').length || 0,
+    coach: allStats?.filter(c => c.tracking_type === 'coach').length || 0,
+    unreviewed: allStats?.filter(c => c.tracking_type === 'unreviewed').length || 0,
+    scored: allStats?.filter(c => c.tracking_type === 'scored').length || 0,
+  };
+
+  const { count: mergeCount } = await supabase.from('creator_merge_candidates').select('*', { count: 'exact', head: true }).eq('workspace_id', wsId).eq('status', 'pending');
+
+  const creators = (rawCreators || []).map(c => ({
+    id: c.id,
+    canonicalName: c.canonical_name,
+    slug: c.slug,
+    avatarUrl: undefined, // Would fetch from profiles if needed
+    primaryPlatform: c.primary_platform || 'other',
+    status: c.onboarding_status as 'processing' | 'ready' | 'failed' | 'archived',
+    trackingType: c.tracking_type,
+    monetizationModel: c.monetization_model,
+    tags: c.tags || [],
+    knownUsernames: c.known_usernames || [],
+    accountCounts: { social: c.profiles && Array.isArray(c.profiles) ? c.profiles[0]?.count || 0 : 0 }, 
+    totalFollowers: "0",
+    updatedAgo: "JUST NOW",
+    hasMergeCandidate: c.creator_merge_candidates && c.creator_merge_candidates.length > 0,
+    errorMessage: c.last_discovery_error
+  }));
+
+  const mergeCandidatesCount = mergeCount || 0;
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -103,21 +108,14 @@ export default function CreatorsHubPage() {
         </div>
       </div>
 
-      <MergeAlertBanner count={mergeCandidatesCount} onReview={() => {}} onDismiss={() => {}} />
+      <MergeAlertBanner count={mergeCandidatesCount} />
 
-      {/* Filters */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <StatusTabBar counts={counts} activeStatus={activeStatus} onStatusChange={setActiveStatus} />
-        
-        {/* We reuse the generic TrackingTabBar from the accounts hub, though adapted for chips if needed. 
-            For now, the existing TrackingTabBar looks good as a secondary filter. */}
-        <TrackingTabBar onTabChange={setTrackingType} activeTab={trackingType} />
-      </div>
+      <CreatorsFilters counts={counts} trackingCounts={trackingCounts} activeStatus={activeStatus} activeTracking={activeTracking} />
 
       {/* Grid */}
-      {MOCK_CREATORS.length > 0 ? (
+      {creators.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {MOCK_CREATORS.map(creator => (
+          {creators.map(creator => (
             <CreatorCard key={creator.id} {...creator} />
           ))}
         </div>

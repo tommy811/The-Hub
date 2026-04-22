@@ -14,6 +14,8 @@ import { parseHandles, type ParsedHandle } from "@/lib/handleParser";
 import { HandleChipPreview } from "./HandleChipPreview";
 import { PLATFORMS } from "@/lib/platforms";
 
+import { bulkImportCreators } from "@/app/actions";
+
 export function BulkImportDialog() {
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState("");
@@ -50,8 +52,11 @@ export function BulkImportDialog() {
 
   const handleBulkSubmit = async () => {
     setIsSubmitting(true);
-    // TODO: Connect to server action bulkImportCreators
-    await new Promise(r => setTimeout(r, 1000));
+    try {
+      await bulkImportCreators(rawText, trackingType, tags, assignedPlatforms);
+    } catch (e) {
+      console.error(e);
+    }
     setIsSubmitting(false);
     setOpen(false);
     setRawText("");

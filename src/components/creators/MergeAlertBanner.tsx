@@ -3,17 +3,25 @@
 
 import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 interface MergeAlertBannerProps {
   count: number;
-  onReview: () => void;
-  onDismiss?: () => void;
 }
 
-export function MergeAlertBanner({ count, onReview, onDismiss }: MergeAlertBannerProps) {
+export function MergeAlertBanner({ count }: MergeAlertBannerProps) {
+  const [isVisible, setIsVisible] = useState(true);
+  const router = useRouter();
+
+  // Reset visibility if count becomes > 0 again
+  useEffect(() => {
+    if (count > 0) setIsVisible(true);
+  }, [count]);
+
   return (
     <AnimatePresence>
-      {count > 0 && (
+      {count > 0 && isVisible && (
         <motion.div
           initial={{ opacity: 0, height: 0, marginBottom: 0 }}
           animate={{ opacity: 1, height: "auto", marginBottom: 24 }}
@@ -29,16 +37,14 @@ export function MergeAlertBanner({ count, onReview, onDismiss }: MergeAlertBanne
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={onReview}
+                onClick={() => router.push('/admin')}
                 className="flex items-center gap-1 text-sm font-semibold hover:text-amber-400 transition-colors"
               >
                 Review <ArrowRight className="h-4 w-4" />
               </button>
-              {onDismiss && (
-                <button onClick={onDismiss} className="p-1 hover:bg-amber-500/20 rounded opacity-60 hover:opacity-100 transition-all">
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+              <button onClick={() => setIsVisible(false)} className="p-1 hover:bg-amber-500/20 rounded opacity-60 hover:opacity-100 transition-all">
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </motion.div>

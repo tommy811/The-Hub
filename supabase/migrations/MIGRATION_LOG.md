@@ -6,7 +6,7 @@ Base platform schema: workspaces, workspace_members, profiles, scraped_content,
 
 content_metrics_snapshots, profile_metrics_snapshots, content_analysis,
 
-profile_scores, trend_signals, alerts_config, alerts_feed.
+profile_scores.
 
 Functions: calculate_rank, flag_outliers, refresh_profile_score, is_workspace_member.
 

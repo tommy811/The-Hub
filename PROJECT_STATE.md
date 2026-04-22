@@ -8,7 +8,6 @@
 - **content_metrics_snapshots & profile_metrics_snapshots**: Time-series tables tracking daily velocity and metric shifts.
 - **content_analysis**: LLM-generated output, linked strictly 1:1 with scraped content.
 - **profile_scores**: Continuously aggregated view of a profile's average quality, assigning a rank.
-- **trend_signals & alerts**: Core event bus for spikes and outliers. 
 
 ## Enum Values
 * **platform**: `instagram`, `tiktok`, `youtube`, `patreon`, `twitter`, `linkedin`
@@ -31,4 +30,3 @@ Must be present in `.env.local`:
 - `SUPABASE_SERVICE_ROLE_KEY` (Python)
 - `APIFY_TOKEN` (Python)
 - `GEMINI_API_KEY` (Python)
-- `RESEND_API_KEY` (Python)

@@ -18,7 +18,7 @@ interface CreatorCardProps {
   slug: string;
   avatarUrl?: string;
   primaryPlatform: string;
-  status: 'processing' | 'ready' | 'failed';
+  status: 'processing' | 'ready' | 'failed' | 'archived';
   trackingType: string;
   monetizationModel?: string;
   tags: string[];

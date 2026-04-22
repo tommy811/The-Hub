@@ -34,8 +34,6 @@ ALTER TYPE post_type ADD VALUE IF NOT EXISTS 'youtube_short';
 ALTER TYPE post_type ADD VALUE IF NOT EXISTS 'youtube_long';
 ALTER TYPE post_type ADD VALUE IF NOT EXISTS 'other';
 
-ALTER TYPE signal_type ADD VALUE IF NOT EXISTS 'new_monetization_detected';
-
 
 -- ============================================================
 -- STEP 2: New enums

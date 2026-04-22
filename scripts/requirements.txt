@@ -7,3 +7,4 @@ tenacity==8.2.3
 rapidfuzz==3.8.1
 rich==13.7.1
 python-dotenv==1.0.1
+apify-client==1.6.4

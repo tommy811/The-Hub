@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import google.generativeai as genai
 from tenacity import retry, stop_after_attempt, wait_exponential
 from common import get_supabase, get_gemini_key, console
+from apify_scraper import scrape_instagram_profile
 
 # --- Models ---
 class DiscoveryInput(BaseModel):
@@ -166,6 +167,21 @@ def run(inp: DiscoveryInput) -> None:
                  
         res = run_gemini_discovery(ctx, resolved)
         commit(inp.run_id, res)
+        
+        # Trigger follow-up Apify Scrape if we found an IG account
+        console.log("[cyan]Checking if Apify scrape is needed...[/cyan]")
+        ig_accounts = [acc for acc in res.proposed_accounts if acc.platform == "instagram"]
+        
+        if ig_accounts:
+            ig_handle = ig_accounts[0].handle
+            if not ig_handle and ig_accounts[0].url:
+                 ig_handle = ig_accounts[0].url.strip('/').split('/')[-1]
+                 
+            if ig_handle:
+                console.log(f"[cyan]Dispatching Apify scrape for detected IG handle: {ig_handle}[/cyan]")
+                # We do a small scrape (5 posts) on initial discovery to populate recent content
+                scrape_instagram_profile(str(inp.workspace_id), ig_handle, limit=5)
+            
     except Exception as e:
         console.log(f"[red]Fatal discovery error: {str(e)}[/red]")
         try:

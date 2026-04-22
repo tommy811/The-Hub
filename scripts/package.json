@@ -1,0 +1,7 @@
+{
+  "name": "backend-runner",
+  "version": "1.0.0",
+  "scripts": {
+    "start:python": "pip install -r scripts/requirements.txt && python scripts/worker.py --once"
+  }
+}

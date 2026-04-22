@@ -1,8 +1,26 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, BellRing, Sparkles, TrendingUp } from "lucide-react";
+import { Activity, Sparkles, TrendingUp, Users, Video, Search } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 
-export default function CommandCenter() {
+export default async function CommandCenter() {
+  const supabase = await createClient();
+  
+  // Enforce workspace
+  const { data: ws } = await supabase.from('workspaces').select('id').limit(1).single();
+  const wsId = ws?.id;
+
+  // Real data queries
+  const { count: creatorCount } = await supabase.from('creators').select('*', { count: 'exact', head: true }).eq('workspace_id', wsId);
+  const { count: postCount } = await supabase.from('scraped_content').select('*', { count: 'exact', head: true });
+  
+  // Pending discovery pipeline
+  const { count: pendingQueue } = await supabase.from('discovery_runs')
+    .select('*', { count: 'exact', head: true })
+    .eq('workspace_id', wsId)
+    .in('status', ['pending', 'processing']);
+
   return (
     <div className="flex flex-col gap-8 pb-10">
       
@@ -13,27 +31,31 @@ export default function CommandCenter() {
 
       {/* Stats Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-card shadow-sm border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tracked Accounts</CardTitle>
-            <UsersIcon className="h-4 w-4 text-indigo-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">154</div>
-            <p className="text-xs text-muted-foreground mt-1">+4 from last week</p>
-          </CardContent>
-        </Card>
+        <Link href="/creators">
+          <Card className="bg-card shadow-sm border-border/50 hover:bg-muted/50 transition-colors cursor-pointer h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Tracked Creators</CardTitle>
+              <Users className="h-4 w-4 text-indigo-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{creatorCount || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Cross-platform profiles managed</p>
+            </CardContent>
+          </Card>
+        </Link>
         
-        <Card className="bg-card shadow-sm border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Posts Ingested (7d)</CardTitle>
-            <VideoIcon className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">1,204</div>
-            <p className="text-xs text-muted-foreground mt-1">12 pending scoring</p>
-          </CardContent>
-        </Card>
+        <Link href="/content">
+          <Card className="bg-card shadow-sm border-border/50 hover:bg-muted/50 transition-colors cursor-pointer h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Posts Ingested</CardTitle>
+              <Video className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{postCount || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total posts in database</p>
+            </CardContent>
+          </Card>
+        </Link>
         
         <Card className="bg-card shadow-sm border-border/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -41,21 +63,23 @@ export default function CommandCenter() {
             <Sparkles className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">68.4</div>
-            <p className="text-xs text-muted-foreground mt-1"><span className="text-emerald-500 font-medium">+2.1</span> from last week</p>
+            <div className="text-2xl font-bold">--</div>
+            <p className="text-xs text-muted-foreground mt-1">LLM scoring running in bg</p>
           </CardContent>
         </Card>
         
-        <Card className="bg-card shadow-sm border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Alerts</CardTitle>
-            <BellRing className="h-4 w-4 text-rose-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">3</div>
-            <p className="text-xs text-muted-foreground mt-1">Velocity spikes detected</p>
-          </CardContent>
-        </Card>
+        <Link href="/creators?status=processing">
+          <Card className="bg-card shadow-sm border-border/50 hover:bg-muted/50 transition-colors cursor-pointer h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Discovery Queue</CardTitle>
+              <Search className="h-4 w-4 text-sky-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingQueue || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Pending AI resolution</p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Main Content Area */}
