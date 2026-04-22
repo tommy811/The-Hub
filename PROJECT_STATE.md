@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-23
+Last synced: 2026-04-23 (sync 2)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Obsidian mirrors it at `02-Architecture/PROJECT_STATE.md`.
 
@@ -42,7 +42,7 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 
 ## 4. Complete Schema (Live + Pending)
 
-### 4.1 Currently live in Supabase (20 tables)
+### 4.1 Currently live in Supabase (18 tables)
 
 **Tenancy**
 - `workspaces` — id, name, slug, owner_id, created_at
