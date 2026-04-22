@@ -20,6 +20,7 @@ export function BulkImportDialog() {
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [trackingType, setTrackingType] = useState("unreviewed");
   const [tags, setTags] = useState("");
   
@@ -52,14 +53,23 @@ export function BulkImportDialog() {
 
   const handleBulkSubmit = async () => {
     setIsSubmitting(true);
+    setError(null);
     try {
-      await bulkImportCreators(rawText, trackingType, tags, assignedPlatforms);
-    } catch (e) {
-      console.error(e);
+      const result = await bulkImportCreators(rawText, trackingType, tags, assignedPlatforms);
+      if (result?.success === false) {
+        setError(result.error || "Import failed. Check the server logs.");
+        setIsSubmitting(false);
+        return;
+      }
+    } catch (e: any) {
+      setError(e?.message || "Unexpected error.");
+      setIsSubmitting(false);
+      return;
     }
     setIsSubmitting(false);
     setOpen(false);
     setRawText("");
+    setError(null);
   };
 
   return (
@@ -127,6 +137,12 @@ export function BulkImportDialog() {
                 <Input placeholder="comma, separated" value={tags} onChange={e => setTags(e.target.value)} />
               </div>
             </div>
+
+            {error && (
+              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                {error}
+              </div>
+            )}
 
             <Button onClick={handleBulkSubmit} disabled={!canSubmitBulk} className="mt-2 w-full bg-indigo-600 hover:bg-indigo-500">
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

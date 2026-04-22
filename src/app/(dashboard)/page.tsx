@@ -1,11 +1,13 @@
+export const dynamic = 'force-dynamic';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, Sparkles, TrendingUp, Users, Video, Search } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import Link from "next/link";
 
 export default async function CommandCenter() {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   
   // Enforce workspace
   const { data: ws } = await supabase.from('workspaces').select('id').limit(1).single();

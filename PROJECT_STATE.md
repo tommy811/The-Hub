@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-23 (sync 3)
+Last synced: 2026-04-23 (sync 4)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Obsidian mirrors it at `02-Architecture/PROJECT_STATE.md`.
 
@@ -51,7 +51,7 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 **Creator layer (root)**
 - `creators` — id, workspace_id, canonical_name, slug, known_usernames[], display_name_variants[], primary_niche, primary_platform, monetization_model, tracking_type, tags[], notes, onboarding_status, import_source, last_discovery_run_id, last_discovery_error, added_by, timestamps
 - `creator_accounts` alias = `profiles` (same table)
-- `profiles` — id, workspace_id, creator_id (FK nullable for legacy), platform, handle, display_name, profile_url, url, avatar_url, bio, follower_count, following_count, post_count, tracking_type, tags[], is_clean, analysis_version, last_scraped_at, added_by, is_active, account_type, discovery_confidence, timestamps
+- `profiles` — id, workspace_id, creator_id (FK nullable for legacy), platform, handle, display_name, profile_url, url, avatar_url, bio, follower_count, following_count, post_count, tracking_type, tags[], is_clean, analysis_version, last_scraped_at, added_by, is_active, account_type, discovery_confidence, is_primary (bool, default false), timestamps
 - `discovery_runs` — id, workspace_id, creator_id, input_handle, input_url, input_platform_hint, status, raw_gemini_response, assets_discovered_count, attempt_number, error_message, initiated_by, timestamps
 - `creator_merge_candidates` — id, workspace_id, creator_a_id, creator_b_id (a<b enforced), confidence, evidence (jsonb), triggered_by_run_id, status, resolved_by, timestamps
 - `funnel_edges` — id, creator_id, workspace_id, from_profile_id, to_profile_id, edge_type, confidence, detected_at
@@ -178,7 +178,7 @@ PK (creator_id, label_id)
 | `/platforms/instagram/outliers` | — | ⬜ Placeholder |
 | `/platforms/instagram/classification` | — | ⬜ Placeholder |
 | `/platforms/instagram/analytics` | — | ⬜ Placeholder |
-| `/platforms/tiktok/accounts` | — | ⬜ Mock data |
+| `/platforms/tiktok/accounts` | `platforms/tiktok/accounts/page.tsx` + `TikTokAccountsClient.tsx` | ✅ Live — real `profiles` query, stat cards, tracking tab URL filter, rank chip client filter, empty state, Unlinked badge |
 
 **Known cleanup:** Sidebar has duplicate `/content` route ("Content Hub" in DAILY + "Content" in ANALYZE) → delete duplicate. TikTok Intel section is header-only → add child routes matching Instagram. `/admin` needs scope definition.
 
@@ -188,8 +188,8 @@ PK (creator_id, label_id)
 
 | Function | Model | Rationale |
 |---|---|---|
-| Creator discovery (fishnet + funnel) | Gemini 1.5 Pro | Long context, cheap, structured JSON from messy web data |
-| Content visual analysis (video/image) | Gemini 1.5 Pro | Native multimodal — analyzes frames directly |
+| Creator discovery (fishnet + funnel) | Gemini 2.5 Flash | Long context, cheap, structured JSON from messy web data |
+| Content visual analysis (video/image) | Gemini 2.5 Flash | Native multimodal — analyzes frames directly |
 | Brand analysis / SEO report | Claude Sonnet | Better at nuanced synthesis and report writing |
 | Quick classification (fixed enum output) | Gemini Flash | Cheap, fast, sufficient for constrained outputs |
 | Hook / narrative pattern analysis | Claude Sonnet | Stronger narrative reasoning |
@@ -291,7 +291,7 @@ MAX_CONCURRENT_RUNS=5
 ## 14. Build Order (Current)
 
 1. ✅ **Phase 1 complete:** Schema, Creators hub, discovery pipeline, bulk import, merge candidates, live card grid with Realtime
-2. 🔜 **Wire existing stub routes** to live Supabase data: `/content`, `/trends`, `/platforms/instagram/accounts`, `/platforms/tiktok/accounts`
+2. 🔄 **Wire existing stub routes** to live Supabase data: ✅ `/platforms/instagram/accounts`, ✅ `/platforms/tiktok/accounts` — 🔜 `/content`, `/trends` remaining
 3. 🔜 **Phase 2 scraping:** IG + TikTok Apify ingestion, normalizers, `flag_outliers` live, Outliers page live
 4. 🔜 **Phase 2 trends:** `trends` table migration, audio signature extraction from `platform_metrics`, trend linking during content analysis
 5. 🔜 **Phase 3 content analysis:** Gemini content scoring pipeline, `profile_scores` + rank tier live on UI

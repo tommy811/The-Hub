@@ -51,15 +51,52 @@ class DiscoveryResult(BaseModel):
     proposed_funnel_edges: list[ProposedFunnelEdge]
     raw_reasoning: str
 
-# Use the Pydantic type schema explicitly for Gemini
-GEMINI_DISCOVERY_SCHEMA = DiscoveryResult.model_json_schema()
+def _clean_schema(obj):
+    """Recursively make a schema Gemini-compatible.
+    - Strips keys Gemini rejects: default, title
+    - Collapses anyOf/oneOf with a null variant into just the non-null type
+      (Gemini doesn't support anyOf; Optional[X] must become just X)
+    """
+    if isinstance(obj, dict):
+        # Collapse Optional[X] = anyOf[X, null] → X
+        if "anyOf" in obj or "oneOf" in obj:
+            variants = obj.get("anyOf") or obj.get("oneOf")
+            non_null = [v for v in variants if not (isinstance(v, dict) and v.get("type") == "null")]
+            if len(non_null) == 1:
+                return _clean_schema({**non_null[0], **{k: v for k, v in obj.items() if k not in ("anyOf", "oneOf", "default", "title")}})
+        return {k: _clean_schema(v) for k, v in obj.items() if k not in ("default", "title", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")}
+    if isinstance(obj, list):
+        return [_clean_schema(i) for i in obj]
+    return obj
 
-# Provide rigid enums to explicitly limit hallucination
-GEMINI_DISCOVERY_SCHEMA["properties"]["proposed_accounts"]["items"]["properties"]["platform"]["enum"] = [
+def _inline_refs(schema: dict) -> dict:
+    """Resolve $ref pointers so Gemini receives a flat schema with no $defs."""
+    defs = schema.get("$defs", {})
+
+    def resolve(obj):
+        if isinstance(obj, dict):
+            if "$ref" in obj:
+                ref_name = obj["$ref"].split("/")[-1]
+                return resolve(defs.get(ref_name, obj))
+            return {k: resolve(v) for k, v in obj.items() if k != "$defs"}
+        if isinstance(obj, list):
+            return [resolve(i) for i in obj]
+        return obj
+
+    return resolve(schema)
+
+# Build a Gemini-compatible schema: inline $refs, strip unsupported keys, inject platform enum
+_raw_schema = DiscoveryResult.model_json_schema()
+_PLATFORM_ENUM = [
     "instagram", "tiktok", "youtube", "facebook", "twitter", "linkedin",
     "onlyfans", "fanvue", "fanplace", "amazon_storefront", "tiktok_shop",
     "linktree", "beacons", "telegram_channel", "telegram_cupidbot", "custom_domain", "other"
 ]
+try:
+    _raw_schema["$defs"]["ProposedAccount"]["properties"]["platform"]["enum"] = _PLATFORM_ENUM
+except KeyError:
+    pass
+GEMINI_DISCOVERY_SCHEMA = _clean_schema(_inline_refs(_raw_schema))
 
 def fetch_input_context(inp: DiscoveryInput) -> dict:
     url = inp.input_url
@@ -99,7 +136,7 @@ def resolve_link_in_bio(url: str) -> list[str]:
 def run_gemini_discovery(context: dict, link_destinations: list[str]) -> DiscoveryResult:
     genai.configure(api_key=get_gemini_key())
     # Use gemini-1.5-pro for high complexity reasoning
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     prompt = f"""
     Analyze the following creator footprint data and discover their true identity, aliases, and platforms.
@@ -115,24 +152,32 @@ def run_gemini_discovery(context: dict, link_destinations: list[str]) -> Discove
         prompt,
         generation_config=genai.GenerationConfig(
             response_mime_type="application/json",
-            response_schema=DiscoveryResult
+            response_schema=GEMINI_DISCOVERY_SCHEMA
         )
     )
     
     return DiscoveryResult.model_validate_json(resp.text)
 
+_VALID_MONETIZATION_MODELS = {
+    "subscription", "tips", "ppv", "affiliate",
+    "brand_deals", "ecommerce", "coaching", "saas", "mixed", "unknown"
+}
+
+def _normalize_monetization_model(value: str) -> str:
+    if value and value.lower() in _VALID_MONETIZATION_MODELS:
+        return value.lower()
+    return "unknown"
+
 def commit(run_id: UUID, result: DiscoveryResult):
     sb = get_supabase()
-    # Call the RPC to transact the results
     data = result.model_dump(mode='json')
-    # Partition the data for the RPC
     creator_data = {
        "canonical_name": data["canonical_name"],
        "known_usernames": data["known_usernames"],
        "display_name_variants": data["display_name_variants"],
        "primary_platform": data["primary_platform"],
        "primary_niche": data["primary_niche"],
-       "monetization_model": data["monetization_model"]
+       "monetization_model": _normalize_monetization_model(data["monetization_model"])
     }
     accounts_data = data["proposed_accounts"]
     funnel_edges = data["proposed_funnel_edges"]

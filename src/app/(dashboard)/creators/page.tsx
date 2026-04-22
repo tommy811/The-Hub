@@ -1,4 +1,6 @@
 // src/app/(dashboard)/creators/page.tsx — Creators Hub page
+export const dynamic = 'force-dynamic';
+
 import { Plus, Users2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -6,12 +8,12 @@ import { MergeAlertBanner } from "@/components/creators/MergeAlertBanner";
 import { CreatorCard } from "@/components/creators/CreatorCard";
 import { BulkImportDialog } from "@/components/creators/BulkImportDialog";
 
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 import { CreatorsFilters } from "@/components/creators/CreatorsFilters";
 
 export default async function CreatorsHubPage({ searchParams }: { searchParams: { status?: string, tracking?: string } }) {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const activeStatus = searchParams?.status || "all";
   const activeTracking = searchParams?.tracking || "all";
 

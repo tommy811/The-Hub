@@ -1,5 +1,13 @@
 # Migration Log
 
+## 20260423000000_add_is_primary_to_profiles
+
+Adds `is_primary BOOLEAN NOT NULL DEFAULT FALSE` column to `profiles`.
+
+Required by `commit_discovery_result` RPC which marks one profile per creator as the primary account for that platform. Applied via Supabase MCP on 2026-04-23 during discovery pipeline debugging.
+
+---
+
 ## 20240103000000_outlier_multiplier
 
 Adds `outlier_multiplier NUMERIC(5,2)` column to `scraped_content` and rewrites `flag_outliers` to store the computed ratio alongside the boolean flag.

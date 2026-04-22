@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { InstagramAccountsClient } from "./InstagramAccountsClient";
 
 export type AccountRowData = {
@@ -26,7 +26,7 @@ export default async function InstagramAccountsPage({
 }: {
   searchParams: { type?: string };
 }) {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const activeType = searchParams?.type ?? "all";
 
   const { data: ws } = await supabase
