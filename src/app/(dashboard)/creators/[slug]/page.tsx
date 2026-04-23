@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic';
 import { notFound } from "next/navigation";
 import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
 import { Network, RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
@@ -14,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { MergeBannerActions } from "@/components/creators/MergeBannerActions";
+import { FailedRetryButton } from "@/components/creators/FailedRetryButton";
 
 const GRADIENTS = [
   "from-violet-500 to-indigo-600",
@@ -117,10 +118,16 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
           <AlertCircle className="h-4 w-4" color="currentColor" />
           <AlertTitle className="font-bold flex items-center justify-between">
             <span>Possible Duplicate Detected</span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-7 text-xs border-amber-500/30 hover:bg-amber-500/20 text-amber-500">Not the same person</Button>
-              <Button size="sm" className="h-7 text-xs bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold">Merge: Keep {creator.canonical_name}</Button>
-            </div>
+            <MergeBannerActions
+              candidateId={mergeCandidates[0].id}
+              keepId={creator.id}
+              mergeId={
+                mergeCandidates[0].creator_a_id === creator.id
+                  ? mergeCandidates[0].creator_b_id
+                  : mergeCandidates[0].creator_a_id
+              }
+              keepLabel={creator.canonical_name}
+            />
           </AlertTitle>
           <AlertDescription className="text-amber-500/80">
             This creator may be the same person as <strong>{mergeWith || "another creator"}</strong>.
@@ -214,7 +221,7 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span className="text-sm font-medium">{creator.last_discovery_error || "Discovery run failed."}</span>
           </div>
-          <Button size="sm" variant="outline" className="border-red-900/50 hover:bg-red-900/20 text-red-400 shrink-0">Retry</Button>
+          <FailedRetryButton creatorId={creator.id} />
         </div>
       )}
 
