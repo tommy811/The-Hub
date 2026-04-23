@@ -3,7 +3,7 @@
 **The Hub — Creator Intelligence Platform**
 Last synced: 2026-04-23 (sync 6)
 
-> This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Obsidian mirrors it at `02-Architecture/PROJECT_STATE.md`.
+> This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Repo and Obsidian vault share one folder — this file is directly visible in both.
 
 ---
 
@@ -278,7 +278,7 @@ MAX_CONCURRENT_RUNS=5
 
 **Who updates `PROJECT_STATE.md`:**
 - Claude Code automatically updates this file on any architectural change (new table, new RPC, new route, new enum, removed column).
-- When the user says "update project state," Claude Code does a full sync: updates repo `PROJECT_STATE.md`, mirrors to Obsidian `02-Architecture/PROJECT_STATE.md`, updates any affected reference doc (`Enum Reference.md`, `RPC Reference.md`, `Migration Log.md`), commits with message `docs: sync project state`, pushes.
+- When the user says "update project state," Claude Code does a full sync: updates `PROJECT_STATE.md` (repo root = Obsidian vault, same file), updates any affected reference doc (`Enum Reference.md`, `RPC Reference.md`, `Migration Log.md`), commits with message `docs: sync project state`, pushes.
 
 **Session notes:** one file per calendar day in Obsidian `06-Sessions/YYYY-MM-DD.md`. Multiple working sessions in the same day append to that day's file.
 
