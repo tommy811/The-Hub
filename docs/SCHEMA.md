@@ -403,9 +403,8 @@ _Column names appearing in 2 or more tables:_
 
 ## Live vs PROJECT_STATE Drift Notes
 
-The following discrepancies exist between live DB and PROJECT_STATE.md §4:
+All drift resolved as of 2026-04-24.
 
-- `trend_signals` live schema has `profile_id` — PROJECT_STATE says `creator_id, account_id`.
-- `alerts_feed` live schema is missing `creator_id` — PROJECT_STATE lists it.
-- `discovery_runs` live has `input_screenshot_path`, `funnel_edges_discovered_count`, `merge_candidates_raised` — not in PROJECT_STATE.
-- `content_analysis.archetype` is `text` not `content_archetype` enum (enum not created yet).
+- `creators.last_discovery_run_id` consolidated via migration `20260424000000_consolidate_last_discovery_run_id`.
+- `trend_signals.profile_id`, `alerts_feed.profile_id+content_id`, and `discovery_runs` extra cols (`input_screenshot_path`, `funnel_edges_discovered_count`, `merge_candidates_raised`, `started_at`, `completed_at`) all reflected in PROJECT_STATE.md §4.
+- `content_analysis.archetype` is intentionally still `text` — Phase 2 migration drops the column entirely (moves to `creators` table). No schema change needed here.
