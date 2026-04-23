@@ -27,6 +27,7 @@ Tables with a `workspace_id` column (row-level RLS isolates by workspace):
 - `content_category`: comedy_entertainment | fashion_style | fitness | lifestyle | beauty | travel | food | music | gaming | education | other
 - `content_vibe`: playful | girl_next_door | body_worship | wifey | luxury | edgy | wholesome | mysterious | confident | aspirational
 - `discovery_run_status`: pending | processing | completed | failed
+- `edge_type`: link_in_bio | direct_link | cta_mention | qr_code | inferred (funnel_edges.edge_type)
 - `label_type`: content_format | trend_pattern | hook_style | visual_style | other
 - `merge_candidate_status`: pending | merged | dismissed
 - `monetization_model`: subscription | tips | ppv | affiliate | brand_deals | ecommerce | coaching | saas | mixed | unknown

@@ -623,7 +623,7 @@ export type Database = {
           confidence: number | null
           creator_id: string
           detected_at: string | null
-          edge_type: string | null
+          edge_type: Database["public"]["Enums"]["edge_type"] | null
           from_profile_id: string
           id: string
           to_profile_id: string
@@ -633,7 +633,7 @@ export type Database = {
           confidence?: number | null
           creator_id: string
           detected_at?: string | null
-          edge_type?: string | null
+          edge_type?: Database["public"]["Enums"]["edge_type"] | null
           from_profile_id: string
           id?: string
           to_profile_id: string
@@ -643,7 +643,7 @@ export type Database = {
           confidence?: number | null
           creator_id?: string
           detected_at?: string | null
-          edge_type?: string | null
+          edge_type?: Database["public"]["Enums"]["edge_type"] | null
           from_profile_id?: string
           id?: string
           to_profile_id?: string
@@ -1131,6 +1131,12 @@ export type Database = {
         | "confident"
         | "aspirational"
       discovery_run_status: "pending" | "processing" | "completed" | "failed"
+      edge_type:
+        | "link_in_bio"
+        | "direct_link"
+        | "cta_mention"
+        | "qr_code"
+        | "inferred"
       label_type:
         | "content_format"
         | "trend_pattern"
@@ -1362,6 +1368,13 @@ export const Constants = {
         "aspirational",
       ],
       discovery_run_status: ["pending", "processing", "completed", "failed"],
+      edge_type: [
+        "link_in_bio",
+        "direct_link",
+        "cta_mention",
+        "qr_code",
+        "inferred",
+      ],
       label_type: [
         "content_format",
         "trend_pattern",
