@@ -1,5 +1,17 @@
 # Migration Log
 
+## 20260424000001_bulk_import_creator_rpc
+
+Applied 2026-04-24 via Supabase MCP `apply_migration` (registered as `bulk_import_creator_rpc`).
+
+Adds atomic `bulk_import_creator(p_handle, p_platform_hint, p_tracking_type, p_tags, p_user_id, p_workspace_id) RETURNS uuid`. Inserts creator + primary profile + pending discovery_run, then links `creators.last_discovery_run_id` to the new run. SECURITY DEFINER, granted to authenticated/anon/service_role.
+
+Replaces the per-handle JS-side `Promise.all` of inserts in the old `src/app/actions.ts` flow. The new server action `bulkImportCreators` (in `src/app/(dashboard)/creators/actions.ts`, coming in L4.3) will loop over handles and call this RPC once per handle.
+
+Smoke-tested 2026-04-24: synthetic handle inserted via RPC, all three rows present (creator with `last_discovery_run_id` set, primary profile, pending discovery_run), cleanup ran successfully.
+
+---
+
 ## 20260424000000_consolidate_last_discovery_run_id
 
 Applied 2026-04-24 via Supabase MCP `apply_migration` (registered as `consolidate_last_discovery_run_id`).

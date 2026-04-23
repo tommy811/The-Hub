@@ -1051,6 +1051,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bulk_import_creator: {
+        Args: {
+          p_handle: string
+          p_platform_hint: Database["public"]["Enums"]["platform"]
+          p_tags: string[]
+          p_tracking_type: Database["public"]["Enums"]["tracking_type"]
+          p_user_id: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       calculate_rank: {
         Args: { score: number }
         Returns: Database["public"]["Enums"]["rank_tier"]

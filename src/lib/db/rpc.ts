@@ -38,4 +38,10 @@ export async function mergeCreators(
   return fromSupabase(resp)
 }
 
-// bulkImportCreator is added in Task 15 after the migration lands.
+export async function bulkImportCreator(
+  args: RpcArgs<'bulk_import_creator'>
+): Promise<Result<RpcReturns<'bulk_import_creator'>>> {
+  const supabase = createServiceClient()
+  const resp = await supabase.rpc('bulk_import_creator', args)
+  return fromSupabase(resp)
+}
