@@ -145,3 +145,156 @@ export async function getProfilesForCreator(
   if (error) throw new Error(`getProfilesForCreator: ${error.message}`)
   return (data ?? []) as ProfileForCreator[]
 }
+
+// ---------- platform-account list (Instagram/TikTok pages) ----------
+
+export type PlatformAccountRow = {
+  id: string
+  handle: string
+  displayName: string
+  avatarUrl: string | null
+  profileUrl: string | null
+  followerCount: number | null
+  postCount: number | null
+  trackingType: string
+  isClean: boolean
+  analysisVersion: string | null
+  creatorId: string | null
+  creatorSlug: string | null
+  currentScore: number | null
+  currentRank: string | null
+  scoredContentCount: number
+  medianViews: number | null
+  outlierCount: number
+  hasContent: boolean
+}
+
+export async function getPlatformAccountsForWorkspace(
+  wsId: string,
+  args: {
+    platform: Enums<'platform'>
+    accountType?: Enums<'account_type'>
+  }
+): Promise<PlatformAccountRow[]> {
+  const supabase = createServiceClient()
+
+  const { data: rawProfiles, error: pErr } = await supabase
+    .from('profiles')
+    .select(`
+      id, handle, display_name, avatar_url, profile_url,
+      follower_count, post_count, tracking_type, is_clean,
+      analysis_version, creator_id,
+      profile_scores ( current_score, current_rank, scored_content_count ),
+      creators!creator_id ( slug )
+    `)
+    .eq('workspace_id', wsId)
+    .eq('platform', args.platform)
+    .eq('account_type', args.accountType ?? 'social')
+
+  if (pErr) throw new Error(`getPlatformAccountsForWorkspace.profiles: ${pErr.message}`)
+  if (!rawProfiles || rawProfiles.length === 0) return []
+
+  const profileIds = rawProfiles.map((p) => p.id)
+
+  const [snapshotsRes, contentRes] = await Promise.all([
+    supabase
+      .from('profile_metrics_snapshots')
+      .select('profile_id, median_views, snapshot_date')
+      .in('profile_id', profileIds)
+      .order('snapshot_date', { ascending: false }),
+    supabase
+      .from('scraped_content')
+      .select('profile_id, is_outlier, view_count, posted_at')
+      .in('profile_id', profileIds),
+  ])
+
+  if (snapshotsRes.error) {
+    throw new Error(`getPlatformAccountsForWorkspace.snapshots: ${snapshotsRes.error.message}`)
+  }
+  if (contentRes.error) {
+    throw new Error(`getPlatformAccountsForWorkspace.content: ${contentRes.error.message}`)
+  }
+
+  // Latest snapshot per profile
+  const snapshotMap = new Map<string, number>()
+  for (const snap of snapshotsRes.data ?? []) {
+    if (!snapshotMap.has(snap.profile_id)) {
+      snapshotMap.set(snap.profile_id, Number(snap.median_views))
+    }
+  }
+
+  // Live median fallback for profiles missing a snapshot
+  const contentSet = new Set<string>()
+  const outlierCountMap = new Map<string, number>()
+  const viewsByProfile = new Map<string, number[]>()
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+
+  for (const row of contentRes.data ?? []) {
+    contentSet.add(row.profile_id!)
+    if (row.is_outlier) {
+      outlierCountMap.set(row.profile_id!, (outlierCountMap.get(row.profile_id!) ?? 0) + 1)
+    }
+    if (
+      !snapshotMap.has(row.profile_id!) &&
+      row.view_count != null &&
+      row.posted_at &&
+      new Date(row.posted_at) >= cutoff
+    ) {
+      const arr = viewsByProfile.get(row.profile_id!) ?? []
+      arr.push(Number(row.view_count))
+      viewsByProfile.set(row.profile_id!, arr)
+    }
+  }
+
+  for (const [profileId, views] of viewsByProfile) {
+    if (views.length > 0) {
+      const sorted = [...views].sort((a, b) => a - b)
+      const mid = Math.floor(sorted.length / 2)
+      const median =
+        sorted.length % 2 === 0
+          ? (sorted[mid - 1] + sorted[mid]) / 2
+          : sorted[mid]
+      snapshotMap.set(profileId, Math.round(median))
+    }
+  }
+
+  const accounts: PlatformAccountRow[] = rawProfiles.map((p) => {
+    const scores = Array.isArray(p.profile_scores)
+      ? p.profile_scores[0] ?? null
+      : (p.profile_scores ?? null)
+    const creator = Array.isArray(p.creators)
+      ? p.creators[0] ?? null
+      : (p.creators ?? null)
+
+    return {
+      id: p.id,
+      handle: p.handle ?? '',
+      displayName: p.display_name ?? p.handle ?? '',
+      avatarUrl: p.avatar_url ?? null,
+      profileUrl: p.profile_url ?? null,
+      followerCount: p.follower_count != null ? Number(p.follower_count) : null,
+      postCount: p.post_count != null ? Number(p.post_count) : null,
+      trackingType: p.tracking_type ?? 'unreviewed',
+      isClean: p.is_clean ?? false,
+      analysisVersion: p.analysis_version ?? null,
+      creatorId: p.creator_id ?? null,
+      creatorSlug: (creator as { slug?: string } | null)?.slug ?? null,
+      currentScore: scores?.current_score != null ? Number(scores.current_score) : null,
+      currentRank: scores?.current_rank ?? null,
+      scoredContentCount: scores?.scored_content_count ?? 0,
+      medianViews: snapshotMap.get(p.id) ?? null,
+      outlierCount: outlierCountMap.get(p.id) ?? 0,
+      hasContent: contentSet.has(p.id),
+    }
+  })
+
+  // Default sort: quality score desc, unscored last
+  accounts.sort((a, b) => {
+    if (a.currentScore === null && b.currentScore === null) return 0
+    if (a.currentScore === null) return 1
+    if (b.currentScore === null) return -1
+    return b.currentScore - a.currentScore
+  })
+
+  return accounts
+}
