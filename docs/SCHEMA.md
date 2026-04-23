@@ -1,5 +1,7 @@
-# SCHEMA.md — Generated 2026-04-23T00:00:00Z
+# SCHEMA.md — Generated 2026-04-24T00:00:00Z
 > Source: live DB (dbkddgwitqwzltuoxmfi). Regenerate via `npm run db:schema`.
+>
+> Surgically updated 2026-04-24 (post-migration `20260424000000_consolidate_last_discovery_run_id`) without re-running the script — the script needs `SUPABASE_DB_URL` in `scripts/.env`. Full regen pending.
 
 ## Tenant-Scoped Tables
 
@@ -404,7 +406,6 @@ _Column names appearing in 2 or more tables:_
 
 The following discrepancies exist between live DB and PROJECT_STATE.md §4:
 
-- `creators` has **two** last-discovery-run columns: `last_discovery_run_id` (no FK) and `last_discovery_run_id_fk` (FK→discovery_runs.id). PROJECT_STATE documents one.
 - `trend_signals` live schema has `profile_id` — PROJECT_STATE says `creator_id, account_id`.
 - `alerts_feed` live schema is missing `creator_id` — PROJECT_STATE lists it.
 - `discovery_runs` live has `input_screenshot_path`, `funnel_edges_discovered_count`, `merge_candidates_raised` — not in PROJECT_STATE.
