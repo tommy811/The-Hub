@@ -545,3 +545,12 @@ Add to `.claude/settings.json`:
 | Instagram CDN avatar expiry | `src/components/creators/AvatarWithFallback.tsx` | Avatar URLs scraped by Apify expire after ~hours. `onError` falls back to gradient monogram — so the UI degrades gracefully but the stored URL is stale | Re-scrape profile to refresh `avatar_url`. Long-term: proxy or store to Supabase Storage |
 | Discovery pipeline broken (httpx) | `scripts/discover_creator.py` — `fetch_input_context()` | `httpx.get("https://www.instagram.com/{handle}/")` returns login redirect or bot block. Gemini receives garbage. Discovery "succeeds" but finds no real data. | Rebuild: replace httpx with Apify `resultsType: "details"` to get real bio + externalUrls. Phase 2 first task. |
 | Schema drift vs PROJECT_STATE | `docs/SCHEMA.md` footer — 4 mismatches: `creators.last_discovery_run_id_fk` shadow col; `trend_signals` has `profile_id` not `creator_id`; `alerts_feed` missing `creator_id`; `discovery_runs` has 3 undocumented cols | Low — drift is documented, types file is correct | Resolve before Phase 2: update §4 to match live DB, then drop footer note |
+
+---
+
+## Decisions Log
+
+- 2026-04-23: Installed agent architecture (UI skills + SCHEMA.md + Stop hook).
+  Scope: 90-min minimal version, not the full 30-hr research plan.
+  Rationale: 25-file codebase, 2-5 users, internal tool — full harness was over-engineered.
+  See docs/AGENT_USAGE.md for day-to-day usage.
