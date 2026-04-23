@@ -1,5 +1,23 @@
 # Migration Log
 
+## 20260424000000_consolidate_last_discovery_run_id
+
+Applied 2026-04-24 via Supabase MCP `apply_migration` (registered as `consolidate_last_discovery_run_id`).
+
+Drift fix. The live `creators` table had two columns pointing at the same logical concept: `last_discovery_run_id` (no FK) and `last_discovery_run_id_fk` (FK→discovery_runs.id). This migration:
+
+1. Backfills any value from `last_discovery_run_id` into `last_discovery_run_id_fk` where the FK column was NULL and the target run exists.
+2. Reports orphan-pointer count (rows where the no-FK column pointed at a deleted run) via `RAISE NOTICE` before discarding them on column drop.
+3. Drops the no-FK column.
+4. Renames `last_discovery_run_id_fk` → `last_discovery_run_id` (column).
+5. Renames the FK constraint `creators_last_discovery_run_id_fk_fkey` → `creators_last_discovery_run_id_fkey`.
+
+`commit_discovery_result` RPC body unchanged — already wrote to `last_discovery_run_id`.
+
+Post-state verified: 1 column named `last_discovery_run_id` with FK constraint `creators_last_discovery_run_id_fkey → discovery_runs(id) ON DELETE SET NULL`.
+
+---
+
 ## fix_retry_discovery_and_canonical_name_guard (applied via MCP — no local file)
 
 Applied 2026-04-23. Two RPC patches:
