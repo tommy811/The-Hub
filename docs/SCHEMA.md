@@ -194,12 +194,11 @@ _RLS: members insert merge_candidates(INSERT), members select merge_candidates(S
 - **notes**: text
 - **onboarding_status**: onboarding_status — DEF 'processing'::onboarding_status
 - **import_source**: text — DEF 'bulk'::text
-- **last_discovery_run_id**: uuid _(no FK constraint — informational pointer)_
+- **last_discovery_run_id**: uuid — FK→discovery_runs.id
 - **last_discovery_error**: text
 - **added_by**: uuid
 - **created_at**: timestamp with time zone — DEF now()
 - **updated_at**: timestamp with time zone — DEF now()
-- **last_discovery_run_id_fk**: uuid — FK→discovery_runs.id _(constrained FK twin of last_discovery_run_id)_
 
 _RLS: members insert creators(INSERT), members select creators(SELECT), members update creators(UPDATE)_
 
