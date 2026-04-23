@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { ExternalLink, RefreshCw, Archive, Edit3, MoreHorizontal, FileText, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,19 +21,33 @@ export interface AccountCardProps {
   medianViews: string;
   outliers: number;
   isUnlinked?: boolean;
+  creatorSlug?: string | null;
 }
 
 export function AccountCard(props: AccountCardProps) {
   const initials = props.displayName.substring(0, 2).toUpperCase();
 
   return (
-    <Card className="group relative flex flex-col overflow-hidden transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10 hover:border-indigo-500/50">
+    <div className="relative group">
+      {/* Stretched link — covers the whole card, sits below interactive elements */}
+      {props.creatorSlug && (
+        <Link
+          href={`/creators/${props.creatorSlug}`}
+          className="absolute inset-0 z-[1] rounded-xl"
+          aria-label={`View ${props.displayName} creator profile`}
+        />
+      )}
+
+      <Card className={cn(
+        "relative flex flex-col overflow-hidden transition-all",
+        props.creatorSlug && "hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10 hover:border-indigo-500/50 cursor-pointer"
+      )}>
 
       {/* Top Half: Image & Rank */}
       <div className="relative flex justify-center pt-8 pb-10 bg-gradient-to-b from-muted/30 to-background">
 
         {/* Actions Menu */}
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-[2]">
           <DropdownMenu>
             <DropdownMenuTrigger className="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50 h-8 w-8 rounded-full bg-background/50 backdrop-blur-sm border shadow-sm hover:bg-background/80 hover:text-accent-foreground text-foreground">
               <MoreHorizontal className="h-4 w-4" />
@@ -48,7 +63,7 @@ export function AccountCard(props: AccountCardProps) {
 
         {/* Unlinked badge */}
         {props.isUnlinked && (
-          <div className="absolute top-3 left-3">
+          <div className="absolute top-3 left-3 z-[2]">
             <Badge variant="outline" className="text-[9px] uppercase tracking-widest font-bold border-zinc-600/50 text-zinc-500 bg-zinc-500/10 flex items-center gap-1">
               <Unlink className="h-2.5 w-2.5" /> Unlinked
             </Badge>
@@ -90,7 +105,8 @@ export function AccountCard(props: AccountCardProps) {
             href={`https://${props.platform}.com/${props.handle.replace('@', '')}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-lg font-bold hover:text-indigo-400 transition-colors decoration-indigo-400/30 underline-offset-4 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-[2] flex items-center gap-1 text-lg font-bold hover:text-indigo-400 transition-colors decoration-indigo-400/30 underline-offset-4 hover:underline"
           >
             {props.handle} <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
           </a>
@@ -123,6 +139,7 @@ export function AccountCard(props: AccountCardProps) {
         </div>
       </div>
     </Card>
+    </div>
   );
 }
 

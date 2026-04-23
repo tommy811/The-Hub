@@ -13,6 +13,7 @@ export type AccountRowData = {
   isClean: boolean;
   analysisVersion: string | null;
   creatorId: string | null;
+  creatorSlug: string | null;
   currentScore: number | null;
   currentRank: string | null;
   scoredContentCount: number;
@@ -48,7 +49,8 @@ export default async function InstagramAccountsPage({
       id, handle, display_name, avatar_url, profile_url,
       follower_count, post_count, tracking_type, is_clean,
       analysis_version, creator_id,
-      profile_scores ( current_score, current_rank, scored_content_count )
+      profile_scores ( current_score, current_rank, scored_content_count ),
+      creators!creator_id ( slug )
     `)
     .eq("workspace_id", wsId)
     .eq("platform", "instagram")
@@ -120,6 +122,9 @@ export default async function InstagramAccountsPage({
     const scores = Array.isArray(p.profile_scores)
       ? (p.profile_scores[0] ?? null)
       : (p.profile_scores ?? null);
+    const creator = Array.isArray(p.creators)
+      ? (p.creators[0] ?? null)
+      : (p.creators ?? null);
 
     return {
       id: p.id,
@@ -133,6 +138,7 @@ export default async function InstagramAccountsPage({
       isClean: p.is_clean ?? false,
       analysisVersion: p.analysis_version ?? null,
       creatorId: p.creator_id ?? null,
+      creatorSlug: (creator as { slug?: string } | null)?.slug ?? null,
       currentScore: scores?.current_score ?? null,
       currentRank: scores?.current_rank ?? null,
       scoredContentCount: scores?.scored_content_count ?? 0,

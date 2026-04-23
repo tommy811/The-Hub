@@ -216,6 +216,7 @@ export function TikTokAccountsClient({ accounts }: Props) {
               medianViews={formatNumber(account.medianViews)}
               outliers={account.outlierCount}
               isUnlinked={account.creatorId === null}
+              creatorSlug={account.creatorSlug}
             />
           ))}
         </div>
