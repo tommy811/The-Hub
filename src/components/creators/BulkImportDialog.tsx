@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 import type { Enums } from "@/types/db";
 
 export function BulkImportDialog() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +68,7 @@ export function BulkImportDialog() {
     setSinglePlatform("");
     setSingleHandle("");
     setSingleUrl("");
+    router.refresh();
   };
 
   const finalHandles = parsedHandles.map((ph, idx) => {
@@ -107,6 +110,7 @@ export function BulkImportDialog() {
     }
     setOpen(false);
     setRawText("");
+    router.refresh();
   };
 
   return (
