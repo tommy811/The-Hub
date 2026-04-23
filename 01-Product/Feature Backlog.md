@@ -4,7 +4,7 @@
 
 Agents are phase deliverables. A phase closes only when its agents are built + validated. See [[04-Pipeline/Agent Catalog]] for full specs.
 
-- [ ] **verify-and-fix** (Phase 1 — retroactive, blocking Phase 1 close)
+- [x] **verify-and-fix** (Phase 1 — ✅ built, `.claude/skills/verify-and-fix/SKILL.md`)
 - [ ] **schema-drift-watchdog** (Phase 2)
 - [ ] **scrape-verify** (Phase 2)
 - [ ] **/verify-scrape slash command** (Phase 2)

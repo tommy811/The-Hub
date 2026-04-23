@@ -10,7 +10,7 @@
 - [[06-Sessions/|📅 Sessions]] — daily work logs
 
 ## Current Status
-- Phase: **1 complete → Phase 2 starting**
+- Phase: **Phase 1 fully closed ✅ → Phase 2 starting**
 - Database: ✅ Supabase (Content OS project)
 - Repo: github.com/tommy811/The-Hub
 - Last session: [[06-Sessions/2026-04-23]]
@@ -22,7 +22,7 @@
 - ✅ Manual Add Account dialog — functional with 18 platforms
 - ✅ Creator detail page — revamped (stats strip, bio, avatar fallback)
 - ✅ Apify field mapping fixed — follower counts backfilled
-- 🔜 **Build verify-and-fix agent** (Phase 1 retroactive — blocking phase close)
+- ✅ verify-and-fix skill built — Phase 1 fully closed
 - 🔜 Phase 2 first task: rebuild discover_creator.py on Apify (httpx blocked by Instagram)
 - 🔜 Wire `/content` and `/trends` routes
 - 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, flag_outliers live)

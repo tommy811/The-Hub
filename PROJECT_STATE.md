@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-23 (sync 6)
+Last synced: 2026-04-23 (sync 7)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Repo and Obsidian vault share one folder — this file is directly visible in both.
 
@@ -294,8 +294,10 @@ MAX_CONCURRENT_RUNS=5
 
 1. ✅ **Phase 1 complete:** Schema, Creators hub, discovery pipeline, bulk import, merge candidates, live card grid with Realtime
 2. ✅ **Phase 1 UX hardening:** Re-run Discovery wired end-to-end, Manual Add Account dialog functional, Creator detail page revamped (stats strip, bio, avatar fallback, network sections), Apify field mapping fixed (follower counts backfilled)
-3. 🔄 **Wire existing stub routes** to live Supabase data: ✅ `/platforms/instagram/accounts`, ✅ `/platforms/tiktok/accounts` — 🔜 `/content`, `/trends` remaining
-3. 🔜 **Phase 2 scraping:** IG + TikTok Apify ingestion, normalizers, `flag_outliers` live, Outliers page live
+3. ✅ **Phase 1 agents:** `verify-and-fix` skill built — Phase 1 fully closed
+4. ✅ **Vault merged into repo:** single folder, single source of truth, all docs committed to git
+5. 🔄 **Wire existing stub routes** to live Supabase data: ✅ `/platforms/instagram/accounts`, ✅ `/platforms/tiktok/accounts` — 🔜 `/content`, `/trends` remaining
+6. 🔜 **Phase 2 scraping:** IG + TikTok Apify ingestion, normalizers, `flag_outliers` live, Outliers page live
 4. 🔜 **Phase 2 trends:** `trends` table migration, audio signature extraction from `platform_metrics`, trend linking during content analysis
 5. 🔜 **Phase 3 content analysis:** Gemini content scoring pipeline, `profile_scores` + rank tier live on UI
 6. 🔜 **Phase 3 brand analysis:** Claude-driven brand report per creator, `creator_brand_analyses` populated, creator-level archetype/vibe filled
@@ -430,7 +432,7 @@ Required agents (retroactive adds):
 
 | Agent | Layer | Status |
 |---|---|---|
-| `verify-and-fix` | Dev-time | 🔜 Next build (blocks Phase 1 close) |
+| `verify-and-fix` | Dev-time | ✅ Built — `.claude/skills/verify-and-fix/SKILL.md` |
 | `verify-scrape` (slash command, not agent) | Dev-time | 🔜 Deferred until Phase 2 has real scrapes |
 | `schema-drift-watchdog` | Ongoing | 🔜 Builds with Phase 2 |
 

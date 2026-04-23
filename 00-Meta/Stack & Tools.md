@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-23 (sync 6)
+**Last synced:** 2026-04-23 (sync 7)
 
 ---
 
@@ -62,6 +62,7 @@
 |---|---|---|
 | **kepano/obsidian-skills** | `.claude/skills/` in vault root | Obsidian Flavored Markdown (wiki-links, callouts, properties), Bases YAML, Canvas JSON, Obsidian CLI |
 | **sync-project-state** | `.claude/skills/sync-project-state/` | Automated project state sync (triggered by "update project state" or "sync project") |
+| **verify-and-fix** | `.claude/skills/verify-and-fix/` | Post-change verification loop — invokes verifier subagent, iterates up to 3×, escalates to session note on exhaustion |
 | **superpowers** | installed | Verification gate, TDD enforcement, verifier subagent patterns |
 | **webapp-testing** (via anthropics/skills) | installed | Next.js + Python test patterns, multi-server lifecycle |
 

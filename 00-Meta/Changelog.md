@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-04-23 (sync 7 — Phase 1 close + vault merge)
+- Added: `verify-and-fix` skill (`.claude/skills/verify-and-fix/SKILL.md`) — post-change verification loop, up to 3 iterations, escalates to session note on exhaustion. Phase 1 agent requirement met.
+- Changed: Phase 1 status → fully closed (feature work + required agents both complete)
+- Changed: Vault merged into repo — single folder at `/Users/simon/OS/Living VAULT/Content OS/The Hub`. No separate vault path, no mirroring.
+- Removed: `02-Architecture/PROJECT_STATE.md` mirror (redundant — repo root copy is the only copy)
+- Changed: `.gitignore` — added Obsidian workspace files and `.claude/settings.local.json`
+- Changed: `00-Meta/How This Vault Works.md` — rewritten to single-folder framing
+- Changed: `sync-project-state` SKILL.md — removed mirror step, updated commit path
+- Changed: `00-Meta/Stack & Tools.md` — corrected vault/repo path references, added verify-and-fix to skills table
+- Fixed: All `[[02-Architecture/PROJECT_STATE...]]` wiki-links → `[[PROJECT_STATE...]]` across 7 files
+- Validated: Stop hook end-to-end (typecheck failure blocks stop, clean code allows it)
+
 ## 2026-04-23 (sync 6 — agent architecture integration)
 - Added: Agent architecture §15–§19 to PROJECT_STATE.md (replacing §15 Agent Roadmap stub)
 - Added: 04-Pipeline/Agent Catalog.md with operational entries for all planned agents
