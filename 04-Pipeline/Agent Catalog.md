@@ -8,7 +8,9 @@
 
 ## Active Agents
 
-_(empty — will populate as agents are built, starting with `verify-and-fix` in Phase 1 retroactive)_
+| Agent | Status | Skill location |
+|---|---|---|
+| `verify-and-fix` | ✅ Built | `.claude/skills/verify-and-fix/SKILL.md` |
 
 ---
 

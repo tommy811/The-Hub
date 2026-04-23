@@ -15,9 +15,9 @@ See [[Full Product Vision]] for the complete 9-module scope.
 - ✅ Phase 1 UX hardening (Re-run Discovery, Add Account dialog, detail page revamp, avatar fallback, Apify field mapping fix)
 
 ### Required Agents — Phase 1
-- **verify-and-fix** — 🔜 Next build (retroactive, blocking phase close)
+- **verify-and-fix** — ✅ Built (`claude/skills/verify-and-fix/SKILL.md`)
 
-> ⚠️ Phase 1 closes only after verify-and-fix subagent is built and validated.
+> ✅ Phase 1 agent requirement met. Phase 1 is fully closed.
 
 See [[PROJECT_STATE#16. Per-Phase Agent Requirements]] for full agent requirements table.
 
