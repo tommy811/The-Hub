@@ -4,16 +4,24 @@ export const dynamic = 'force-dynamic';
 import { notFound } from "next/navigation";
 import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
-import { Network, RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { createServiceClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { MergeBannerActions } from "@/components/creators/MergeBannerActions";
+import { FailedRetryButton } from "@/components/creators/FailedRetryButton";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
+import {
+  getCreatorBySlugForWorkspace,
+  getProfilesForCreator,
+  getMergeCandidatesForCreator,
+  getCreatorNameById,
+} from "@/lib/db/queries";
+import { ComingSoon } from "@/components/shared/ComingSoon";
 
 const GRADIENTS = [
   "from-violet-500 to-indigo-600",
@@ -58,42 +66,20 @@ function StatPanel({ label, value, icon: Icon, sub }: StatPanelProps) {
 }
 
 export default async function CreatorDetailPage({ params }: { params: { slug: string } }) {
-  const supabase = createServiceClient();
-
-  const { data: ws } = await supabase.from('workspaces').select('id').limit(1).single();
-  const wsId = ws?.id;
-
-  const { data: creator } = await supabase
-    .from('creators')
-    .select('*')
-    .eq('workspace_id', wsId)
-    .eq('slug', params.slug)
-    .single();
-
+  const wsId = await getCurrentWorkspaceId();
+  const creator = await getCreatorBySlugForWorkspace(wsId, params.slug);
   if (!creator) return notFound();
 
-  const [profilesResult, mergeCandidatesResult] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, platform, handle, display_name, url, follower_count, following_count, post_count, bio, account_type, discovery_confidence, is_primary, updated_at, avatar_url')
-      .eq('creator_id', creator.id)
-      .order('is_primary', { ascending: false }),
-    supabase
-      .from('creator_merge_candidates')
-      .select('id, creator_a_id, creator_b_id, evidence')
-      .eq('status', 'pending')
-      .or(`creator_a_id.eq.${creator.id},creator_b_id.eq.${creator.id}`),
+  const [profiles, mergeCandidates] = await Promise.all([
+    getProfilesForCreator(creator.id),
+    getMergeCandidatesForCreator(creator.id),
   ]);
-
-  const profiles = profilesResult.data || [];
-  const mergeCandidates = mergeCandidatesResult.data || [];
 
   let mergeWith: string | null = null;
   if (mergeCandidates.length > 0) {
     const mc = mergeCandidates[0];
     const otherId = mc.creator_a_id === creator.id ? mc.creator_b_id : mc.creator_a_id;
-    const { data: other } = await supabase.from('creators').select('canonical_name').eq('id', otherId).single();
-    mergeWith = other?.canonical_name || null;
+    mergeWith = await getCreatorNameById(otherId);
   }
 
   const primaryProfile = profiles.find(p => p.is_primary) ?? profiles[0];
@@ -117,14 +103,23 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
           <AlertCircle className="h-4 w-4" color="currentColor" />
           <AlertTitle className="font-bold flex items-center justify-between">
             <span>Possible Duplicate Detected</span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" className="h-7 text-xs border-amber-500/30 hover:bg-amber-500/20 text-amber-500">Not the same person</Button>
-              <Button size="sm" className="h-7 text-xs bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold">Merge: Keep {creator.canonical_name}</Button>
-            </div>
+            <MergeBannerActions
+              candidateId={mergeCandidates[0].id}
+              keepId={creator.id}
+              mergeId={
+                mergeCandidates[0].creator_a_id === creator.id
+                  ? mergeCandidates[0].creator_b_id
+                  : mergeCandidates[0].creator_a_id
+              }
+              keepLabel={creator.canonical_name}
+            />
           </AlertTitle>
           <AlertDescription className="text-amber-500/80">
             This creator may be the same person as <strong>{mergeWith || "another creator"}</strong>.
-            {mergeCandidates[0]?.evidence?.summary && ` ${mergeCandidates[0].evidence.summary}`}
+            {(() => {
+              const ev = mergeCandidates[0]?.evidence as { summary?: string } | null | undefined;
+              return ev?.summary ? ` ${ev.summary}` : null;
+            })()}
           </AlertDescription>
         </Alert>
       )}
@@ -162,9 +157,9 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
             </p>
           )}
 
-          {creator.tags?.length > 0 && (
+          {(creator.tags?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-1 mt-0.5">
-              {creator.tags.map((t: string) => (
+              {(creator.tags ?? []).map((t: string) => (
                 <span key={t} className="bg-muted px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-widest text-muted-foreground">{t}</span>
               ))}
             </div>
@@ -214,7 +209,7 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span className="text-sm font-medium">{creator.last_discovery_error || "Discovery run failed."}</span>
           </div>
-          <Button size="sm" variant="outline" className="border-red-900/50 hover:bg-red-900/20 text-red-400 shrink-0">Retry</Button>
+          <FailedRetryButton creatorId={creator.id} />
         </div>
       )}
 
@@ -243,13 +238,11 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
         </TabsContent>
 
         <TabsContent value="funnel" className="mt-6">
-          <div className="flex flex-col justify-center items-center h-64 border border-dashed border-border/50 rounded-xl bg-muted/10 text-center">
-            <Network className="h-10 w-10 text-indigo-500/50 mb-3" />
-            <h3 className="text-lg font-bold">Funnel visualization</h3>
-            <p className="text-muted-foreground mt-1 max-w-sm text-sm">
-              Coming in Phase 4 — visualize exactly how traffic flows across this creator's network.
-            </p>
-          </div>
+          <ComingSoon
+            phase={4}
+            feature="Funnel visualization"
+            description="Visualize how traffic flows across this creator's network."
+          />
         </TabsContent>
       </Tabs>
     </div>

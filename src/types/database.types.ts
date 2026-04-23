@@ -458,7 +458,6 @@ export type Database = {
           known_usernames: string[] | null
           last_discovery_error: string | null
           last_discovery_run_id: string | null
-          last_discovery_run_id_fk: string | null
           monetization_model:
             | Database["public"]["Enums"]["monetization_model"]
             | null
@@ -484,7 +483,6 @@ export type Database = {
           known_usernames?: string[] | null
           last_discovery_error?: string | null
           last_discovery_run_id?: string | null
-          last_discovery_run_id_fk?: string | null
           monetization_model?:
             | Database["public"]["Enums"]["monetization_model"]
             | null
@@ -510,7 +508,6 @@ export type Database = {
           known_usernames?: string[] | null
           last_discovery_error?: string | null
           last_discovery_run_id?: string | null
-          last_discovery_run_id_fk?: string | null
           monetization_model?:
             | Database["public"]["Enums"]["monetization_model"]
             | null
@@ -528,8 +525,8 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "creators_last_discovery_run_id_fk_fkey"
-            columns: ["last_discovery_run_id_fk"]
+            foreignKeyName: "creators_last_discovery_run_id_fkey"
+            columns: ["last_discovery_run_id"]
             isOneToOne: false
             referencedRelation: "discovery_runs"
             referencedColumns: ["id"]
@@ -1054,6 +1051,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bulk_import_creator: {
+        Args: {
+          p_handle: string
+          p_platform_hint: Database["public"]["Enums"]["platform"]
+          p_tags: string[]
+          p_tracking_type: Database["public"]["Enums"]["tracking_type"]
+          p_user_id: string
+          p_workspace_id: string
+        }
+        Returns: string
+      }
       calculate_rank: {
         Args: { score: number }
         Returns: Database["public"]["Enums"]["rank_tier"]
@@ -1226,13 +1234,13 @@ export type Tables<
     : never
   : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
         DefaultSchema["Views"])
-  ? (DefaultSchema["Tables"] &
-      DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-      Row: infer R
-    }
-    ? R
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
     : never
-  : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
@@ -1252,12 +1260,12 @@ export type TablesInsert<
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-      Insert: infer I
-    }
-    ? I
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
     : never
-  : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
@@ -1277,12 +1285,12 @@ export type TablesUpdate<
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-      Update: infer U
-    }
-    ? U
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
     : never
-  : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
@@ -1298,8 +1306,8 @@ export type Enums<
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-  : never
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
@@ -1315,8 +1323,8 @@ export type CompositeTypes<
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-  : never
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
 
 export const Constants = {
   public: {

@@ -30,7 +30,7 @@ type SortKey = "quality" | "followers" | "outliers";
 
 interface Props {
   accounts: AccountRowData[];
-  activeType: string;
+  activeTracking: string;
 }
 
 export function TikTokAccountsClient({ accounts }: Props) {
@@ -38,7 +38,7 @@ export function TikTokAccountsClient({ accounts }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const activeTab = searchParams.get("type") ?? "all";
+  const activeTab = searchParams.get("tracking") ?? "all";
 
   const [selectedRanks, setSelectedRanks] = useState<RankTier[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>("quality");
@@ -46,8 +46,8 @@ export function TikTokAccountsClient({ accounts }: Props) {
 
   const handleTabChange = (tab: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === "all") params.delete("type");
-    else params.set("type", tab);
+    if (tab === "all") params.delete("tracking");
+    else params.set("tracking", tab);
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };

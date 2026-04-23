@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,12 @@ import { parseHandles, type ParsedHandle } from "@/lib/handleParser";
 import { HandleChipPreview } from "./HandleChipPreview";
 import { PLATFORMS } from "@/lib/platforms";
 
-import { bulkImportCreators } from "@/app/actions";
+import { bulkImportCreators, importSingleCreator } from "@/app/(dashboard)/creators/actions";
+import { toast } from "sonner";
+import type { Enums } from "@/types/db";
 
 export function BulkImportDialog() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [rawText, setRawText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,6 +41,36 @@ export function BulkImportDialog() {
   // Hacky quick state to manage user-assigned platforms for lines that needed it
   const [assignedPlatforms, setAssignedPlatforms] = useState<Record<string, string>>({});
 
+  const [isSingleSubmitting, setIsSingleSubmitting] = useState(false);
+  const [singleError, setSingleError] = useState<string | null>(null);
+
+  const canSubmitSingle =
+    !!singlePlatform &&
+    singleHandle.trim().length > 0 &&
+    !isSingleSubmitting;
+
+  const handleSingleSubmit = async () => {
+    setIsSingleSubmitting(true);
+    setSingleError(null);
+    const result = await importSingleCreator(
+      singlePlatform as Enums<"platform">,
+      singleHandle,
+      singleUrl || undefined
+    );
+    setIsSingleSubmitting(false);
+    if (!result.ok) {
+      setSingleError(result.error);
+      toast.error("Import failed", { description: result.error });
+      return;
+    }
+    toast.success("Creator queued for discovery");
+    setOpen(false);
+    setSinglePlatform("");
+    setSingleHandle("");
+    setSingleUrl("");
+    router.refresh();
+  };
+
   const finalHandles = parsedHandles.map((ph, idx) => {
     const assigned = assignedPlatforms[`${idx}`];
     if (assigned) {
@@ -54,22 +88,29 @@ export function BulkImportDialog() {
   const handleBulkSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
-    try {
-      const result = await bulkImportCreators(rawText, trackingType, tags, assignedPlatforms);
-      if (result?.success === false) {
-        setError(result.error || "Import failed. Check the server logs.");
-        setIsSubmitting(false);
-        return;
-      }
-    } catch (e: any) {
-      setError(e?.message || "Unexpected error.");
-      setIsSubmitting(false);
+    const result = await bulkImportCreators(
+      rawText,
+      trackingType as Enums<"tracking_type">,
+      tags,
+      assignedPlatforms
+    );
+    setIsSubmitting(false);
+    if (!result.ok) {
+      setError(result.error);
+      toast.error("Bulk import failed", { description: result.error });
       return;
     }
-    setIsSubmitting(false);
+    const { imported, skipped, errors } = result.data;
+    if (errors.length > 0) {
+      toast.warning(`Imported ${imported}, ${errors.length} failed`, {
+        description: errors.map((e) => `${e.handle}: ${e.error}`).join("\n"),
+      });
+    } else {
+      toast.success(`Imported ${imported} creator${imported === 1 ? "" : "s"}`);
+    }
     setOpen(false);
     setRawText("");
-    setError(null);
+    router.refresh();
   };
 
   return (
@@ -170,7 +211,19 @@ export function BulkImportDialog() {
                 <Label>URL (Optional)</Label>
                 <Input placeholder="https://..." value={singleUrl} onChange={e => setSingleUrl(e.target.value)} />
              </div>
-             <Button className="mt-2 w-full bg-indigo-600 hover:bg-indigo-500">Import Creator</Button>
+             {singleError && (
+               <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                 {singleError}
+               </div>
+             )}
+             <Button
+               onClick={handleSingleSubmit}
+               disabled={!canSubmitSingle}
+               className="mt-2 w-full bg-indigo-600 hover:bg-indigo-500"
+             >
+               {isSingleSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+               Import Creator
+             </Button>
           </TabsContent>
         </Tabs>
       </DialogContent>

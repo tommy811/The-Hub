@@ -1,5 +1,7 @@
-# SCHEMA.md — Generated 2026-04-23T00:00:00Z
+# SCHEMA.md — Generated 2026-04-24T00:00:00Z
 > Source: live DB (dbkddgwitqwzltuoxmfi). Regenerate via `npm run db:schema`.
+>
+> Surgically updated 2026-04-24 (post-migration `20260424000000_consolidate_last_discovery_run_id`) without re-running the script — the script needs `SUPABASE_DB_URL` in `scripts/.env`. Full regen pending.
 
 ## Tenant-Scoped Tables
 
@@ -192,12 +194,11 @@ _RLS: members insert merge_candidates(INSERT), members select merge_candidates(S
 - **notes**: text
 - **onboarding_status**: onboarding_status — DEF 'processing'::onboarding_status
 - **import_source**: text — DEF 'bulk'::text
-- **last_discovery_run_id**: uuid _(no FK constraint — informational pointer)_
+- **last_discovery_run_id**: uuid — FK→discovery_runs.id
 - **last_discovery_error**: text
 - **added_by**: uuid
 - **created_at**: timestamp with time zone — DEF now()
 - **updated_at**: timestamp with time zone — DEF now()
-- **last_discovery_run_id_fk**: uuid — FK→discovery_runs.id _(constrained FK twin of last_discovery_run_id)_
 
 _RLS: members insert creators(INSERT), members select creators(SELECT), members update creators(UPDATE)_
 
@@ -402,10 +403,8 @@ _Column names appearing in 2 or more tables:_
 
 ## Live vs PROJECT_STATE Drift Notes
 
-The following discrepancies exist between live DB and PROJECT_STATE.md §4:
+All drift resolved as of 2026-04-24.
 
-- `creators` has **two** last-discovery-run columns: `last_discovery_run_id` (no FK) and `last_discovery_run_id_fk` (FK→discovery_runs.id). PROJECT_STATE documents one.
-- `trend_signals` live schema has `profile_id` — PROJECT_STATE says `creator_id, account_id`.
-- `alerts_feed` live schema is missing `creator_id` — PROJECT_STATE lists it.
-- `discovery_runs` live has `input_screenshot_path`, `funnel_edges_discovered_count`, `merge_candidates_raised` — not in PROJECT_STATE.
-- `content_analysis.archetype` is `text` not `content_archetype` enum (enum not created yet).
+- `creators.last_discovery_run_id` consolidated via migration `20260424000000_consolidate_last_discovery_run_id`.
+- `trend_signals.profile_id`, `alerts_feed.profile_id+content_id`, and `discovery_runs` extra cols (`input_screenshot_path`, `funnel_edges_discovered_count`, `merge_candidates_raised`, `started_at`, `completed_at`) all reflected in PROJECT_STATE.md §4.
+- `content_analysis.archetype` is intentionally still `text` — Phase 2 migration drops the column entirely (moves to `creators` table). No schema change needed here.

@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { MoreHorizontal, FileText, Edit3, Archive, Loader2, AlertCircle, RefreshCw, Users } from "lucide-react";
-import { rerunCreatorDiscovery } from "@/app/actions";
+import { toast } from "sonner";
+import { retryCreatorDiscovery } from "@/app/(dashboard)/creators/actions";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon } from "@/components/accounts/PlatformIcon";
@@ -61,7 +62,12 @@ export function CreatorCard({
 
   const handleRerun = () => {
     startTransition(async () => {
-      await rerunCreatorDiscovery(id);
+      const r = await retryCreatorDiscovery(id);
+      if (!r.ok) {
+        toast.error("Re-run discovery failed", { description: r.error });
+        return;
+      }
+      toast.success("Discovery re-queued");
       router.refresh();
     });
   };
@@ -133,8 +139,12 @@ export function CreatorCard({
               </div>
             </div>
             <div className="p-4 border-t border-red-900/30 flex justify-center">
-              <button className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 border border-red-900/50 rounded-full px-4 py-1.5 transition-colors">
-                <RefreshCw className="h-3 w-3" /> Retry Discovery
+              <button
+                onClick={handleRerun}
+                disabled={isPending}
+                className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 border border-red-900/50 rounded-full px-4 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} /> {isPending ? 'Retrying…' : 'Retry Discovery'}
               </button>
             </div>
           </Container>

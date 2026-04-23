@@ -36,8 +36,8 @@ export function MergeAlertBanner({ count }: MergeAlertBannerProps) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <button 
-                onClick={() => router.push('/admin')}
+              <button
+                onClick={() => router.push('/creators')}
                 className="flex items-center gap-1 text-sm font-semibold hover:text-amber-400 transition-colors"
               >
                 Review <ArrowRight className="h-4 w-4" />

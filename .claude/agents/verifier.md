@@ -1,15 +1,7 @@
 ---
 name: verifier
 description: Read-only verification subagent. Checks that code changes actually work end-to-end before declaring complete. Has NO write or edit tools. Reports pass/fail with evidence; does not fix.
-tools:
-  - Read
-  - Grep
-  - Glob
-  - Bash
-  - mcp__chrome-devtools__*
-  - mcp__playwright__*
-  - mcp__supabase__*
-  - mcp__apify__*
+tools: Read, Grep, Glob, Bash, mcp__plugin_chrome-devtools-mcp_chrome-devtools__*, mcp__claude_ai_Supabase__execute_sql, mcp__claude_ai_Supabase__list_tables, mcp__claude_ai_Supabase__list_migrations, mcp__claude_ai_Supabase__list_extensions, mcp__claude_ai_Supabase__get_logs, mcp__claude_ai_Supabase__get_advisors, mcp__claude_ai_Supabase__generate_typescript_types, mcp__claude_ai_Supabase__search_docs
 ---
 
 # Verifier Subagent
@@ -31,14 +23,13 @@ For any code change affecting a route, component, server action, or pipeline:
 2. Start `npm run dev` in background if not running.
 3. For each changed route, curl it — assert 200, no stack trace in response.
 4. For pages that render data:
-   - Execute the expected Supabase query via mcp__supabase.
+   - Execute the expected Supabase query via `mcp__claude_ai_Supabase__execute_sql` (read-only — no DDL, no data writes; the MCP write tools are intentionally NOT in this agent's tool list).
    - Assert row count, null rates, shape.
-5. Open the route in Chrome via mcp__chrome-devtools:
+5. Open the route in Chrome via `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*`:
    - Check console messages — assert zero errors.
    - Take screenshot as evidence (log the path).
    - Assert key DOM elements exist via evaluate_script.
-6. If change touches scraping: use mcp__apify to check last actor run status,
-   itemCount, and log output.
+6. If change touches scraping: Apify MCP is not currently exposed to this agent — escalate to the controller, who can run the Apify checks directly.
 
 ## Output Format
 
