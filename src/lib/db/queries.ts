@@ -298,3 +298,131 @@ export async function getPlatformAccountsForWorkspace(
 
   return accounts
 }
+
+// ---------- Command Center ----------
+
+export async function getCommandCenterStats(wsId: string): Promise<{
+  creatorCount: number
+  postCount: number
+  pendingDiscoveryCount: number
+  avgQualityScore: number | null
+}> {
+  const supabase = createServiceClient()
+
+  const [creatorsRes, pendingRes, contentCountRes, scoresRes] = await Promise.all([
+    supabase
+      .from('creators')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', wsId),
+    supabase
+      .from('discovery_runs')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', wsId)
+      .in('status', ['pending', 'processing']),
+    // scraped_content has no workspace_id — scope via profile_id IN (workspace profiles)
+    supabase
+      .from('scraped_content')
+      .select('profiles!inner(workspace_id)', { count: 'exact', head: true })
+      .eq('profiles.workspace_id', wsId),
+    supabase
+      .from('profile_scores')
+      .select('current_score, profiles!inner(workspace_id)')
+      .eq('profiles.workspace_id', wsId),
+  ])
+
+  const scores = (scoresRes.data ?? [])
+    .map((r) => Number(r.current_score))
+    .filter((n) => !Number.isNaN(n) && n > 0)
+  const avg =
+    scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null
+
+  return {
+    creatorCount: creatorsRes.count ?? 0,
+    postCount: contentCountRes.count ?? 0,
+    pendingDiscoveryCount: pendingRes.count ?? 0,
+    avgQualityScore: avg !== null ? Math.round(avg * 10) / 10 : null,
+  }
+}
+
+export async function getRecentOutliersForWorkspace(
+  wsId: string,
+  limit = 5
+): Promise<Array<{
+  profileHandle: string
+  outlierMultiplier: number | null
+  viewCount: number
+  postUrl: string | null
+}>> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('scraped_content')
+    .select(`
+      view_count, outlier_multiplier, post_url,
+      profiles!inner ( handle, workspace_id )
+    `)
+    .eq('profiles.workspace_id', wsId)
+    .eq('is_outlier', true)
+    .order('outlier_multiplier', { ascending: false, nullsFirst: false })
+    .limit(limit)
+  if (error) throw new Error(`getRecentOutliersForWorkspace: ${error.message}`)
+  return (data ?? []).map((r: any) => ({
+    profileHandle: r.profiles?.handle ?? '',
+    outlierMultiplier: r.outlier_multiplier != null ? Number(r.outlier_multiplier) : null,
+    viewCount: Number(r.view_count ?? 0),
+    postUrl: r.post_url ?? null,
+  }))
+}
+
+export async function getActiveTrendSignalsForWorkspace(
+  wsId: string,
+  limit = 5
+): Promise<Array<{
+  signalType: Enums<'signal_type'>
+  score: number | null
+  metadata: Record<string, unknown>
+  detectedAt: string | null
+}>> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('trend_signals')
+    .select('signal_type, score, metadata, detected_at')
+    .eq('workspace_id', wsId)
+    .eq('is_dismissed', false)
+    .order('detected_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(`getActiveTrendSignalsForWorkspace: ${error.message}`)
+  return (data ?? []).map((r) => ({
+    signalType: r.signal_type as Enums<'signal_type'>,
+    score: r.score != null ? Number(r.score) : null,
+    metadata: (r.metadata as Record<string, unknown>) ?? {},
+    detectedAt: r.detected_at,
+  }))
+}
+
+// ---------- merge candidates ----------
+
+export async function getMergeCandidatesForWorkspace(
+  wsId: string
+): Promise<Tables<'creator_merge_candidates'>[]> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('creator_merge_candidates')
+    .select('*')
+    .eq('workspace_id', wsId)
+    .eq('status', 'pending')
+  if (error) throw new Error(`getMergeCandidatesForWorkspace: ${error.message}`)
+  return data ?? []
+}
+
+export async function getMergeCandidatesForCreator(
+  creatorId: string
+): Promise<Tables<'creator_merge_candidates'>[]> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('creator_merge_candidates')
+    .select('*')
+    .eq('status', 'pending')
+    .or(`creator_a_id.eq.${creatorId},creator_b_id.eq.${creatorId}`)
+  if (error) throw new Error(`getMergeCandidatesForCreator: ${error.message}`)
+  return data ?? []
+}
