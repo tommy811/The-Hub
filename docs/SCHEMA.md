@@ -237,7 +237,7 @@ _RLS: members insert discovery_runs(INSERT), members select discovery_runs(SELEC
 - **workspace_id**: uuid — NN FK→workspaces.id
 - **from_profile_id**: uuid — NN FK→profiles.id
 - **to_profile_id**: uuid — NN FK→profiles.id
-- **edge_type**: text — DEF 'inferred'::text
+- **edge_type**: edge_type — DEF 'inferred'::edge_type
 - **confidence**: numeric — DEF 1.0
 - **detected_at**: timestamp with time zone — DEF now()
 
