@@ -14,7 +14,7 @@ import { parseHandles, type ParsedHandle } from "@/lib/handleParser";
 import { HandleChipPreview } from "./HandleChipPreview";
 import { PLATFORMS } from "@/lib/platforms";
 
-import { bulkImportCreators } from "@/app/actions";
+import { bulkImportCreators, importSingleCreator } from "@/app/(dashboard)/creators/actions";
 
 export function BulkImportDialog() {
   const [open, setOpen] = useState(false);

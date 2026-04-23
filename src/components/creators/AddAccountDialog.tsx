@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addProfileToCreator } from "@/app/actions";
+import { addAccountToCreator } from "@/app/(dashboard)/creators/actions";
 
 const PLATFORMS = [
   { value: 'instagram',         label: 'Instagram',         group: 'Social' },
@@ -72,7 +72,13 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
     setLoading(true);
     setError(null);
     try {
-      await addProfileToCreator(creatorId, platform, handle.trim(), accountType, url.trim() || undefined, displayName.trim() || undefined);
+      await addAccountToCreator(creatorId, {
+        platform: platform as any,
+        handle: handle.trim(),
+        accountType: accountType as any,
+        url: url.trim() || undefined,
+        displayName: displayName.trim() || undefined,
+      });
       setOpen(false);
       setHandle('');
       setUrl('');

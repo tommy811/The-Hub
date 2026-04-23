@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { MoreHorizontal, FileText, Edit3, Archive, Loader2, AlertCircle, RefreshCw, Users } from "lucide-react";
-import { rerunCreatorDiscovery } from "@/app/actions";
+import { retryCreatorDiscovery } from "@/app/(dashboard)/creators/actions";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon } from "@/components/accounts/PlatformIcon";
@@ -61,7 +61,7 @@ export function CreatorCard({
 
   const handleRerun = () => {
     startTransition(async () => {
-      await rerunCreatorDiscovery(id);
+      await retryCreatorDiscovery(id);
       router.refresh();
     });
   };

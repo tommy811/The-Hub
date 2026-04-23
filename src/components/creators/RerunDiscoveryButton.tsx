@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { rerunCreatorDiscovery } from "@/app/actions";
+import { retryCreatorDiscovery } from "@/app/(dashboard)/creators/actions";
 
 export function RerunDiscoveryButton({ creatorId, isProcessing }: { creatorId: string; isProcessing: boolean }) {
   const [loading, setLoading] = useState(false);
@@ -14,7 +14,7 @@ export function RerunDiscoveryButton({ creatorId, isProcessing }: { creatorId: s
     if (loading || isProcessing) return;
     setLoading(true);
     try {
-      await rerunCreatorDiscovery(creatorId);
+      await retryCreatorDiscovery(creatorId);
       router.refresh();
     } catch (e) {
       console.error("Re-run discovery failed:", e);
