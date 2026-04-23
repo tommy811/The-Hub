@@ -16,6 +16,14 @@ declaring done. This is documented in 04-Pipeline/Agent Catalog.md.
 
 Never mark anything "working" without evidence from the verifier.
 
+## Autonomous Execution
+
+For subagent-driven or multi-task work where the user has granted autonomy
+("just do it", "keep working", "proceed"), invoke the `autonomous-execution`
+skill at the start. It codifies which decisions warrant interrupting the
+user vs. proceeding with best judgment, and how subagents should inherit
+the same policy.
+
 ## Database Query Protocol
 
 ### Ground Truth — READ FIRST
