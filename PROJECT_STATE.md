@@ -49,10 +49,10 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 - `workspace_members` — workspace_id, user_id, role (`workspace_role`), joined_at
 
 **Creator layer (root)**
-- `creators` — id, workspace_id, canonical_name, slug, known_usernames[], display_name_variants[], primary_niche, primary_platform, monetization_model, tracking_type, tags[], notes, onboarding_status, import_source, last_discovery_run_id, last_discovery_error, added_by, timestamps
+- `creators` — id, workspace_id, canonical_name, slug, known_usernames[], display_name_variants[], primary_niche, primary_platform, monetization_model, tracking_type, tags[], notes, onboarding_status, import_source, last_discovery_run_id (FK→discovery_runs), last_discovery_error, added_by, timestamps
 - `creator_accounts` alias = `profiles` (same table)
 - `profiles` — id, workspace_id, creator_id (FK nullable for legacy), platform, handle, display_name, profile_url, url, avatar_url, bio, follower_count, following_count, post_count, tracking_type, tags[], is_clean, analysis_version, last_scraped_at, added_by, is_active, account_type, discovery_confidence, is_primary (bool, default false), timestamps
-- `discovery_runs` — id, workspace_id, creator_id, input_handle, input_url, input_platform_hint, status, raw_gemini_response, assets_discovered_count, attempt_number, error_message, initiated_by, timestamps
+- `discovery_runs` — id, workspace_id, creator_id, input_handle, input_url, input_platform_hint, input_screenshot_path, status, raw_gemini_response, assets_discovered_count, funnel_edges_discovered_count, merge_candidates_raised, attempt_number, error_message, initiated_by, started_at, completed_at, timestamps
 - `creator_merge_candidates` — id, workspace_id, creator_a_id, creator_b_id (a<b enforced), confidence, evidence (jsonb), triggered_by_run_id, status, resolved_by, timestamps
 - `funnel_edges` — id, creator_id, workspace_id, from_profile_id, to_profile_id, edge_type, confidence, detected_at
 - `creator_brand_analyses` — id, creator_id, workspace_id, version, niche_summary, usp, brand_keywords[], seo_keywords[], funnel_map (jsonb), monetization_summary, platforms_included[], gemini_raw_response, analyzed_at
@@ -69,9 +69,9 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 - `content_label_assignments` — content_id, label_id, assigned_by_ai, confidence, PK (content_id, label_id)
 
 **Signals & alerts**
-- `trend_signals` — id, workspace_id, signal_type, creator_id, account_id, content_id, score, detected_at, metadata (jsonb), is_dismissed
+- `trend_signals` — id, workspace_id, signal_type, profile_id (FK→profiles), content_id (FK→scraped_content), score, detected_at, metadata (jsonb), is_dismissed
 - `alerts_config` — id, workspace_id, name, rule_type, threshold_json, target_profile_ids[], is_enabled, notify_emails[], created_by
-- `alerts_feed` — id, workspace_id, config_id, content_id, profile_id, creator_id, triggered_at, is_read, payload (jsonb)
+- `alerts_feed` — id, workspace_id, config_id, content_id (FK→scraped_content), profile_id (FK→profiles), triggered_at, is_read, payload (jsonb)
 
 ### 4.2 Pending migration (Phase 2 entry point)
 
@@ -544,7 +544,6 @@ Add to `.claude/settings.json`:
 | Trend Signals feed | Same file | TrendItem cards are hardcoded mock data | Wire via `trend_signals` table in Phase 2–3 |
 | Instagram CDN avatar expiry | `src/components/creators/AvatarWithFallback.tsx` | Avatar URLs scraped by Apify expire after ~hours. `onError` falls back to gradient monogram — so the UI degrades gracefully but the stored URL is stale | Re-scrape profile to refresh `avatar_url`. Long-term: proxy or store to Supabase Storage |
 | Discovery pipeline broken (httpx) | `scripts/discover_creator.py` — `fetch_input_context()` | `httpx.get("https://www.instagram.com/{handle}/")` returns login redirect or bot block. Gemini receives garbage. Discovery "succeeds" but finds no real data. | Rebuild: replace httpx with Apify `resultsType: "details"` to get real bio + externalUrls. Phase 2 first task. |
-| Schema drift vs PROJECT_STATE | `docs/SCHEMA.md` footer — 4 mismatches: `creators.last_discovery_run_id_fk` shadow col; `trend_signals` has `profile_id` not `creator_id`; `alerts_feed` missing `creator_id`; `discovery_runs` has 3 undocumented cols | Low — drift is documented, types file is correct | Resolve before Phase 2: update §4 to match live DB, then drop footer note |
 
 ---
 
@@ -554,3 +553,4 @@ Add to `.claude/settings.json`:
   Scope: 90-min minimal version, not the full 30-hr research plan.
   Rationale: 25-file codebase, 2-5 users, internal tool — full harness was over-engineered.
   See docs/AGENT_USAGE.md for day-to-day usage.
+- 2026-04-24: Phase 1 schema drift resolved (migration 20260424000000). PROJECT_STATE §4 now matches live DB exactly. Phase 2 schema migration deferred to Phase 2 entry per docs/superpowers/specs/2026-04-23-phase-1-overhaul-design.md.
