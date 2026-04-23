@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-23 (sync 5)
+Last synced: 2026-04-23 (sync 6)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Obsidian mirrors it at `02-Architecture/PROJECT_STATE.md`.
 
@@ -282,7 +282,7 @@ MAX_CONCURRENT_RUNS=5
 
 **Session notes:** one file per calendar day in Obsidian `06-Sessions/YYYY-MM-DD.md`. Multiple working sessions in the same day append to that day's file.
 
-**Agent development cadence:** Each phase's required agents are built alongside feature work, not deferred. A phase closes only when its agents are live and validated. Agent specs live in `.claude/skills/[agent-name]/SKILL.md`. See §15 Agent Roadmap.
+**Agent development cadence:** Each phase's required agents are built alongside feature work, not deferred. A phase closes only when its agents are live and validated. Agent specs live in `.claude/agents/[agent-name].md`. See §15–§19 Agent Architecture.
 
 **Every new AI Studio session:** paste this file at the top of the prompt.
 
@@ -307,26 +307,232 @@ MAX_CONCURRENT_RUNS=5
 
 ---
 
-## 15. Agent Roadmap
+## 15. Agent Architecture
 
-Agents are first-class phase deliverables. A phase is not complete until its required agents are built, tested, and documented. Agents live in `.claude/skills/[agent-name]/SKILL.md` and are version-controlled with the repo.
+The Hub uses a **two-layer agent architecture**:
 
-| Phase | Agent | Status | Purpose |
-|---|---|---|---|
-| 1 | verify-and-fix | 🔜 Next build | Verifies every code change actually works before declaring done — starts dev server, checks compile, curls affected pages, verifies Supabase query shapes, smoke-tests server actions, auto-fixes up to 3 loops then escalates |
-| 2 | schema drift watchdog | ⬜ Phase 2 | Weekly drift detection: compares live Supabase schema vs PROJECT_STATE.md §4 vs code queries. Surfaces drift before it breaks production. |
-| 2 | scrape-verify | ⬜ Phase 2 | Post-ingestion verification: correct row counts landed, field mappings populated, no upsert duplicates, is_outlier flag set where expected, snapshot tables populated. Escalates on anomalies. |
-| 3 | brand analysis | ⬜ Phase 3 | Multi-step creator brand report synthesis — reads bio + link-in-bio + top content captions + hashtags → writes structured report with niche, USP, brand_keywords, seo_keywords, proposed archetype/vibe → writes to creator_brand_analyses |
-| 3 | label deduplication | ⬜ Phase 3 | Nightly review of new AI-created content_labels with low usage_count. Detects semantic duplicates via embedding comparison, proposes merges, auto-merges at high confidence, surfaces ambiguous for human review. |
-| 3 | merge candidate auto-resolver | ⬜ Phase 3 | Reviews creator_merge_candidates where status = 'pending' and confidence ≥ 0.9. Auto-merges clear cases, escalates the rest for human review. |
-| 4 | funnel inference | ⬜ Phase 4 | Analyzes scraped content captions and link-in-bio destinations to propose new funnel_edges the discovery pass missed. Suggests edges with confidence scores for human approval. |
-| ongoing | documentation drift | ⬜ Phase 2+ | Scheduled weekly. Scans for docs referencing deprecated patterns, broken wiki-links, new files not linked from Home.md, stale session notes. Produces drift report. |
+- **Layer 1 — Dev-time verification** (inside Claude Code sessions)
+  Agents enforce "work actually works" before Claude declares done. Prevents the "claims done, reality empty" failure pattern.
 
-**Full agent specs:** see `04-Pipeline/Agent Catalog.md` in the Obsidian vault.
+- **Layer 2 — Runtime watchdogs** (deterministic, not LLM-based at row level)
+  Webhooks and schema validators catch silent failures (login walls, empty datasets, parse errors) after ingestion.
+
+**No in-app agentic self-healing.** At 2–5 users it adds more operational surface than it removes. Evidence: Anthropic's own "Building Effective Agents" guidance; community consensus across Pixelmojo, Blake Crosley, and the DEV.to "20 agents locally, one in prod" post.
 
 ---
 
-## 16. Known Limitations
+## 15.1 Dev-Time Verifier Stack
+
+### Core verification skills/plugins
+
+| Component | Role | Install |
+|---|---|---|
+| `obra/superpowers` | The gate. Enforces verification-before-completion. Bundles TDD, systematic debugging, verifier subagent patterns. | `/plugin install superpowers@claude-plugins-official` |
+| `kepano/obsidian-skills` | Obsidian Flavored Markdown for the vault (already installed). | existing |
+| `anthropics/skills` (webapp-testing) | Canonical Python+Playwright pattern with multi-server lifecycle. Matches Next.js + Python stack. | `/plugin install example-skills@anthropic-agent-skills` |
+| `nizos/tdd-guard` | Hook-based hard block: no code without a failing test first. Optional but recommended for Phase 3+. | see github |
+
+### Core MCP servers for verifier access
+
+| MCP | Purpose | Connection |
+|---|---|---|
+| `chrome-devtools-mcp` (Google) | Real Chrome navigation — detects auth walls, captchas, redirects, console errors. **This is what catches the Gemini-scraper-blocked-at-login case.** | `/plugin install chrome-devtools-mcp` |
+| `playwright-mcp` (Microsoft) | Structured accessibility snapshots. Cross-browser. Storage-state for authenticated flows. | `claude mcp add playwright npx @playwright/mcp@latest` |
+| `supabase-mcp` (official) | Schema/query/logs. **Always `read_only=true&project_ref=<DEV>`** — never connect to production with write access. | `claude mcp add --transport http supabase "https://mcp.supabase.com/mcp?project_ref=<DEV_REF>&read_only=true"` |
+| `apify-mcp` | Actor runs, dataset inspection, logs for scraper debugging. | `claude mcp add apify npx @apify/actors-mcp-server` |
+| `sentry-mcp` | Production error stack traces surfaced in dev sessions. | `claude mcp add --transport http sentry https://mcp.sentry.dev/mcp` |
+
+### Verifier subagent pattern
+
+`.claude/agents/verifier.md` — a dedicated subagent with **read-only tools only**:
+
+Allowed: `Read`, `Grep`, `Glob`, `Bash`, `mcp__chrome-devtools__*`, `mcp__playwright__*`, `mcp__supabase__*`, `mcp__apify__*`.
+
+**Forbidden: `Edit`, `Write`, any mutation tool.**
+
+Rationale: a verifier that can fix code self-justifies rubber-stamping. Enforcing tool separation prevents the self-evaluation bias Anthropic documents. The verifier reports pass/fail with evidence; the implementer fixes.
+
+### Stop hook as the hard gate
+
+`.claude/settings.json` Stop hook invokes the verifier subagent before allowing task completion. The `stop_hook_active` flag prevents infinite loops. Non-zero exit blocks the turn from ending.
+
+**Known issue:** Stop hooks are unreliable in the VSCode Claude Code extension (GitHub issues #17805, #29767, #40029). Use CLI mode for reliable enforcement; the extension works but cannot be trusted as a hard gate.
+
+---
+
+## 15.2 Runtime Watchdog Stack
+
+### Apify webhooks (4 events, not 1)
+
+Configure on every actor run:
+- `ACTOR.RUN.SUCCEEDED` — normal success path
+- `ACTOR.RUN.FAILED` — crashed
+- `ACTOR.RUN.TIMED_OUT` — exceeded time limit
+- **`ACTOR.RUN.SUCCEEDED_WITH_EMPTY_DATASET`** — the one most teams miss. Fires when the actor "succeeded" but wrote zero rows. Catches login walls, captcha deflection, site structure changes.
+
+Webhook targets a Next.js API route or Supabase Edge Function. Returns 200 < 30s. Queues heavy work.
+
+### Deterministic result validators (no LLM at row level)
+
+Chain Apify's `lukaskrivka/results-checker` actor after every scrape:
+
+```yaml
+minItems: 50                                    # p5 of historical baseline
+jsonSchema: schemas/social_post.schema.json
+fieldRules:
+  author: 0.95       # 95% of rows must have author
+  content: 0.90
+  url: 1.0           # 100% must have URL
+compareWithPreviousExecution: true              # catches silent degradation
+```
+
+### Inside each actor run
+
+- Store raw HTML sample: `{run_id}_raw.html` to Apify key-value store
+- Validator regex: `sign in|captcha|cf-chl|access denied|log in` — fail run if found
+- Pydantic validation on every row; retry via `tenacity` on `finish_reason in {"SAFETY", "RECITATION", "MAX_TOKENS"}`
+
+### Supabase schema additions (Phase 2)
+
+Add to `scraped_content`:
+- `quality_flag` enum (`clean` | `suspicious` | `rejected`)
+- `quality_reason` text
+
+Populate before any row is exposed in UI. Surface flags in admin views. Never show `rejected` rows.
+
+### Cron check (deterministic, no LLM)
+
+Supabase scheduled function runs hourly:
+```sql
+-- Alert if any tracked creator has no successful scrape in 48h
+SELECT creator_id, MAX(scraped_at) as last_scrape
+FROM scraped_content
+WHERE workspace_id = <ws>
+GROUP BY creator_id
+HAVING MAX(scraped_at) < NOW() - INTERVAL '48 hours';
+```
+
+Results post to a Slack webhook. No agent involvement.
+
+### LLM-as-judge (only on flagged rows)
+
+Gemini Flash reviews ~5% of scraped rows flagged as `suspicious` by deterministic validators. Decides: promote to `clean` or demote to `rejected`. Keeps LLM cost under $10/month at The Hub's scale.
+
+---
+
+## 16. Per-Phase Agent Requirements
+
+**A phase is not complete until its required agents exist, are validated, and are documented in the Agent Catalog.**
+
+### Phase 1 — Foundation & Creators
+
+Required agents (retroactive adds):
+
+| Agent | Layer | Status |
+|---|---|---|
+| `verify-and-fix` | Dev-time | 🔜 Next build (blocks Phase 1 close) |
+| `verify-scrape` (slash command, not agent) | Dev-time | 🔜 Deferred until Phase 2 has real scrapes |
+| `schema-drift-watchdog` | Ongoing | 🔜 Builds with Phase 2 |
+
+### Phase 2 — Platform Intelligence + Scraping
+
+Required agents:
+
+| Agent | Layer | Purpose |
+|---|---|---|
+| `schema-drift-watchdog` | Dev-time | Weekly comparison: live Supabase vs PROJECT_STATE vs code queries |
+| `scrape-verify` | Runtime | Post-ingestion check: row counts, field success rates, auth-wall detection |
+| `verify-scrape` slash command | Dev-time | On-demand end-to-end check: Apify → Supabase → UI DOM integrity |
+
+### Phase 3 — Analysis Engines
+
+Required agents:
+
+| Agent | Layer | Purpose |
+|---|---|---|
+| `brand-analysis` | Dev+Runtime | Multi-step Claude agent: bio + link-in-bio + top content → brand report. Writes to `creator_brand_analyses`. |
+| `label-deduplication` | Runtime (nightly) | Embedding-based semantic merge of near-duplicate `content_labels`. Auto-merge at high confidence; escalate ambiguous. |
+| `merge-candidate-resolver` | Runtime (nightly) | Auto-merges `creator_merge_candidates` at confidence ≥ 0.9. Escalates lower. |
+
+### Phase 4 — Funnel & Monetization
+
+Required agents:
+
+| Agent | Layer | Purpose |
+|---|---|---|
+| `funnel-inference` | Runtime (weekly) | Scans content captions + link-in-bio destinations for `funnel_edges` the discovery pass missed. Proposes with confidence. |
+
+### Ongoing (all phases)
+
+| Agent | Layer | Purpose |
+|---|---|---|
+| `documentation-drift` | Dev-time (weekly) | Companion to `sync-project-state`. Scans for deprecated pattern references, broken wiki-links, unlinked files, stale session notes. |
+
+---
+
+## 17. Agent Design Principles
+
+1. **Separation of tools.** Verifier agents never hold write access to the thing they verify. Self-evaluation bias is real; Anthropic has documented it.
+2. **Deterministic before LLM.** Row-count checks, schema validation, regex — use these first. Only escalate flagged rows to LLM judgment.
+3. **Explicit checklists beat vague criteria.** Verifier prompts must enumerate what to check. "Verify this works" produces rubber stamps.
+4. **Escalate, don't guess.** On ambiguous cases, agents write to `06-Sessions/YYYY-MM-DD.md` under "Agent Escalations" and stop.
+5. **One runtime per agent, or none.** Every agent running in production is a system to maintain. Weigh against scale. The Hub's scale mostly justifies dev-time agents + deterministic runtime watchdogs, not autonomous runtime agents.
+6. **Read-only in production by default.** Only the `sync-project-state` skill and the brand-analysis agent write to Supabase. Verifiers never.
+7. **Audit trail.** Every agent logs its actions to the day's session note. No silent modifications.
+8. **Cost ceiling per agent.** Each agent has a documented monthly LLM cost estimate. If it exceeds ceiling, it's refactored or removed.
+
+---
+
+## 18. Agent-Stack-Specific Environment Variables
+
+Add to `scripts/.env`:
+
+```
+# Webhook targets for Apify watchdog
+APIFY_WEBHOOK_URL_SUCCEEDED=
+APIFY_WEBHOOK_URL_FAILED=
+APIFY_WEBHOOK_URL_EMPTY_DATASET=
+
+# Sentry MCP (optional, for prod error surfacing in dev)
+SENTRY_AUTH_TOKEN=
+SENTRY_ORG_SLUG=
+
+# Slack webhook for runtime alerts
+SLACK_WEBHOOK_URL_ALERTS=
+```
+
+Add to `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "supabase": { "transport": "http", "url": "https://mcp.supabase.com/mcp?project_ref=<DEV_REF>&read_only=true" },
+    "chrome-devtools": { "command": "npx", "args": ["chrome-devtools-mcp"] },
+    "playwright": { "command": "npx", "args": ["@playwright/mcp@latest"] },
+    "apify": { "command": "npx", "args": ["@apify/actors-mcp-server"] },
+    "sentry": { "transport": "http", "url": "https://mcp.sentry.dev/mcp" }
+  },
+  "hooks": {
+    "Stop": [
+      { "command": "bash .claude/hooks/verify-before-stop.sh" }
+    ]
+  }
+}
+```
+
+---
+
+## 19. Integration with Existing Workflow
+
+- **`sync-project-state` skill** — extend to read Apify latest-run metadata and Supabase `quality_flag` distribution. Writes a nightly `project-health.md` note in Obsidian.
+- **`PROJECT_STATE.md` §7 Routes table** — add a "Verifier" column indicating which agent/slash-command validates each route.
+- **`06-Sessions/YYYY-MM-DD.md`** — new section template: "Agent Escalations." Agents write here when they escalate.
+- **`00-Meta/Stack & Tools.md`** — agent stack is referenced here, canonically defined in PROJECT_STATE.md §15–§18.
+- **`04-Pipeline/Agent Catalog.md`** — operational details of each agent live here (triggers, workflow, escalation paths).
+
+---
+
+## 20. Known Limitations
 
 | Issue | Location | Impact | Fix |
 |---|---|---|---|
