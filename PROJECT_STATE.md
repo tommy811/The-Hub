@@ -282,6 +282,8 @@ MAX_CONCURRENT_RUNS=5
 
 **Session notes:** one file per calendar day in Obsidian `06-Sessions/YYYY-MM-DD.md`. Multiple working sessions in the same day append to that day's file.
 
+**Agent development cadence:** Each phase's required agents are built alongside feature work, not deferred. A phase closes only when its agents are live and validated. Agent specs live in `.claude/skills/[agent-name]/SKILL.md`. See §15 Agent Roadmap.
+
 **Every new AI Studio session:** paste this file at the top of the prompt.
 
 **Every new Claude Code session:** "Read PROJECT_STATE.md first."
@@ -305,7 +307,26 @@ MAX_CONCURRENT_RUNS=5
 
 ---
 
-## 15. Known Limitations
+## 15. Agent Roadmap
+
+Agents are first-class phase deliverables. A phase is not complete until its required agents are built, tested, and documented. Agents live in `.claude/skills/[agent-name]/SKILL.md` and are version-controlled with the repo.
+
+| Phase | Agent | Status | Purpose |
+|---|---|---|---|
+| 1 | verify-and-fix | 🔜 Next build | Verifies every code change actually works before declaring done — starts dev server, checks compile, curls affected pages, verifies Supabase query shapes, smoke-tests server actions, auto-fixes up to 3 loops then escalates |
+| 2 | schema drift watchdog | ⬜ Phase 2 | Weekly drift detection: compares live Supabase schema vs PROJECT_STATE.md §4 vs code queries. Surfaces drift before it breaks production. |
+| 2 | scrape-verify | ⬜ Phase 2 | Post-ingestion verification: correct row counts landed, field mappings populated, no upsert duplicates, is_outlier flag set where expected, snapshot tables populated. Escalates on anomalies. |
+| 3 | brand analysis | ⬜ Phase 3 | Multi-step creator brand report synthesis — reads bio + link-in-bio + top content captions + hashtags → writes structured report with niche, USP, brand_keywords, seo_keywords, proposed archetype/vibe → writes to creator_brand_analyses |
+| 3 | label deduplication | ⬜ Phase 3 | Nightly review of new AI-created content_labels with low usage_count. Detects semantic duplicates via embedding comparison, proposes merges, auto-merges at high confidence, surfaces ambiguous for human review. |
+| 3 | merge candidate auto-resolver | ⬜ Phase 3 | Reviews creator_merge_candidates where status = 'pending' and confidence ≥ 0.9. Auto-merges clear cases, escalates the rest for human review. |
+| 4 | funnel inference | ⬜ Phase 4 | Analyzes scraped content captions and link-in-bio destinations to propose new funnel_edges the discovery pass missed. Suggests edges with confidence scores for human approval. |
+| ongoing | documentation drift | ⬜ Phase 2+ | Scheduled weekly. Scans for docs referencing deprecated patterns, broken wiki-links, new files not linked from Home.md, stale session notes. Produces drift report. |
+
+**Full agent specs:** see `04-Pipeline/Agent Catalog.md` in the Obsidian vault.
+
+---
+
+## 16. Known Limitations
 
 | Issue | Location | Impact | Fix |
 |---|---|---|---|
