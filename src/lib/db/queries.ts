@@ -88,6 +88,19 @@ export async function getCreatorBySlugForWorkspace(
   return data
 }
 
+export async function getCreatorNameById(
+  creatorId: string
+): Promise<string | null> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('creators')
+    .select('canonical_name')
+    .eq('id', creatorId)
+    .maybeSingle()
+  if (error) throw new Error(`getCreatorNameById: ${error.message}`)
+  return data?.canonical_name ?? null
+}
+
 export async function getCreatorStatsForWorkspace(
   wsId: string
 ): Promise<{

@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
 import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { createServiceClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
@@ -20,6 +19,7 @@ import {
   getCreatorBySlugForWorkspace,
   getProfilesForCreator,
   getMergeCandidatesForCreator,
+  getCreatorNameById,
 } from "@/lib/db/queries";
 import { ComingSoon } from "@/components/shared/ComingSoon";
 
@@ -79,13 +79,7 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
   if (mergeCandidates.length > 0) {
     const mc = mergeCandidates[0];
     const otherId = mc.creator_a_id === creator.id ? mc.creator_b_id : mc.creator_a_id;
-    const supabase = createServiceClient();
-    const { data: other } = await supabase
-      .from("creators")
-      .select("canonical_name")
-      .eq("id", otherId)
-      .maybeSingle();
-    mergeWith = other?.canonical_name ?? null;
+    mergeWith = await getCreatorNameById(otherId);
   }
 
   const primaryProfile = profiles.find(p => p.is_primary) ?? profiles[0];
