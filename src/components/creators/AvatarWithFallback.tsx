@@ -1,0 +1,34 @@
+"use client";
+
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+
+interface AvatarWithFallbackProps {
+  avatarUrl: string | null;
+  name: string;
+  gradient: string;
+  className?: string;
+  textClassName?: string;
+}
+
+export function AvatarWithFallback({ avatarUrl, name, gradient, className, textClassName }: AvatarWithFallbackProps) {
+  const [imgError, setImgError] = useState(false);
+  const showFallback = !avatarUrl || imgError;
+
+  return (
+    <div className={cn("flex items-center justify-center bg-gradient-to-br overflow-hidden", gradient, className)}>
+      {!showFallback ? (
+        <img
+          src={avatarUrl!}
+          alt=""
+          className="w-full h-full object-cover"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <span className={cn("font-black text-white/90", textClassName)}>
+          {name.substring(0, 2).toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
+}

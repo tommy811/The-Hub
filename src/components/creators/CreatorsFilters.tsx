@@ -32,7 +32,7 @@ export function CreatorsFilters({ counts, trackingCounts, activeStatus, activeTr
   };
 
   return (
-    <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+    <div className="flex flex-col gap-3">
       <StatusTabBar counts={counts} activeStatus={activeStatus} onStatusChange={handleStatusChange} />
       <TrackingTabBar onTabChange={handleTrackingChange} activeTab={activeTracking} counts={trackingCounts} />
     </div>

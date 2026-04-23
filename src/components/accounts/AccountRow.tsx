@@ -88,7 +88,7 @@ export function AccountRow({
            </TooltipProvider>
            {lastScrapedAt && (
              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest hidden lg:block">
-               Updated {new Date(lastScrapedAt).toLocaleDateString()}
+               Updated {new Date(lastScrapedAt).toISOString().slice(0, 10)}
              </span>
            )}
         </div>

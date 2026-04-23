@@ -72,18 +72,27 @@ def scrape_instagram_profile(workspace_id: str, handle: str, limit: int = 5):
         profile_update = {}
         
         for item in dataset_items:
-            # 1. Extract Profile stats if available (usually in the first item or parentData)
-            owner = item.get("ownerProfilePicUrl")
-            if owner and not profile_update:
-                profile_update = {
-                    "avatar_url": item.get("ownerProfilePicUrl"),
-                    "display_name": item.get("ownerFullName"),
-                    "follower_count": item.get("ownerFollowers"),
-                    "following_count": item.get("ownerFollowing"),
-                    "post_count": item.get("ownerPostsCount", 0),
-                    "bio": item.get("ownerBiography"),
-                    "last_scraped_at": "now()"
-                }
+            # 1. Extract Profile stats
+            # Apify instagram-scraper (resultsType=posts) returns flat fields alongside metaData
+            # Primary fields: followersCount, profilePicUrl, ownerFullName, biography, followsCount, postsCount
+            # Fallback: metaData nested object has the same fields
+            if not profile_update:
+                meta = item.get("metaData") or {}
+                followers = item.get("followersCount") or meta.get("followersCount")
+                full_name = item.get("ownerFullName") or meta.get("fullName")
+                bio = item.get("biography") or meta.get("biography")
+                if any([followers, full_name, bio]):
+                    profile_update = {
+                        "display_name": full_name,
+                        "follower_count": followers,
+                        "following_count": item.get("followsCount") or meta.get("followsCount"),
+                        "post_count": item.get("postsCount") or meta.get("postsCount") or 0,
+                        "bio": bio,
+                        "last_scraped_at": "now()"
+                    }
+                    pic = item.get("profilePicUrl") or meta.get("profilePicUrl")
+                    if pic:
+                        profile_update["avatar_url"] = pic
             
             # 2. Extract Post data
             post_id = item.get("id")

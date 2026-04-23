@@ -83,10 +83,51 @@ export async function bulkImportCreators(
     // Refresh UI
     revalidatePath('/creators');
     return { success: true };
-    
+
   } catch (error: any) {
     console.error("Bulk Import Error:", error);
     return { success: false, error: error.message };
   }
+}
+
+export async function rerunCreatorDiscovery(creatorId: string) {
+  const { data: runId, error } = await supabase.rpc('retry_creator_discovery', {
+    p_creator_id: creatorId,
+    p_user_id: null,
+  });
+  if (error) throw new Error(error.message);
+  // Non-blocking edge function trigger — Python worker polls anyway
+  if (runId) {
+    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/trigger-discovery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+      body: JSON.stringify({ run_id: runId }),
+    }).catch(() => {});
+  }
+  revalidatePath('/creators');
+}
+
+export async function addProfileToCreator(
+  creatorId: string,
+  platform: string,
+  handle: string,
+  accountType: string,
+  url?: string,
+  displayName?: string,
+) {
+  const { data: ws } = await supabase.from('workspaces').select('id').limit(1).single();
+  const { error } = await supabase.from('profiles').insert({
+    workspace_id: ws!.id,
+    creator_id: creatorId,
+    platform,
+    handle,
+    account_type: accountType,
+    url: url || null,
+    display_name: displayName || null,
+    discovery_confidence: 1.0,
+    is_primary: false,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath('/creators');
 }
 

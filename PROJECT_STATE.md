@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-23 (sync 4)
+Last synced: 2026-04-23 (sync 5)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Obsidian mirrors it at `02-Architecture/PROJECT_STATE.md`.
 
@@ -159,7 +159,7 @@ PK (creator_id, label_id)
 | `increment_label_usage` | () → trigger | Trigger: `content_labels.usage_count++` on assignment insert |
 | `commit_discovery_result` | (p_run_id, p_creator_data jsonb, p_accounts jsonb, p_funnel_edges jsonb) → jsonb | Transactional: enriches creator, upserts profiles (with collision → merge_candidates), inserts funnel edges, marks run completed. Returns `{creator_id, accounts_upserted, merge_candidates_raised}` |
 | `mark_discovery_failed` | (p_run_id, p_error text) → void | Sets run.status=failed, creator.onboarding_status=failed |
-| `retry_creator_discovery` | (p_creator_id, p_user_id) → uuid | Creates new `discovery_runs` (attempt_number+1), returns new run_id |
+| `retry_creator_discovery` | (p_creator_id, p_user_id) → uuid | Creates new `discovery_runs` (attempt_number+1), copies `input_handle` + `input_platform_hint` from most recent prior run, returns new run_id |
 | `merge_creators` | (p_keep_id, p_merge_id, p_resolver_id, p_candidate_id) → void | Migrates profiles/edges/analyses merge→keep, merges known_usernames[], archives merged creator |
 
 ---
@@ -170,7 +170,7 @@ PK (creator_id, label_id)
 |---|---|---|
 | `/` | `(dashboard)/page.tsx` | ✅ Live — Command Center with live stats from Supabase |
 | `/creators` | `(dashboard)/creators/page.tsx` | ✅ Live — real queries, bulk import works |
-| `/creators/[slug]` | `(dashboard)/creators/[slug]/page.tsx` | 🟡 Partial — Network tab live, Content/Analytics/Brand tabs are mock |
+| `/creators/[slug]` | `(dashboard)/creators/[slug]/page.tsx` | 🟡 Partial — Full revamp: stats strip (Total Reach, account type counts), bio, AvatarWithFallback, network sections with icons. Content/Branding/Funnel tabs are coming-soon stubs. |
 | `/content` | `(dashboard)/content/page.tsx` | ⬜ Placeholder |
 | `/trends` | `(dashboard)/trends/page.tsx` | ⬜ Mock — UI built, no live data |
 | `/admin` | `(dashboard)/admin/page.tsx` | ⬜ Placeholder |
@@ -291,7 +291,8 @@ MAX_CONCURRENT_RUNS=5
 ## 14. Build Order (Current)
 
 1. ✅ **Phase 1 complete:** Schema, Creators hub, discovery pipeline, bulk import, merge candidates, live card grid with Realtime
-2. 🔄 **Wire existing stub routes** to live Supabase data: ✅ `/platforms/instagram/accounts`, ✅ `/platforms/tiktok/accounts` — 🔜 `/content`, `/trends` remaining
+2. ✅ **Phase 1 UX hardening:** Re-run Discovery wired end-to-end, Manual Add Account dialog functional, Creator detail page revamped (stats strip, bio, avatar fallback, network sections), Apify field mapping fixed (follower counts backfilled)
+3. 🔄 **Wire existing stub routes** to live Supabase data: ✅ `/platforms/instagram/accounts`, ✅ `/platforms/tiktok/accounts` — 🔜 `/content`, `/trends` remaining
 3. 🔜 **Phase 2 scraping:** IG + TikTok Apify ingestion, normalizers, `flag_outliers` live, Outliers page live
 4. 🔜 **Phase 2 trends:** `trends` table migration, audio signature extraction from `platform_metrics`, trend linking during content analysis
 5. 🔜 **Phase 3 content analysis:** Gemini content scoring pipeline, `profile_scores` + rank tier live on UI
@@ -312,3 +313,5 @@ MAX_CONCURRENT_RUNS=5
 | Anon key used in server actions | Same file — `getSupabase()` uses `NEXT_PUBLIC_SUPABASE_ANON_KEY` | RLS policies with `auth.uid()` checks may block writes | Switch to service role key (with `cookies()` auth) or implement Auth |
 | Command Center outlier feed | `src/app/(dashboard)/page.tsx` | Outlier cards are hardcoded mock data — no live `scraped_content` query yet | Wire in Phase 2 when `flag_outliers` runs on real posts |
 | Trend Signals feed | Same file | TrendItem cards are hardcoded mock data | Wire via `trend_signals` table in Phase 2–3 |
+| Instagram CDN avatar expiry | `src/components/creators/AvatarWithFallback.tsx` | Avatar URLs scraped by Apify expire after ~hours. `onError` falls back to gradient monogram — so the UI degrades gracefully but the stored URL is stale | Re-scrape profile to refresh `avatar_url`. Long-term: proxy or store to Supabase Storage |
+| Discovery pipeline broken (httpx) | `scripts/discover_creator.py` — `fetch_input_context()` | `httpx.get("https://www.instagram.com/{handle}/")` returns login redirect or bot block. Gemini receives garbage. Discovery "succeeds" but finds no real data. | Rebuild: replace httpx with Apify `resultsType: "details"` to get real bio + externalUrls. Phase 2 first task. |

@@ -1,5 +1,17 @@
 # Migration Log
 
+## fix_retry_discovery_and_canonical_name_guard (applied via MCP — no local file)
+
+Applied 2026-04-23. Two RPC patches:
+
+**`retry_creator_discovery`** — now copies `input_handle` and `input_platform_hint` from the most recent prior `discovery_runs` row into the new run. Previously these were NULL on retry runs, causing the Python worker to have no context to work with (re-ran but immediately failed because it didn't know the handle).
+
+**`commit_discovery_result`** — added `NULLIF(NULLIF(TRIM(name), ''), 'Unknown')` guard when writing `canonical_name`. Prevents Gemini returning the string "Unknown" from overwriting a previously valid canonical_name on a retry run.
+
+Data fix also applied: `UPDATE creators SET canonical_name = 'Esmae' WHERE slug LIKE 'esmaecursed%' AND canonical_name = 'Unknown'`
+
+---
+
 ## 20260423000000_add_is_primary_to_profiles
 
 Adds `is_primary BOOLEAN NOT NULL DEFAULT FALSE` column to `profiles`.
