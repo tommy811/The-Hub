@@ -65,6 +65,9 @@
 | **verify-and-fix** | `.claude/skills/verify-and-fix/` | Post-change verification loop — invokes verifier subagent, iterates up to 3×, escalates to session note on exhaustion |
 | **superpowers** | installed | Verification gate, TDD enforcement, verifier subagent patterns |
 | **webapp-testing** (via anthropics/skills) | installed | Next.js + Python test patterns, multi-server lifecycle |
+| **shadcn** | `.claude/skills/shadcn/` | Deep shadcn/ui component knowledge — component selection, CLI usage, theming, registry authoring. Activates when `components.json` exists. |
+| **web-design-guidelines** | `.claude/skills/web-design-guidelines/` | UI consistency auditor — audits code against 100+ Vercel Web Interface Guidelines rules (a11y, focus states, forms, animation, typography, images, performance, dark mode). |
+| **a11y-audit** | `.claude/skills/a11y-audit/` | WCAG 2.1 AA accessibility auditor — template-aware page sampling, axe-core + Puppeteer scanning, prioritized findings with remediation hints and progress tracking across audits. |
 
 > **Planned agents:** see [[PROJECT_STATE#16. Per-Phase Agent Requirements]] for the full per-phase agent requirements. All agent operational details are in [[04-Pipeline/Agent Catalog]].
 
