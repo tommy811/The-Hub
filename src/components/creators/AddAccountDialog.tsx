@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { addAccountToCreator } from "@/app/(dashboard)/creators/actions";
+import { toast } from "sonner";
+import type { Enums } from "@/types/db";
 
 const PLATFORMS = [
   { value: 'instagram',         label: 'Instagram',         group: 'Social' },
@@ -71,26 +73,27 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
     if (!handle.trim()) return;
     setLoading(true);
     setError(null);
-    try {
-      await addAccountToCreator(creatorId, {
-        platform: platform as any,
-        handle: handle.trim(),
-        accountType: accountType as any,
-        url: url.trim() || undefined,
-        displayName: displayName.trim() || undefined,
-      });
-      setOpen(false);
-      setHandle('');
-      setUrl('');
-      setDisplayName('');
-      setPlatform('instagram');
-      setAccountType('social');
-      router.refresh();
-    } catch (e: any) {
-      setError(e.message || 'Failed to add account.');
-    } finally {
-      setLoading(false);
+    const result = await addAccountToCreator(creatorId, {
+      platform: platform as Enums<"platform">,
+      handle: handle.trim(),
+      accountType: accountType as Enums<"account_type">,
+      url: url.trim() || undefined,
+      displayName: displayName.trim() || undefined,
+    });
+    setLoading(false);
+    if (!result.ok) {
+      setError(result.error);
+      toast.error("Could not add account", { description: result.error });
+      return;
     }
+    toast.success("Account added");
+    setOpen(false);
+    setHandle('');
+    setUrl('');
+    setDisplayName('');
+    setPlatform('instagram');
+    setAccountType('social');
+    router.refresh();
   };
 
   return (
