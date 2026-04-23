@@ -43,7 +43,6 @@ export function Sidebar() {
             <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Analyze</h4>
             <NavItem href="#" icon={Users} label="Fan Analytics" disabled />
             <NavItem href="#" icon={BarChart} label="Revenue" disabled />
-            <NavItem href="/content" icon={Video} label="Content" currentPath={currentPath} />
             <NavItem href="/trends" icon={Activity} label="Trends & Alerts" currentPath={currentPath} />
             <NavItem href="#" icon={Wallet} label="Finance" disabled />
           </div>
@@ -52,10 +51,10 @@ export function Sidebar() {
           <div className="flex flex-col gap-1 mb-4">
             <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Creators</h4>
             <NavItem href="/creators" icon={Users} label="All Creators" currentPath={currentPath} />
-            <NavItem href="/creators?type=managed" icon={Users} label="Managed" currentPath={currentPath} />
-            <NavItem href="/creators?type=candidate" icon={Users} label="Candidates" currentPath={currentPath} />
-            <NavItem href="/creators?type=competitor" icon={Users} label="Competitors" currentPath={currentPath} />
-            <NavItem href="/creators?type=inspiration" icon={Users} label="Inspiration" currentPath={currentPath} />
+            <NavItem href="/creators?tracking=managed" icon={Users} label="Managed" currentPath={currentPath} />
+            <NavItem href="/creators?tracking=candidate" icon={Users} label="Candidates" currentPath={currentPath} />
+            <NavItem href="/creators?tracking=competitor" icon={Users} label="Competitors" currentPath={currentPath} />
+            <NavItem href="/creators?tracking=inspiration" icon={Users} label="Inspiration" currentPath={currentPath} />
           </div>
 
           {/* PLATFORMS */}
@@ -70,17 +69,23 @@ export function Sidebar() {
               </div>
               <div className="ml-[26px] flex flex-col pl-2 border-l border-border/50 gap-1 mt-1">
                 <SubNavItem href="/platforms/instagram/accounts" label="Accounts" currentPath={currentPath} />
-                <SubNavItem href="/platforms/instagram/outliers" label="Outliers" currentPath={currentPath} />
-                <SubNavItem href="/platforms/instagram/classification" label="Classification" currentPath={currentPath} />
-                <SubNavItem href="/platforms/instagram/analytics" label="Analytics" currentPath={currentPath} />
+                <SubNavItem href="/platforms/instagram/outliers" label="Outliers" currentPath={currentPath} comingSoon />
+                <SubNavItem href="/platforms/instagram/classification" label="Classification" currentPath={currentPath} comingSoon />
+                <SubNavItem href="/platforms/instagram/analytics" label="Analytics" currentPath={currentPath} comingSoon />
               </div>
             </div>
 
             {/* Expanded section for TikTok Intel */}
-            <div className="flex flex-col mb-2 opacity-50">
-               <div className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-foreground rounded-md">
+            <div className="flex flex-col mb-2">
+              <div className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium text-foreground rounded-md">
                 <MonitorPlay className="h-4 w-4" />
                 <span>TikTok Intel</span>
+              </div>
+              <div className="ml-[26px] flex flex-col pl-2 border-l border-border/50 gap-1 mt-1">
+                <SubNavItem href="/platforms/tiktok/accounts" label="Accounts" currentPath={currentPath} />
+                <SubNavItem href="/platforms/tiktok/outliers" label="Outliers" currentPath={currentPath} comingSoon />
+                <SubNavItem href="/platforms/tiktok/classification" label="Classification" currentPath={currentPath} comingSoon />
+                <SubNavItem href="/platforms/tiktok/analytics" label="Analytics" currentPath={currentPath} comingSoon />
               </div>
             </div>
             
@@ -140,18 +145,40 @@ function NavItem({ href, icon: Icon, label, disabled, currentPath, badgeCount, b
   );
 }
 
-function SubNavItem({ href, label, currentPath }: { href: string; label: string; currentPath?: string }) {
-  const isActive = currentPath === href;
+function SubNavItem({
+  href,
+  label,
+  currentPath,
+  comingSoon,
+}: {
+  href: string
+  label: string
+  currentPath?: string
+  comingSoon?: boolean
+}) {
+  const isActive = currentPath === href
   return (
-    <Link 
-      href={href} 
+    <Link
+      href={href}
       className={cn(
-        "flex items-center px-4 py-1.5 text-[13px] rounded-md transition-all relative",
-        isActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-primary hover:bg-muted/50"
+        "flex items-center justify-between px-4 py-1.5 text-[13px] rounded-md transition-all relative",
+        isActive
+          ? "text-primary font-semibold"
+          : "text-muted-foreground hover:text-primary hover:bg-muted/50"
       )}
     >
-      {isActive && <div className="absolute -left-[5px] w-2 h-2 rounded-full border-[2px] border-background bg-indigo-500" />}
-      {label}
+      {isActive && (
+        <div className="absolute -left-[5px] w-2 h-2 rounded-full border-[2px] border-background bg-indigo-500" />
+      )}
+      <span>{label}</span>
+      {comingSoon && (
+        <Badge
+          variant="outline"
+          className="text-[8px] h-4 px-1 py-0 uppercase border-muted-foreground/30 text-muted-foreground/60 font-semibold bg-transparent"
+        >
+          Soon
+        </Badge>
+      )}
     </Link>
-  );
+  )
 }
