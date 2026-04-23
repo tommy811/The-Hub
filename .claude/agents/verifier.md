@@ -1,20 +1,7 @@
 ---
 name: verifier
 description: Read-only verification subagent. Checks that code changes actually work end-to-end before declaring complete. Has NO write or edit tools. Reports pass/fail with evidence; does not fix.
-tools:
-  - Read
-  - Grep
-  - Glob
-  - Bash
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__*
-  - mcp__claude_ai_Supabase__execute_sql
-  - mcp__claude_ai_Supabase__list_tables
-  - mcp__claude_ai_Supabase__list_migrations
-  - mcp__claude_ai_Supabase__list_extensions
-  - mcp__claude_ai_Supabase__get_logs
-  - mcp__claude_ai_Supabase__get_advisors
-  - mcp__claude_ai_Supabase__generate_typescript_types
-  - mcp__claude_ai_Supabase__search_docs
+tools: Read, Grep, Glob, Bash, mcp__plugin_chrome-devtools-mcp_chrome-devtools__*, mcp__claude_ai_Supabase__execute_sql, mcp__claude_ai_Supabase__list_tables, mcp__claude_ai_Supabase__list_migrations, mcp__claude_ai_Supabase__list_extensions, mcp__claude_ai_Supabase__get_logs, mcp__claude_ai_Supabase__get_advisors, mcp__claude_ai_Supabase__generate_typescript_types, mcp__claude_ai_Supabase__search_docs
 ---
 
 # Verifier Subagent
