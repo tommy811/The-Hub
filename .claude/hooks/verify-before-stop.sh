@@ -28,4 +28,20 @@ if ! npm run typecheck 2>/dev/null; then
   exit 2  # Exit code 2 tells Claude to not stop the turn
 fi
 
+# 2a. Playwright — only if config exists
+if [ -f "playwright.config.ts" ]; then
+  if ! npx playwright test --reporter=line; then
+    echo "Playwright tests failed — blocking task completion." >&2
+    exit 2
+  fi
+fi
+
+# 2b. UI change nudge — detect files touched in this session
+SESSION_UI_CHANGES=$(git diff --name-only HEAD 2>/dev/null \
+  | grep -E '^(app|components|src/app|src/components)/' \
+  | wc -l)
+if [ "$SESSION_UI_CHANGES" -gt 0 ]; then
+  echo "⚠️  UI files changed this session. Consider running /review-ui with the web-design-guidelines skill before shipping." >&2
+fi
+
 exit 0
