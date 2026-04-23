@@ -1,10 +1,10 @@
 import { ComingSoon } from "@/components/shared/ComingSoon"
 
-export default function InstagramAnalytics() {
+export default function TikTokAnalytics() {
   return (
     <ComingSoon
       phase={3}
-      feature="Instagram Analytics"
+      feature="TikTok Analytics"
       description="Cross-account performance, scoring, rank trends. Activates after content scoring is live."
     />
   )
