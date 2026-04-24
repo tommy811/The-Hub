@@ -105,9 +105,13 @@ export async function importSingleCreator(
     })
     if (!res.ok) return err(res.error)
 
+    // New bulk_import_creator returns jsonb {bulk_import_id, creator_id, run_id}.
+    const payload = res.data as { creator_id: string } | null
+    if (!payload?.creator_id) return err("bulk_import_creator did not return a creator_id")
+
     // url is informational at the action layer; discovery will use it.
     revalidatePath("/creators")
-    return ok({ creatorId: res.data })
+    return ok({ creatorId: payload.creator_id })
   } catch (e: any) {
     return err(e?.message ?? "Single import failed")
   }

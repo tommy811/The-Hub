@@ -1300,28 +1300,41 @@ export type Database = {
     Functions: {
       bulk_import_creator: {
         Args: {
+          p_bulk_import_id?: string
           p_handle: string
-          p_platform_hint: Database["public"]["Enums"]["platform"]
+          p_platform_hint: string
           p_tags: string[]
           p_tracking_type: Database["public"]["Enums"]["tracking_type"]
           p_user_id: string
           p_workspace_id: string
         }
-        Returns: string
+        Returns: Json
       }
       calculate_rank: {
         Args: { score: number }
         Returns: Database["public"]["Enums"]["rank_tier"]
       }
-      commit_discovery_result: {
-        Args: {
-          p_accounts: Json
-          p_creator_data: Json
-          p_funnel_edges: Json
-          p_run_id: string
-        }
-        Returns: Json
-      }
+      commit_discovery_result:
+        | {
+            Args: {
+              p_accounts: Json
+              p_creator_data: Json
+              p_funnel_edges: Json
+              p_run_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_accounts: Json
+              p_bulk_import_id?: string
+              p_creator_data: Json
+              p_discovered_urls?: Json
+              p_funnel_edges: Json
+              p_run_id: string
+            }
+            Returns: Json
+          }
       flag_outliers: { Args: { p_profile_id: string }; Returns: undefined }
       is_workspace_member: { Args: { ws_id: string }; Returns: boolean }
       mark_discovery_failed: {
@@ -1345,6 +1358,10 @@ export type Database = {
       retry_creator_discovery: {
         Args: { p_creator_id: string; p_user_id: string }
         Returns: string
+      }
+      run_cross_workspace_merge_pass: {
+        Args: { p_bulk_import_id?: string; p_workspace_id: string }
+        Returns: Json
       }
     }
     Enums: {
