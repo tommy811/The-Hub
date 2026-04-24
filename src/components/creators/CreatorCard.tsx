@@ -228,11 +228,11 @@ export function CreatorCard({
                   trackingType === 'candidate' ? "text-amber-400 border-amber-400/30 bg-amber-500/10" :
                   "text-violet-400 border-violet-400/30 bg-violet-500/10"
                 )}>
-                  {trackingType.replace(/_/g, ' ')}
+                  {trackingType.replaceAll('_', ' ')}
                 </Badge>
                 {monetizationModel && monetizationModel !== 'unknown' && (
                   <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground border-border/50">
-                    {monetizationModel.replace(/_/g, ' ')}
+                    {monetizationModel.replaceAll('_', ' ')}
                   </Badge>
                 )}
               </div>

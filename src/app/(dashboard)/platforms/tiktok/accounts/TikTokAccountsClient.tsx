@@ -15,12 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Search, SlidersHorizontal, Video } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
+import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import Link from "next/link";
 import type { AccountRowData } from "./page";
 
 function formatNumber(n: number | null | undefined): string {
-  if (n == null) return "—";
+  if (n == null || n === 0) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
   return n.toLocaleString();
@@ -134,7 +135,7 @@ export function TikTokAccountsClient({ accounts }: Props) {
           </p>
         </div>
         <div className="flex flex-col items-center justify-center p-20 text-center border border-dashed border-border/50 rounded-xl bg-muted/10 mt-8">
-          <Video className="h-16 w-16 text-muted-foreground/30 mb-4" />
+          <PlatformIcon platform="tiktok" size={64} className="mb-4 opacity-60" />
           <h3 className="text-xl font-bold">No TikTok accounts tracked yet</h3>
           <p className="text-muted-foreground mt-2 max-w-md">
             Add creators from the{" "}

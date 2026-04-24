@@ -8,10 +8,11 @@ export type AccountRowData = PlatformAccountRow
 export default async function TikTokAccountsPage({
   searchParams,
 }: {
-  searchParams: { tracking?: string }
+  searchParams: Promise<{ tracking?: string }>
 }) {
   const wsId = await getCurrentWorkspaceId()
-  const activeTracking = searchParams?.tracking ?? "all"
+  const sp = await searchParams
+  const activeTracking = sp?.tracking ?? "all"
 
   const accounts = await getPlatformAccountsForWorkspace(wsId, {
     platform: "tiktok",
