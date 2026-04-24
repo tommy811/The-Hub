@@ -101,6 +101,8 @@ class TestRunEmptyContextFailsFast:
         # mark_discovery_failed was invoked
         called_rpc_names = [c.args[0] for c in fake_sb.rpc.call_args_list]
         assert "mark_discovery_failed" in called_rpc_names
+        mark_failed_call = next(c for c in fake_sb.rpc.call_args_list if c.args[0] == "mark_discovery_failed")
+        assert mark_failed_call.args[1]["p_error"].startswith("empty_context:")
 
 
 class TestMarkDiscoveryFailedRetries:
@@ -124,6 +126,7 @@ class TestMarkDiscoveryFailedRetries:
         run_id = uuid4()
         with patch("discover_creator.get_supabase", return_value=fake_sb):
             dc.mark_discovery_failed_with_retry(fake_sb, run_id, "the error")
-        contents = (tmp_path / "deadletter.jsonl").read_text()
-        assert str(run_id) in contents
-        assert "the error" in contents
+        line = (tmp_path / "deadletter.jsonl").read_text().strip()
+        parsed = json.loads(line)
+        assert parsed["run_id"] == str(run_id)
+        assert parsed["error"] == "the error"

@@ -3,18 +3,18 @@ import json
 import argparse
 import os
 from pathlib import Path
-from typing import Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 import google.generativeai as genai
-from tenacity import retry, stop_after_attempt, wait_exponential
+from pydantic import ValidationError
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from common import get_supabase, get_gemini_key, console
 from schemas import (
     DiscoveryInput,
     DiscoveryResult,
     InputContext,
-    PLATFORM_VALUES,
 )
 from apify_details import (
     EmptyDatasetError,
@@ -131,7 +131,12 @@ Do not hallucinate follower counts, niches, or accounts that aren't evidenced in
 """.strip()
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_not_exception_type(ValidationError),
+    reraise=True,
+)
 def run_gemini_discovery(ctx: InputContext) -> DiscoveryResult:
     genai.configure(api_key=get_gemini_key())
     model = genai.GenerativeModel("gemini-2.5-flash")
@@ -174,8 +179,7 @@ def mark_discovery_failed_with_retry(sb, run_id: UUID, error: str) -> None:
         _write_dead_letter(run_id, error)
 
 
-def commit(run_id: UUID, result: DiscoveryResult):
-    sb = get_supabase()
+def commit(sb, run_id: UUID, result: DiscoveryResult):
     data = result.model_dump(mode="json")
     creator_data = {
         "canonical_name": data["canonical_name"],
@@ -202,14 +206,15 @@ def run(inp: DiscoveryInput) -> None:
         console.log(f"[cyan]Context: bio={bool(ctx.bio)} followers={ctx.follower_count} external_urls={len(ctx.external_urls)} destinations={len(ctx.link_in_bio_destinations)}[/cyan]")
 
         result = run_gemini_discovery(ctx)
-        commit(inp.run_id, result)
+        commit(sb, inp.run_id, result)
 
         # Kick off a small IG posts scrape for the primary account
         ig_accounts = [a for a in result.proposed_accounts if a.platform == "instagram"]
         if ig_accounts:
-            ig_handle = ig_accounts[0].handle or (
-                ig_accounts[0].url.strip("/").split("/")[-1] if ig_accounts[0].url else None
-            )
+            ig_handle = ig_accounts[0].handle
+            if not ig_handle and ig_accounts[0].url:
+                path_parts = urlparse(ig_accounts[0].url).path.strip("/").split("/")
+                ig_handle = path_parts[0] if path_parts and path_parts[0] else None
             if ig_handle:
                 console.log(f"[cyan]Dispatching Apify posts scrape for @{ig_handle}[/cyan]")
                 scrape_instagram_profile(str(inp.workspace_id), ig_handle, limit=5)
