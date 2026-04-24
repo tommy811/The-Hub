@@ -209,31 +209,62 @@ export async function addAccountToCreator(
     accountType: Enums<"account_type">
     url?: string
     displayName?: string
+    runDiscovery?: boolean
   }
-): Promise<Result<{ profileId: string }>> {
+): Promise<Result<{ profileId: string; runId: string | null }>> {
   try {
     const userId = getCurrentUserId()
     const wsId = await getCurrentWorkspaceId()
     const supabase = createServiceClient()
+    const cleanHandle = data.handle.replace(/^@/, "")
     const { data: row, error } = await supabase
       .from("profiles")
       .insert({
         workspace_id: wsId,
         creator_id: creatorId,
         platform: data.platform,
-        handle: data.handle.replace(/^@/, ""),
+        handle: cleanHandle,
         account_type: data.accountType,
         url: data.url ?? null,
         display_name: data.displayName ?? null,
         discovery_confidence: 1.0,
+        discovery_reason: "manual_add",
         is_primary: false,
         added_by: userId,
       })
       .select("id")
       .single()
     if (error) return err(error.message)
+
+    // Optional: queue a discovery run so the worker fans out from this account.
+    let runId: string | null = null
+    if (data.runDiscovery !== false) {
+      const { data: runRow, error: runErr } = await supabase
+        .from("discovery_runs")
+        .insert({
+          workspace_id: wsId,
+          creator_id: creatorId,
+          input_handle: cleanHandle,
+          input_platform_hint: data.platform,
+          status: "pending",
+          attempt_number: 1,
+          source: "manual_add",
+          bulk_import_id: null,
+          initiated_by: userId,
+          started_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single()
+      if (runErr) {
+        // Non-fatal: profile is saved; user can retry discovery from the row.
+        console.error("[addAccountToCreator] discovery_runs insert failed:", runErr.message)
+      } else {
+        runId = runRow.id
+      }
+    }
+
     revalidatePath(`/creators/${creatorId}`)
-    return ok({ profileId: row.id })
+    return ok({ profileId: row.id, runId })
   } catch (e: any) {
     return err(e?.message ?? "Add account failed")
   }

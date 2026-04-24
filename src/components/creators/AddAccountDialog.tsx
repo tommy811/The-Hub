@@ -61,6 +61,7 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
   const [handle, setHandle] = useState('');
   const [url, setUrl] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [runDiscovery, setRunDiscovery] = useState<boolean>(true);
 
   const handlePlatformChange = (val: string | null) => {
     if (!val) return;
@@ -79,6 +80,7 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
       accountType: accountType as Enums<"account_type">,
       url: url.trim() || undefined,
       displayName: displayName.trim() || undefined,
+      runDiscovery,
     });
     setLoading(false);
     if (!result.ok) {
@@ -86,13 +88,14 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
       toast.error("Could not add account", { description: result.error });
       return;
     }
-    toast.success("Account added");
+    toast.success(runDiscovery ? "Account added — discovery queued" : "Account added");
     setOpen(false);
     setHandle('');
     setUrl('');
     setDisplayName('');
     setPlatform('instagram');
     setAccountType('social');
+    setRunDiscovery(true);
     router.refresh();
   };
 
@@ -167,6 +170,19 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
             />
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              id="run-discovery"
+              type="checkbox"
+              checked={runDiscovery}
+              onChange={(e) => setRunDiscovery(e.target.checked)}
+              className="h-4 w-4 rounded border-neutral-700 bg-neutral-900 text-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+            />
+            <label htmlFor="run-discovery" className="text-sm text-neutral-300 cursor-pointer">
+              Run discovery on this account (find network + monetization)
+            </label>
           </div>
 
           {error && <p className="text-xs text-red-500">{error}</p>}
