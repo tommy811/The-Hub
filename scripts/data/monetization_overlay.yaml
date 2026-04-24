@@ -1,0 +1,88 @@
+# scripts/data/monetization_overlay.yaml
+# Hand-curated overlay on top of WhatsMyName. Marks specific destinations as
+# monetization platforms + pins platform enum values per the project's
+# `platform` + `account_type` enums. Classifier loads this after the base
+# gazetteer; overlay entries win on conflict.
+
+# Format per entry:
+#   host: exact hostname match (lowercased, no www)
+#   platform: one of PROJECT_STATE.md §5 `platform` enum values
+#   account_type: one of PROJECT_STATE.md §5 `account_type` enum values
+#   url_pattern: optional regex the URL path must match. If absent, host alone matches.
+
+entries:
+  # Subscription monetization
+  - host: onlyfans.com
+    platform: onlyfans
+    account_type: monetization
+  - host: fanvue.com
+    platform: fanvue
+    account_type: monetization
+  - host: fanplace.com
+    platform: fanplace
+    account_type: monetization
+  - host: patreon.com
+    platform: patreon
+    account_type: monetization
+
+  # Ecommerce
+  - host: amazon.com
+    platform: amazon_storefront
+    account_type: monetization
+    url_pattern: '^/shop/'
+  - host: tiktok.com
+    platform: tiktok_shop
+    account_type: monetization
+    url_pattern: '^/@[^/]+/shop'
+  - host: gumroad.com
+    platform: other
+    account_type: monetization
+  - host: stan.store
+    platform: other
+    account_type: monetization
+
+  # Social (primary)
+  - host: instagram.com
+    platform: instagram
+    account_type: social
+  - host: tiktok.com
+    platform: tiktok
+    account_type: social
+    url_pattern: '^/@[^/]+/?$'
+  - host: youtube.com
+    platform: youtube
+    account_type: social
+  - host: youtu.be
+    platform: youtube
+    account_type: social
+  - host: twitter.com
+    platform: twitter
+    account_type: social
+  - host: x.com
+    platform: twitter
+    account_type: social
+  - host: facebook.com
+    platform: facebook
+    account_type: social
+  - host: linkedin.com
+    platform: linkedin
+    account_type: social
+
+  # Aggregators (link-in-bio)
+  - host: linktr.ee
+    platform: linktree
+    account_type: link_in_bio
+  - host: beacons.ai
+    platform: beacons
+    account_type: link_in_bio
+  - host: beacons.page
+    platform: beacons
+    account_type: link_in_bio
+
+  # Messaging
+  - host: t.me
+    platform: telegram_channel
+    account_type: messaging
+  - host: telegram.me
+    platform: telegram_channel
+    account_type: messaging
