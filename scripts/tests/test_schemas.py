@@ -7,6 +7,9 @@ from schemas import (
     ProposedAccount,
     ProposedFunnelEdge,
     DiscoveryResult,
+    DiscoveredUrl,
+    TextMention,
+    DiscoveryResultV2,
     PLATFORM_VALUES,
 )
 
@@ -96,3 +99,62 @@ class TestPlatformValuesCompleteness:
             "telegram_channel", "telegram_cupidbot", "other",
         }
         assert set(PLATFORM_VALUES) == expected
+
+
+# --- v2 additions ---
+
+
+class TestDiscoveredUrl:
+    def test_accepts_valid_monetization(self):
+        du = DiscoveredUrl(
+            canonical_url="https://onlyfans.com/alice",
+            platform="onlyfans", account_type="monetization",
+            destination_class="monetization", reason="rule:onlyfans_monetization",
+        )
+        assert du.platform == "onlyfans"
+
+    def test_rejects_invalid_platform(self):
+        with pytest.raises(ValidationError):
+            DiscoveredUrl(
+                canonical_url="x", platform="bogus", account_type="social",
+                destination_class="social", reason="x",
+            )
+
+    def test_rejects_invalid_destination_class(self):
+        with pytest.raises(ValidationError):
+            DiscoveredUrl(
+                canonical_url="x", platform="instagram", account_type="social",
+                destination_class="bogus", reason="x",
+            )
+
+
+class TestTextMention:
+    def test_default_source_is_seed_bio(self):
+        tm = TextMention(platform="instagram", handle="alice")
+        assert tm.source == "seed_bio"
+
+    def test_rejects_unknown_platform(self):
+        with pytest.raises(ValidationError):
+            TextMention(platform="bogus", handle="alice")
+
+
+class TestDiscoveryResultV2:
+    def test_minimal(self):
+        r = DiscoveryResultV2(
+            canonical_name="Alice",
+            known_usernames=["alice"],
+            display_name_variants=["Alice"],
+            raw_reasoning="short",
+        )
+        assert r.monetization_model == "unknown"
+        assert r.text_mentions == []
+
+    def test_no_longer_has_proposed_accounts_or_edges(self):
+        # The v1 DiscoveryResult required proposed_accounts/proposed_funnel_edges.
+        # V2 omits them entirely — classifier + resolver own those.
+        r = DiscoveryResultV2(
+            canonical_name="Alice", known_usernames=["alice"],
+            display_name_variants=["Alice"], raw_reasoning="x",
+        )
+        assert not hasattr(r, "proposed_accounts")
+        assert not hasattr(r, "proposed_funnel_edges")

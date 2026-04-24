@@ -92,3 +92,40 @@ class DiscoveryResult(BaseModel):
     proposed_accounts: list[ProposedAccount]
     proposed_funnel_edges: list[ProposedFunnelEdge]
     raw_reasoning: str
+
+
+# --- v2 additions ---
+
+DestinationClass = Literal["monetization", "aggregator", "social", "other"]
+DiscoverySource = Literal["seed", "manual_add", "retry", "auto_expand"]
+
+
+class DiscoveredUrl(BaseModel):
+    """A URL the resolver discovered + classified. One row per URL in the creator's network."""
+    canonical_url: str
+    platform: Platform
+    account_type: AccountType
+    destination_class: DestinationClass
+    reason: str  # 'rule:X' | 'llm:high_confidence' | 'llm:cache_hit' | 'llm:low_confidence' | 'llm:timeout' | 'manual_add'
+
+
+class TextMention(BaseModel):
+    """A handle Gemini extracted from bio prose (no URL present). Fed back into Stage B."""
+    platform: Platform
+    handle: str
+    source: Literal["seed_bio", "enriched_bio"] = "seed_bio"
+
+
+class DiscoveryResultV2(BaseModel):
+    """Narrower Gemini output shape — no URL classification, no account proposals.
+
+    Resolver output populates accounts/funnel_edges directly from the classifier
+    and fetchers; Gemini's remaining job is canonicalization + niche + text hints.
+    """
+    canonical_name: str
+    known_usernames: list[str]
+    display_name_variants: list[str]
+    primary_niche: Optional[str] = None
+    monetization_model: MonetizationModel = "unknown"
+    text_mentions: list[TextMention] = Field(default_factory=list)
+    raw_reasoning: str
