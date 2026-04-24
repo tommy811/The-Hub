@@ -70,6 +70,23 @@ class TestClassifyLLMFallback:
         assert result.reason == "llm:cache_hit"
 
     @patch("pipeline.classifier._classify_via_llm")
+    def test_execute_returns_none_is_treated_as_cache_miss(self, mock_llm):
+        # supabase-py 2.x quirk: .maybe_single().execute() returns None
+        # (not an APIResponse) when no row matches. Regression caught by
+        # the live smoke on 2026-04-25 — classifier must not crash here.
+        mock_llm.return_value = ("other", "other", 0.85, "gemini-2.5-flash")
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.maybe_single\
+            .return_value.execute.return_value = None
+        sb.table.return_value.upsert.return_value.execute.return_value = None
+
+        result = classify("https://uncached.example/x", supabase=sb)
+
+        # Should fall through to LLM, not raise AttributeError on None.data
+        mock_llm.assert_called_once()
+        assert result.reason == "llm:high_confidence"
+
+    @patch("pipeline.classifier._classify_via_llm")
     def test_llm_timeout_returns_other_other(self, mock_llm):
         mock_llm.side_effect = TimeoutError("gemini slow")
         sb = MagicMock()

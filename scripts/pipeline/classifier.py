@@ -58,9 +58,13 @@ def _classify_via_llm(url: str) -> tuple[str, str, float, str]:
 
 
 def _cache_lookup(sb, canonical_url: str) -> Optional[dict]:
+    # supabase-py 2.x: .maybe_single().execute() returns None (not APIResponse)
+    # when no row matches. Guard against that before accessing .data.
     resp = sb.table("classifier_llm_guesses").select("*").eq(
         "canonical_url", canonical_url
     ).maybe_single().execute()
+    if resp is None:
+        return None
     return resp.data
 
 
