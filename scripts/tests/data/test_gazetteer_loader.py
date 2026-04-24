@@ -18,12 +18,6 @@ def test_lookup_onlyfans_is_monetization():
     assert reason.startswith("rule:")
 
 
-def test_lookup_strips_www_prefix():
-    result = lookup("https://www.onlyfans.com/alice")
-    assert result is not None
-    assert result[0] == "onlyfans"
-
-
 def test_lookup_instagram_is_social():
     result = lookup("https://instagram.com/alice")
     assert result is not None

@@ -47,11 +47,6 @@ def lookup(url: str) -> Optional[tuple[str, str, str]]:
     if not host:
         return None
 
-    # Strip a lowercase "www." prefix only. Uppercase "WWW." indicates a
-    # non-canonicalized URL — caller is expected to canonicalize first.
-    if host.startswith("www.") and "://www." in url:
-        host = host[4:]
-
     gaz = load_gazetteer()
     entries = gaz.get(host, [])
     if not entries:
