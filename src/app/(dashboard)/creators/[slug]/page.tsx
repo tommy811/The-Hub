@@ -21,6 +21,8 @@ import {
   getCreatorNameById,
 } from "@/lib/db/queries";
 import { ComingSoon } from "@/components/shared/ComingSoon";
+import { sortAccounts } from "@/lib/sortAccounts";
+import { PLATFORMS, getSortPriority } from "@/lib/platforms";
 
 const GRADIENTS = [
   "from-violet-500 to-indigo-600",
@@ -86,10 +88,12 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
   const avatarUrl = primaryProfile?.avatar_url ?? null;
   const gradient = getGradient(creator.canonical_name);
 
-  const socialAccounts = profiles.filter(p => p.account_type === 'social');
-  const monetizationAccounts = profiles.filter(p => p.account_type === 'monetization');
-  const linkInBioAccounts = profiles.filter(p => p.account_type === 'link_in_bio');
-  const messagingAccounts = profiles.filter(p => p.account_type === 'messaging');
+  // Sort at the render layer (not the DB layer) so that other consumers keep insertion order.
+  // sortAccounts: primary first → sortPriority asc → follower_count desc (nulls last) → handle asc.
+  const socialAccounts = sortAccounts(profiles.filter(p => p.account_type === 'social'));
+  const monetizationAccounts = sortAccounts(profiles.filter(p => p.account_type === 'monetization'));
+  const linkInBioAccounts = sortAccounts(profiles.filter(p => p.account_type === 'link_in_bio'));
+  const messagingAccounts = sortAccounts(profiles.filter(p => p.account_type === 'messaging'));
 
   const totalFollowers = socialAccounts.reduce((sum, p) => sum + (p.follower_count || 0), 0);
 
@@ -179,13 +183,27 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           label="Social"
           value={socialAccounts.length}
           icon={Globe}
-          sub={socialAccounts.length > 0 ? socialAccounts.map(a => a.platform).join(', ') : 'none linked'}
+          sub={
+            socialAccounts.length > 0
+              ? Array.from(new Set(socialAccounts.map(a => a.platform)))
+                  .sort((a, b) => getSortPriority(a) - getSortPriority(b))
+                  .map(p => PLATFORMS[p]?.label ?? p)
+                  .join(', ')
+              : 'none linked'
+          }
         />
         <StatPanel
           label="Monetization"
           value={monetizationAccounts.length}
           icon={DollarSign}
-          sub={monetizationAccounts.length > 0 ? monetizationAccounts.map(a => a.platform).join(', ') : 'none linked'}
+          sub={
+            monetizationAccounts.length > 0
+              ? Array.from(new Set(monetizationAccounts.map(a => a.platform)))
+                  .sort((a, b) => getSortPriority(a) - getSortPriority(b))
+                  .map(p => PLATFORMS[p]?.label ?? p)
+                  .join(', ')
+              : 'none linked'
+          }
         />
         <StatPanel
           label="Link-in-Bio"
