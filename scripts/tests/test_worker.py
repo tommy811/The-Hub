@@ -24,3 +24,37 @@ class TestLogGatherResults:
         assert "b" in logged
         assert "d" in logged
         assert "boom" in logged
+
+
+from worker import _fire_merge_pass_if_bulk_complete
+
+
+class TestFireMergePassIfBulkComplete:
+    def test_does_not_fire_when_pending_remain(self):
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.in_.return_value.\
+            execute.return_value.data = [{"id": "still-running"}]
+
+        _fire_merge_pass_if_bulk_complete(sb, bulk_import_id="b1", workspace_id="w1")
+        sb.rpc.assert_not_called()
+
+    def test_fires_when_bulk_terminal(self):
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.in_.return_value.\
+            execute.return_value.data = []
+        sb.rpc.return_value.execute.return_value = None
+
+        _fire_merge_pass_if_bulk_complete(sb, bulk_import_id="b1", workspace_id="w1")
+        sb.rpc.assert_called_once_with(
+            "run_cross_workspace_merge_pass",
+            {"p_workspace_id": "w1", "p_bulk_import_id": "b1"},
+        )
+
+    def test_swallows_rpc_errors(self):
+        sb = MagicMock()
+        sb.table.return_value.select.return_value.eq.return_value.in_.return_value.\
+            execute.return_value.data = []
+        sb.rpc.return_value.execute.side_effect = Exception("rpc failed")
+
+        _fire_merge_pass_if_bulk_complete(sb, bulk_import_id="b1", workspace_id="w1")
+        # Should not raise.
