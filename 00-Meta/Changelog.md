@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-04-25 (sync 11 — verification stack synced)
+- Added: non-interactive ESLint flat config, aggregate `npm test`, `typecheck`, `test:py`, and `test:browser` scripts, plus a Playwright browser smoke suite for route and console coverage.
+- Changed: repo runtime upgraded to Next.js 16.2.4, `src/middleware.ts` replaced with `src/proxy.ts`, `tailwind.config.js` converted to ESM, favicon wired into layout, and browser dev origins allowed for local smoke tests.
+- Verified: `npm run build`, `npm run lint`, `npm run typecheck`, `npm run test:py`, `npm run test:browser`, `npm test`, and `npm audit --omit=dev` all passed.
+
 ## 2026-04-25 (sync 10 — Discovery v2 shipped)
 - Shipped: PR [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4). Replaces the single-hop pipeline with a two-stage resolver + deterministic URL classifier + rule-cascade identity scorer + multi-platform fetcher layer + first-class `bulk_imports` job.
 - Added: `pipeline/` module — `resolver.py` (two-stage: fetch seed → classify+enrich destinations), `classifier.py` (rule-first gazetteer + cached LLM fallback), `identity.py` (rule cascade + CLIP avatar tiebreak), `canonicalize.py` (URL normalization + short-URL resolution), `budget.py` (Apify cost cap).

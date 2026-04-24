@@ -114,7 +114,7 @@ export function parseHandles(
       else {
         result.handle = line.replace(/^@/, "");
       }
-    } catch (e) {
+    } catch {
       // If URL parsing fails or other issues, fallback to treating as bare handle
       result.handle = line.replace(/^@/, "");
     }

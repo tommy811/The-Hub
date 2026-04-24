@@ -51,6 +51,49 @@ function getGradient(name: string): string {
   return GRADIENTS[hash % GRADIENTS.length];
 }
 
+function CreatorCardContainer({
+  children,
+  className,
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <Card
+      onClick={onClick}
+      className={cn(
+        "group relative flex flex-col min-h-[260px] overflow-hidden transition-all border border-border/50 bg-[#13131A] rounded-xl",
+        onClick && "cursor-pointer hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10",
+        className
+      )}
+    >
+      {children}
+    </Card>
+  );
+}
+
+function CreatorCardAvatar({
+  avatarUrl,
+  canonicalName,
+  gradient,
+}: {
+  avatarUrl?: string;
+  canonicalName: string;
+  gradient: string;
+}) {
+  return (
+    <AvatarWithFallback
+      avatarUrl={avatarUrl ?? null}
+      name={canonicalName}
+      gradient={gradient}
+      className="w-20 h-20 rounded-2xl border-4 border-background shadow-xl shrink-0"
+      textClassName="text-2xl tracking-tight"
+    />
+  );
+}
+
 export function CreatorCard({
   id, canonicalName, slug, avatarUrl, primaryPlatform, status,
   trackingType, monetizationModel, tags, knownUsernames = [],
@@ -74,34 +117,11 @@ export function CreatorCard({
   const totalAccounts = Object.values(accountCounts).reduce((s, n) => s + n, 0);
   const primaryHandle = knownUsernames[0] || canonicalName.toLowerCase().replace(/\s+/g, '');
 
-  const Container = ({ children, className, onClick }: { children: ReactNode, className?: string, onClick?: () => void }) => (
-    <Card
-      onClick={onClick}
-      className={cn(
-        "group relative flex flex-col min-h-[260px] overflow-hidden transition-all border border-border/50 bg-[#13131A] rounded-xl",
-        onClick && "cursor-pointer hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10",
-        className
-      )}
-    >
-      {children}
-    </Card>
-  );
-
-  const Avatar = () => (
-    <AvatarWithFallback
-      avatarUrl={avatarUrl ?? null}
-      name={canonicalName}
-      gradient={gradient}
-      className="w-20 h-20 rounded-2xl border-4 border-background shadow-xl shrink-0"
-      textClassName="text-2xl tracking-tight"
-    />
-  );
-
   return (
     <AnimatePresence mode="wait">
       {status === 'processing' && (
         <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <Container className="opacity-60 pointer-events-none">
+          <CreatorCardContainer className="opacity-60 pointer-events-none">
             <div className="absolute top-4 right-4 text-indigo-400">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
@@ -117,13 +137,13 @@ export function CreatorCard({
               <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
               <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
             </div>
-          </Container>
+          </CreatorCardContainer>
         </motion.div>
       )}
 
       {status === 'failed' && (
         <motion.div key="failed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <Container className="border-red-900/60 shadow-lg shadow-red-900/10">
+          <CreatorCardContainer className="border-red-900/60 shadow-lg shadow-red-900/10">
             <div className="absolute top-4 right-4 text-red-500">
               <AlertCircle className="h-5 w-5" />
             </div>
@@ -147,13 +167,13 @@ export function CreatorCard({
                 <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} /> {isPending ? 'Retrying…' : 'Retry Discovery'}
               </button>
             </div>
-          </Container>
+          </CreatorCardContainer>
         </motion.div>
       )}
 
       {status === 'ready' && (
         <motion.div key="ready" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <Container className="hover:border-indigo-500/50" onClick={() => router.push(`/creators/${slug}`)}>
+          <CreatorCardContainer className="hover:border-indigo-500/50" onClick={() => router.push(`/creators/${slug}`)}>
             {hasMergeCandidate && (
               <div className="absolute top-3 right-3 z-10">
                 <Badge className="bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 border-amber-500/30 font-bold uppercase tracking-widest text-[9px]">
@@ -186,7 +206,11 @@ export function CreatorCard({
 
             {/* Avatar + name */}
             <div className="flex flex-col items-center px-6 pt-8 pb-4">
-              <Avatar />
+              <CreatorCardAvatar
+                avatarUrl={avatarUrl}
+                canonicalName={canonicalName}
+                gradient={gradient}
+              />
               <div className="mt-3 font-bold text-lg text-center leading-snug">{canonicalName}</div>
               <div className="flex items-center gap-1 mt-1 text-muted-foreground">
                 <PlatformIcon platform={primaryPlatform} size={12} />
@@ -235,7 +259,7 @@ export function CreatorCard({
                 <span className="text-[10px] uppercase tracking-widest font-semibold">{updatedAgo}</span>
               </div>
             </div>
-          </Container>
+          </CreatorCardContainer>
         </motion.div>
       )}
     </AnimatePresence>

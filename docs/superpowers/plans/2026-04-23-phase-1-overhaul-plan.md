@@ -6,11 +6,11 @@
 
 **Architecture:** Six-layer bottom-up sweep. Each layer has a verification gate; no layer advances until the layer below is verified. Schema drift fixed via one new migration; data access becomes typed and structural via query/RPC wrappers; broken UI controls wired with `Result<T>` error handling; mock data replaced with real workspace-scoped queries.
 
-**Tech Stack:** Next.js 14 (App Router), TypeScript strict, Supabase (Postgres 17), shadcn/ui, Tailwind, sonner (new — for toasts), @supabase/ssr, @supabase/supabase-js.
+**Tech Stack:** Next.js 16.2.4 (App Router), TypeScript strict, Supabase (Postgres 17), shadcn/ui, Tailwind, sonner (new — for toasts), @supabase/ssr, @supabase/supabase-js.
 
 **Spec reference:** `docs/superpowers/specs/2026-04-23-phase-1-overhaul-design.md`
 
-**Verification model:** This codebase has no test framework. Verification per layer relies on:
+**Verification model:** This codebase now has a verification stack. The historical layer-by-layer plan relied on:
 - `npm run typecheck` (TypeScript compiler) — strict type errors block progress.
 - `psql`/`supabase db` — SQL state assertions for schema and RPC behavior.
 - `grep` invariants for code patterns (e.g., no raw `.from()` in `src/app/`).

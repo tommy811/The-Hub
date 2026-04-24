@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-23 (sync 7)
+**Last synced:** 2026-04-25 (sync 11 — verification stack synced)
 
 ---
 
@@ -86,10 +86,11 @@ npx skills add git@github.com:kepano/obsidian-skills.git
 ## Tech Stack
 
 ### Frontend
-- Next.js 14 (App Router, Server Components where possible)
+- Next.js 16.2.4 (App Router, Server Components where possible)
 - TypeScript strict mode
 - Tailwind CSS
 - shadcn/ui
+- Playwright browser smoke tests
 - Recharts (viz)
 - lucide-react (icons)
 - framer-motion (animations)
@@ -107,6 +108,12 @@ npx skills add git@github.com:kepano/obsidian-skills.git
 - `httpx` (HTTP client)
 - `beautifulsoup4` (HTML parsing)
 - `rich` (structured logging)
+
+### Testing
+- ESLint flat config for repo-wide linting
+- `tsc --noEmit` typecheck gate
+- `pytest` for the Python pipeline
+- Playwright browser smoke suite for route and console coverage
 
 ---
 

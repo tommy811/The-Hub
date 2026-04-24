@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Loader2 } from "lucide-react";
-import { parseHandles, type ParsedHandle } from "@/lib/handleParser";
+import { parseHandles } from "@/lib/handleParser";
 import { HandleChipPreview } from "./HandleChipPreview";
 import { PLATFORMS } from "@/lib/platforms";
 
@@ -105,6 +105,8 @@ export function BulkImportDialog() {
       toast.warning(`Imported ${imported}, ${errors.length} failed`, {
         description: errors.map((e) => `${e.handle}: ${e.error}`).join("\n"),
       });
+    } else if (skipped > 0) {
+      toast.success(`Imported ${imported}; skipped ${skipped} duplicate${skipped === 1 ? "" : "s"}`);
     } else {
       toast.success(`Imported ${imported} creator${imported === 1 ? "" : "s"}`);
     }

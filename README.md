@@ -4,7 +4,7 @@ Internal tool for a creator management agency. Not a SaaS. The Creator is the so
 
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router), TypeScript strict, Tailwind, shadcn/ui, Recharts, framer-motion
+- **Frontend:** Next.js 16.2.4 (App Router), TypeScript strict, Tailwind, shadcn/ui, Recharts, framer-motion, Playwright browser smoke tests
 - **Backend:** Supabase (Postgres 17, Auth, RLS, Realtime, Storage, Edge Functions)
 - **Pipeline:** Python 3.11+, `supabase-py`, `apify-client`, `google-generativeai`, `anthropic`, `pydantic v2`
 - **Supabase project:** Content OS (`dbkddgwitqwzltuoxmfi`, us-east-1)
@@ -32,6 +32,18 @@ GEMINI_API_KEY=
 ANTHROPIC_API_KEY=
 APIFY_TOKEN=
 ```
+
+## Verification
+
+```bash
+npm run lint
+npm run typecheck
+npm run test:py
+npm run test:browser
+npm test
+```
+
+`npm test` is the aggregate gate used in this repo. It runs typecheck, lint, the Python suite, and the Playwright browser smoke suite.
 
 ## Project Structure
 

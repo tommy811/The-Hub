@@ -24,7 +24,7 @@ export function AddAccountDialog() {
         <DialogHeader>
           <DialogTitle>Track New Account</DialogTitle>
           <DialogDescription>
-            Add a profile to begin data ingestion. We'll queue a scrape immediately via Apify.
+            Add a profile to begin data ingestion. We&apos;ll queue a scrape immediately via Apify.
           </DialogDescription>
         </DialogHeader>
         

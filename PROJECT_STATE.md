@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-25 (sync 10 — Discovery v2)
+Last synced: 2026-04-25 (sync 11 — verification stack synced)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Repo and Obsidian vault share one folder — this file is directly visible in both.
 
@@ -17,7 +17,7 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 
 ## 2. Tech Stack
 
-- **Frontend:** Next.js 14 (App Router, Server Components where possible), TypeScript strict, Tailwind, shadcn/ui, Recharts, lucide-react, framer-motion, @xyflow/react
+- **Frontend:** Next.js 16.2.4 (App Router, Server Components where possible), TypeScript strict, Tailwind, shadcn/ui, Playwright browser smoke tests, Recharts, lucide-react, framer-motion, @xyflow/react
 - **Backend:** Supabase (Postgres 17, Auth, RLS, Realtime, Storage, Edge Functions)
 - **Pipeline:** Python 3.11+, `supabase-py`, `apify-client`, `google-generativeai`, `anthropic`, `pydantic v2`, `tenacity`, `rapidfuzz`, `httpx`, `beautifulsoup4`
 - **Supabase project:** Content OS (`dbkddgwitqwzltuoxmfi`, us-east-1)

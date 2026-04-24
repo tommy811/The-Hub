@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -16,11 +17,14 @@ export function AvatarWithFallback({ avatarUrl, name, gradient, className, textC
   const showFallback = !avatarUrl || imgError;
 
   return (
-    <div className={cn("flex items-center justify-center bg-gradient-to-br overflow-hidden", gradient, className)}>
+    <div className={cn("relative flex items-center justify-center bg-gradient-to-br overflow-hidden", gradient, className)}>
       {!showFallback ? (
-        <img
+        <Image
           src={avatarUrl!}
           alt=""
+          fill
+          sizes="96px"
+          unoptimized
           className="w-full h-full object-cover"
           onError={() => setImgError(true)}
         />

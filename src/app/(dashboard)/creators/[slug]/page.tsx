@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
 import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
@@ -199,7 +198,7 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
       {creator.onboarding_status === 'processing' && (
         <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl text-indigo-400 flex items-center gap-3">
           <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
-          <span className="text-sm font-medium">Discovering network footprint… Accounts will appear below as they're mapped.</span>
+          <span className="text-sm font-medium">Discovering network footprint… Accounts will appear below as they&apos;re mapped.</span>
         </div>
       )}
 

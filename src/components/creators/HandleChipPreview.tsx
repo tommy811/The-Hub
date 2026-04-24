@@ -3,7 +3,6 @@ import { X, AlertCircle } from "lucide-react";
 import { type ParsedHandle } from "@/lib/handleParser";
 import { PLATFORMS } from "@/lib/platforms";
 import { PlatformIcon } from "@/components/accounts/PlatformIcon";
-import { cn } from "@/lib/utils";
 
 interface HandleChipPreviewProps {
   handle: ParsedHandle;

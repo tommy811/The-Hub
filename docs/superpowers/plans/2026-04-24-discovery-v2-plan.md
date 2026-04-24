@@ -6,7 +6,7 @@
 
 **Architecture:** New `scripts/pipeline/` and `scripts/fetchers/` modules with focused single-responsibility files. Classifier owns `(platform, account_type)` via rule-first gazetteer with LLM fallback. Identity scorer runs a rule cascade at every commit (intra-seed, within-bulk, cross-workspace) against a persistent `profile_destination_links` index. Resolver does exactly two stages: fetch seed, then classify+enrich destinations. Feature-flagged behind `DISCOVERY_V2_ENABLED` for safe rollout.
 
-**Tech Stack:** Python 3.11+, Pydantic v2, `apify-client`, `httpx`, `curl_cffi` (new — JA3 impersonation for OnlyFans), `yt-dlp` (new — YouTube), `sentence-transformers` + `Pillow` (new — CLIP avatar similarity), `beautifulsoup4`, `google-generativeai`, `tenacity`, `pytest` + `pytest-mock`. Supabase Postgres 17 for schema + RPC changes. Next.js 14 for UI touchpoints.
+**Tech Stack:** Python 3.11+, Pydantic v2, `apify-client`, `httpx`, `curl_cffi` (new — JA3 impersonation for OnlyFans), `yt-dlp` (new — YouTube), `sentence-transformers` + `Pillow` (new — CLIP avatar similarity), `beautifulsoup4`, `google-generativeai`, `tenacity`, `pytest` + `pytest-mock`. Supabase Postgres 17 for schema + RPC changes. Next.js 16.2.4 for UI touchpoints.
 
 ---
 
@@ -4733,7 +4733,7 @@ Expected: reasonable counters, `cost_apify_cents < 200` (under $2), status in `(
 
 Edit header:
 ```
-Last synced: 2026-04-25 (sync 10 — discovery v2)
+Last synced: 2026-04-25 (sync 11 — verification stack synced)
 ```
 
 Add to §4.1 table list: `bulk_imports`, `classifier_llm_guesses`, `profile_destination_links`. Bump total to 23 tables.
@@ -4850,4 +4850,3 @@ EOF
 ---
 
 # Plan complete
-

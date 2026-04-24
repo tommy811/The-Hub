@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Card } from "@/components/ui/card";
 import { ExternalLink, RefreshCw, Archive, Edit3, MoreHorizontal, FileText, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -72,9 +73,12 @@ export function AccountCard(props: AccountCardProps) {
 
         <div className="relative">
           {props.avatarUrl ? (
-            <img
+            <Image
               src={props.avatarUrl}
               alt={props.handle}
+              width={96}
+              height={96}
+              unoptimized
               className="w-24 h-24 rounded-2xl object-cover border-4 border-background shadow-lg group-hover:scale-105 transition-transform duration-500"
             />
           ) : (

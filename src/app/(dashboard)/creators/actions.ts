@@ -86,7 +86,7 @@ export async function bulkImportCreators(
 export async function importSingleCreator(
   platform: Enums<"platform">,
   handle: string,
-  url?: string
+  _url?: string
 ): Promise<Result<{ creatorId: string }>> {
   try {
     if (!handle || handle.trim().length === 0) {
