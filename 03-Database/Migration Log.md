@@ -1,5 +1,15 @@
 # Migration Log
 
+## 2026-04-25 — fix retry_creator_discovery casts input_platform_hint::platform
+**File:** `supabase/migrations/20260425000300_fix_retry_creator_discovery_platform_cast.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+UI Re-run / Retry Discovery buttons hit Postgres `42703 column input_platform_hint is of type platform but expression is of type text`. Local var `v_platform_hint TEXT` inside the RPC body coerced the platform-typed value to text before the INSERT. Added explicit `::platform` cast at the INSERT site. RPC still copies `input_handle` + `input_platform_hint` from the most recent prior run; only the type cast changed. Verified with a synthetic call against Aria Swan — new pending row inserted with correct `input_platform_hint = 'instagram'::platform`.
+
+---
+
 ## 2026-04-25 — fix commit_discovery_result drops discovery_runs.updated_at
 **File:** `supabase/migrations/20260425000200_fix_commit_discovery_result_no_updated_at.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP

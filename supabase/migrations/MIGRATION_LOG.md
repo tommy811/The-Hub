@@ -1,5 +1,13 @@
 # Migration Log
 
+## 20260425000300_fix_retry_creator_discovery_platform_cast
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+UI Re-run / Retry Discovery buttons errored with `column "input_platform_hint" is of type platform but expression is of type text`. The RPC's local var `v_platform_hint TEXT` carried the value through plpgsql's implicit-coerce pipe and arrived at the INSERT as text. Fix: explicit `::platform` cast at the INSERT site. No behavior change beyond the cast — RPC still copies `input_handle` + `input_platform_hint` from the most recent prior run. Verified by re-running `retry_creator_discovery(aria.id, NULL)` — new pending row inserted cleanly with correct types.
+
+---
+
 ## 20260425000200_fix_commit_discovery_result_no_updated_at
 
 Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.

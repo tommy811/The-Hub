@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-25 (sync 11 — verification stack synced)
+**Last synced:** 2026-04-25 (sync 12 — creator HQ revamp + autonomous-fix-list skill)
 
 ---
 
@@ -63,6 +63,8 @@
 | **kepano/obsidian-skills** | `.claude/skills/` in vault root | Obsidian Flavored Markdown (wiki-links, callouts, properties), Bases YAML, Canvas JSON, Obsidian CLI |
 | **sync-project-state** | `.claude/skills/sync-project-state/` | Automated project state sync (triggered by "update project state" or "sync project") |
 | **verify-and-fix** | `.claude/skills/verify-and-fix/` | Post-change verification loop — invokes verifier subagent, iterates up to 3×, escalates to session note on exhaustion |
+| **autonomous-execution** | `.claude/skills/autonomous-execution/` | Decision-gating policy for subagent-driven / multi-task work where the user has explicitly granted autonomy. Codifies which decisions warrant interrupting vs proceeding with best judgment. |
+| **autonomous-fix-list** | `.claude/skills/autonomous-fix-list/` | Workflow companion to autonomous-execution. Triggered when Simon hands a fix list with phrases like "full autonomy", "every permission granted", "use subagents to run everything", "minimal input from my end". Runs plan → dispatch (parallel where independent, sequenced where dependent) → catch unrelated regressions inline → final verify (tsc + pytest + visual via Chrome DevTools MCP) → push → report end-to-end with zero check-ins. |
 | **superpowers** | installed | Verification gate, TDD enforcement, verifier subagent patterns |
 | **webapp-testing** (via anthropics/skills) | installed | Next.js + Python test patterns, multi-server lifecycle |
 | **shadcn** | `.claude/skills/shadcn/` | Deep shadcn/ui component knowledge — component selection, CLI usage, theming, registry authoring. Activates when `components.json` exists. |
@@ -92,7 +94,8 @@ npx skills add git@github.com:kepano/obsidian-skills.git
 - shadcn/ui
 - Playwright browser smoke tests
 - Recharts (viz)
-- lucide-react (icons)
+- lucide-react (generic icons + brand-icon fallbacks)
+- react-icons (Simple Icons + FontAwesome — real platform brand glyphs: `SiInstagram`, `SiTiktok`, `SiYoutube`, `SiX`, `SiFacebook`, `SiPatreon`, `SiOnlyfans`, `SiTelegram`, `SiLinktree`, `FaLinkedin`, `FaAmazon`)
 - framer-motion (animations)
 - @xyflow/react (React Flow — funnel editor, stubbed for Phase 1)
 

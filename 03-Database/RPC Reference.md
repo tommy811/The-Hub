@@ -62,6 +62,8 @@ All callable via: `supabase.rpc('function_name', { args })`
 
 > **Fixed 2026-04-23:** Previous version did not copy `input_handle` into the new row. Retry runs had NULL handle and immediately failed at the worker's fetch step.
 
+> **Fixed 2026-04-25 (migration `20260425000300`):** Local var `v_platform_hint TEXT` was carrying the value through plpgsql as text, so the INSERT into `discovery_runs(input_platform_hint)` (column type: `platform` enum) failed with `42703 column ... is of type platform but expression is of type text`. UI Re-run / Retry Discovery buttons errored. Fix: explicit `::platform` cast at the INSERT site.
+
 ---
 
 ## merge_creators

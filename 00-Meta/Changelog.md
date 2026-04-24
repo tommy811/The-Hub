@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-04-25 (sync 12 — creator HQ revamp + autonomous-fix-list skill)
+- Fixed: `retry_creator_discovery` RPC casts `input_platform_hint::platform` (migration `20260425000300`) — UI Re-run / Retry Discovery buttons no longer hit Postgres `42703`. Verified by re-running Aria Swan from her failed-state card.
+- Fixed: 4 Next 16 sync-API regressions on `[slug]/page.tsx`, `/creators`, `/platforms/instagram/accounts`, `/platforms/tiktok/accounts` — `params` and `searchParams` are Promises in Next 15+; all four routes now await them.
+- Fixed: `getProfilesForCreator` filters `is_active=true` so soft-deleted profiles disappear after Remove.
+- Added: real brand icons via `react-icons/si` and FontAwesome fallbacks — Instagram, TikTok, YouTube, X (Twitter), Facebook, LinkedIn, Patreon, OnlyFans, Amazon, Telegram, Linktree. Fanvue/Fanplace/Beacons fall back to lucide.
+- Added: `sortAccounts` util (`src/lib/sortAccounts.ts`) with canonical platform order — primary → social (IG/TT/YT/FB/X/LinkedIn) → monetization (OF/Patreon/Fanvue/Amazon shop/TT shop) → aggregators → messaging. Applied at the render layer; DB queries keep insertion order.
+- Added: `removeAccountFromCreator` server action — soft-deletes via `is_active=false`, wired to AccountRow dropdown's Remove item with native confirm. Edit / Mark Primary / Verify Connection items hidden until backed by real implementations.
+- Added: header **Add Account** button on creator detail page — replaces 4 redundant per-section "Add manually" inline buttons. Opens existing `AddAccountDialog` with the v2 manual-add discovery flow.
+- Added: Brand Summary placeholder card on creator detail page (between stats strip and tabs) — signals where Phase 3 brand analysis will land (niche, archetype, vibe, monetization model, SEO keywords).
+- Added: new project skill `autonomous-fix-list` (`.claude/skills/autonomous-fix-list/SKILL.md`) — companion to `autonomous-execution`. When Simon hands a fix list with a full-autonomy phrase, runs the full plan → dispatch → verify → push playbook end-to-end with zero check-ins.
+- Changed: creator detail page restructure into proper brand HQ — bio stripped from header (it's account-level, not creator-level identity); tabs forced horizontal across the top (was rendering side-by-side); Re-run/Retry Discovery buttons unified into a single component with `variant: 'header' | 'failed-state'`.
+- Changed: AccountRow polished — `replaceAll('_',' ')` so `link_in_bio` reads as "link in bio"; em-dash for null/0 followers instead of "0 flwrs"; relative date format ("today", "1d ago"); dropdown reduced to Remove only.
+- Changed: Stats Strip "Social" sub-text now de-dupes platform names — Esmae no longer reads "instagram, twitter, instagram".
+- Propagated: brand icon + label-fix patterns to `/creators` grid and `/platforms/{instagram,tiktok}/accounts` clients for project-wide consistency.
+- Verified: tsc 0, pytest 102/102 throughout the pass. Walked the brand-HQ creator detail page via Chrome DevTools MCP — clean console (only known IG-CDN avatar `NotSameOrigin` blocks).
+- Branch / PR: `phase-2-discovery-v2` → PR [#4](https://github.com/tommy811/The-Hub/pull/4). 7 commits this pass: `3b08376` (params await) → `6f481ff` (retry RPC cast) → `6ec3048` (brand icons + sort) → `9a3b90b` (page restructure) → `cefa808` (is_active filter) → `03b0c8a` (consistency propagation) → `93960a8` (autonomous-fix-list skill).
+
 ## 2026-04-25 (sync 11 — verification stack synced)
 - Added: non-interactive ESLint flat config, aggregate `npm test`, `typecheck`, `test:py`, and `test:browser` scripts, plus a Playwright browser smoke suite for route and console coverage.
 - Changed: repo runtime upgraded to Next.js 16.2.4, `src/middleware.ts` replaced with `src/proxy.ts`, `tailwind.config.js` converted to ESM, favicon wired into layout, and browser dev origins allowed for local smoke tests.
