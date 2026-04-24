@@ -154,6 +154,7 @@ export async function getProfilesForCreator(
       'id, platform, handle, display_name, url, follower_count, following_count, post_count, bio, account_type, discovery_confidence, is_primary, updated_at, avatar_url'
     )
     .eq('creator_id', creatorId)
+    .eq('is_active', true)
     .order('is_primary', { ascending: false })
   if (error) throw new Error(`getProfilesForCreator: ${error.message}`)
   return (data ?? []) as ProfileForCreator[]
