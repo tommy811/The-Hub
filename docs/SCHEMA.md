@@ -1,7 +1,7 @@
 # SCHEMA.md — Generated 2026-04-24T00:00:00Z
 > Source: live DB (dbkddgwitqwzltuoxmfi). Regenerate via `npm run db:schema`.
 >
-> Surgically updated 2026-04-24 (post-migration `20260424000000_consolidate_last_discovery_run_id`) without re-running the script — the script needs `SUPABASE_DB_URL` in `scripts/.env`. Full regen pending.
+> Surgically updated 2026-04-24 post-migrations `20260424000000_consolidate_last_discovery_run_id`, `20260424150000_create_edge_type_enum`, `20260424160000_fix_funnel_edges_creator_id`, and `20260424170000_phase_2_schema_migration` without re-running the script — the script needs `SUPABASE_DB_URL` in `scripts/.env`. Full regen pending.
 
 ## Tenant-Scoped Tables
 
@@ -17,6 +17,7 @@ Tables with a `workspace_id` column (row-level RLS isolates by workspace):
 - `funnel_edges`
 - `profiles`
 - `trend_signals`
+- `trends`
 - `workspace_members`
 
 ---
@@ -24,11 +25,13 @@ Tables with a `workspace_id` column (row-level RLS isolates by workspace):
 ## Enums
 
 - `account_type`: social | monetization | link_in_bio | messaging | other
+- `content_archetype`: the_jester | the_caregiver | the_lover | the_everyman | the_creator | the_hero | the_sage | the_innocent | the_explorer | the_rebel | the_magician | the_ruler (creators.archetype)
 - `content_category`: comedy_entertainment | fashion_style | fitness | lifestyle | beauty | travel | food | music | gaming | education | other
-- `content_vibe`: playful | girl_next_door | body_worship | wifey | luxury | edgy | wholesome | mysterious | confident | aspirational
+- `content_vibe`: playful | girl_next_door | body_worship | wifey | luxury | edgy | wholesome | mysterious | confident | aspirational (creators.vibe)
 - `discovery_run_status`: pending | processing | completed | failed
 - `edge_type`: link_in_bio | direct_link | cta_mention | qr_code | inferred (funnel_edges.edge_type)
-- `label_type`: content_format | trend_pattern | hook_style | visual_style | other
+- `label_type`: content_format | trend_pattern | hook_style | visual_style | creator_niche | other
+- `llm_model`: gemini_pro | gemini_flash | claude_opus | claude_sonnet
 - `merge_candidate_status`: pending | merged | dismissed
 - `monetization_model`: subscription | tips | ppv | affiliate | brand_deals | ecommerce | coaching | saas | mixed | unknown
 - `onboarding_status`: processing | ready | failed | archived
@@ -37,6 +40,7 @@ Tables with a `workspace_id` column (row-level RLS isolates by workspace):
 - `rank_tier`: diamond | platinum | gold | silver | bronze | plastic
 - `signal_type`: velocity_spike | outlier_post | emerging_archetype | hook_pattern | cadence_change | new_monetization_detected
 - `tracking_type`: managed | inspiration | competitor | candidate | hybrid_ai | coach | unreviewed
+- `trend_type`: audio | dance | lipsync | transition | meme | challenge
 - `workspace_role`: owner | admin | member
 
 ---
@@ -79,8 +83,6 @@ _RLS: Users view alerts feed(SELECT)_
 - **id**: uuid — PK DEF gen_random_uuid()
 - **content_id**: uuid — FK→scraped_content.id
 - **quality_score**: numeric
-- **archetype**: text _(pending drop in Phase 2 — moves to creators)_
-- **vibe**: content_vibe _(pending drop in Phase 2 — moves to creators)_
 - **category**: content_category
 - **visual_tags**: ARRAY — DEF '{}'::text[]
 - **transcription**: text
@@ -197,11 +199,26 @@ _RLS: members insert merge_candidates(INSERT), members select merge_candidates(S
 - **import_source**: text — DEF 'bulk'::text
 - **last_discovery_run_id**: uuid — FK→discovery_runs.id
 - **last_discovery_error**: text
+- **archetype**: content_archetype _(filled by Phase 3 brand analysis)_
+- **vibe**: content_vibe _(filled by Phase 3 brand analysis)_
 - **added_by**: uuid
 - **created_at**: timestamp with time zone — DEF now()
 - **updated_at**: timestamp with time zone — DEF now()
 
 _RLS: members insert creators(INSERT), members select creators(SELECT), members update creators(UPDATE)_
+
+---
+
+### creator_label_assignments
+
+- **creator_id**: uuid — PK FK→creators.id (CASCADE)
+- **label_id**: uuid — PK FK→content_labels.id (CASCADE)
+- **assigned_by_ai**: boolean — DEF false
+- **confidence**: numeric(3,2)
+- **created_at**: timestamp with time zone — DEF now()
+
+_RLS: workspace access inherited from creators via join_
+_Trigger: increment_label_usage (bumps content_labels.usage_count on INSERT)_
 
 ---
 
@@ -330,8 +347,31 @@ _RLS: Users insert profiles to their workspace(INSERT), Users update profiles in
 - **created_at**: timestamp with time zone — DEF now()
 - **updated_at**: timestamp with time zone — DEF now()
 - **outlier_multiplier**: numeric
+- **trend_id**: uuid — FK→trends.id (SET NULL on delete)
 
 _RLS: Users view content from profiles in their workspace(SELECT)_
+
+---
+
+### trends
+
+- **id**: uuid — PK DEF gen_random_uuid()
+- **workspace_id**: uuid — NN FK→workspaces.id (CASCADE)
+- **name**: text — NN
+- **trend_type**: trend_type — NN
+- **audio_signature**: text
+- **audio_artist**: text
+- **audio_title**: text
+- **description**: text
+- **usage_count**: integer — NN DEF 0
+- **is_canonical**: boolean — NN DEF true
+- **peak_detected_at**: timestamp with time zone
+- **created_at**: timestamp with time zone — NN DEF now()
+- **updated_at**: timestamp with time zone — NN DEF now()
+
+_UNIQUE (workspace_id, audio_signature) WHERE audio_signature IS NOT NULL_
+_RLS: workspace member SELECT + ALL policies_
+_Trigger: set_updated_at BEFORE UPDATE_
 
 ---
 

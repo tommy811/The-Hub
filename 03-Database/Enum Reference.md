@@ -111,8 +111,19 @@ velocity_spike, outlier_post, emerging_archetype,
 hook_pattern, cadence_change, new_monetization_detected
 
 ## label_type
-content_format, trend_pattern, hook_style, visual_style, other
-*(pending Phase 2: + `creator_niche`)*
+content_format, trend_pattern, hook_style, visual_style, creator_niche, other
 
-## trend_type *(pending — Phase 2 migration)*
+## trend_type
 audio, dance, lipsync, transition, meme, challenge
+
+*Powers the `trends` table. `scraped_content.trend_id` FKs into `trends` to link posts to canonical trends.*
+
+## llm_model
+gemini_pro, gemini_flash, claude_opus, claude_sonnet
+
+*Reserved for analysis pipelines. Every analysis row will record its generating model in `model_version` so we can A/B test later.*
+
+## edge_type
+link_in_bio, direct_link, cta_mention, qr_code, inferred
+
+*Kinds of `funnel_edges` between profiles.*

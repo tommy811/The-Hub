@@ -17,3 +17,4 @@ tsconfig.tsbuildinfo
 .obsidian/graph.json
 .obsidian/cache
 .claude/settings.local.json
+supabase/.temp/
