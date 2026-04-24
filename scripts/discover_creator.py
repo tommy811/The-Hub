@@ -1,9 +1,8 @@
-# scripts/discover_creator.py — Discovery and network analysis logic
-import json
+# scripts/discover_creator.py — Discovery entry point, dispatches to v2 resolver
 import argparse
+import json
 import os
 from pathlib import Path
-from urllib.parse import urlparse
 from uuid import UUID
 
 import google.generativeai as genai
@@ -11,18 +10,13 @@ from pydantic import ValidationError
 from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from common import get_supabase, get_gemini_key, console
-from schemas import (
-    DiscoveryInput,
-    DiscoveryResult,
-    InputContext,
-)
-from apify_details import (
-    EmptyDatasetError,
-    fetch_instagram_details,
-    fetch_tiktok_details,
-)
+from schemas import DiscoveryInput, InputContext, DiscoveryResultV2
 from apify_scraper import get_apify_client, scrape_instagram_profile
-from link_in_bio import is_aggregator_url, resolve_link_in_bio
+from fetchers.base import EmptyDatasetError
+
+from pipeline.resolver import resolve_seed, ResolverResult
+from pipeline.budget import BudgetTracker, BudgetExhaustedError
+
 
 DEAD_LETTER_PATH = Path(os.environ.get(
     "DISCOVERY_DEAD_LETTER_PATH",
@@ -66,83 +60,33 @@ def _inline_refs(schema: dict) -> dict:
     return resolve(schema)
 
 
-GEMINI_DISCOVERY_SCHEMA = _clean_schema(_inline_refs(DiscoveryResult.model_json_schema()))
+GEMINI_V2_SCHEMA = _clean_schema(_inline_refs(DiscoveryResultV2.model_json_schema()))
 
 
-def fetch_input_context(inp: DiscoveryInput) -> InputContext:
-    """Fetch structured profile context via Apify. Raises EmptyDatasetError on login wall."""
-    if not inp.input_handle:
-        raise ValueError("input_handle is required — legacy input_url-only path removed")
-
-    platform = (inp.input_platform_hint or "").lower()
-    client = get_apify_client()
-
-    if platform == "instagram":
-        ctx = fetch_instagram_details(client, inp.input_handle)
-    elif platform == "tiktok":
-        ctx = fetch_tiktok_details(client, inp.input_handle)
-    else:
-        raise ValueError(
-            f"Unsupported input_platform_hint={platform!r}. "
-            f"Supported: instagram, tiktok."
-        )
-
-    # Apify occasionally returns 1 item with all-null fields (private / restricted /
-    # shape-valid-but-empty). Treat it identically to a 0-item response so the run
-    # fails cleanly instead of being committed with a blank profile.
-    if ctx.is_empty():
-        raise EmptyDatasetError(
-            f"Apify returned a shape-valid but empty item for @{inp.input_handle} on "
-            f"{platform} (no bio, no follower count, no external URLs). Likely private, "
-            f"restricted, or the actor could not resolve the profile."
-        )
-
-    # Resolve aggregator URLs (Linktree/Beacons) found in the bio
-    destinations: list[str] = []
-    for url in ctx.external_urls:
-        if is_aggregator_url(url):
-            destinations.extend(resolve_link_in_bio(url))
-
-    # Deduplicate while preserving order
-    seen: set[str] = set()
-    unique_destinations: list[str] = []
-    for d in destinations:
-        if d not in seen:
-            seen.add(d)
-            unique_destinations.append(d)
-
-    ctx.link_in_bio_destinations = unique_destinations
-    return ctx
-
-
-def build_prompt(ctx: InputContext) -> str:
+def build_prompt_v2(ctx: InputContext) -> str:
     ctx_json = ctx.model_dump_json(indent=2)
     return f"""
-You are analyzing a creator's online footprint to discover their true identity, aliases, and platforms.
+You are extracting identity metadata from a creator's profile — NOT classifying URLs.
 
-**Ground every field in the provided context.** Do not rely on prior knowledge of this handle. If a field cannot be determined from the context (bio, external URLs, link-in-bio destinations), return null / "unknown" / an empty list rather than guessing.
-
-Do not hallucinate follower counts, niches, or accounts that aren't evidenced in the context.
+**Ground every field in the provided context.** Do not rely on prior knowledge of this handle. If a field cannot be determined from the context, return null / "unknown" / an empty list.
 
 ## Context
 ```
-{ctx_json}
+{{ctx_json}}
 ```
 
-## Task
-1. Determine the creator's canonical name. If not clearly stated in display_name or bio, use the handle.
-2. Infer primary_niche from bio and link-in-bio destination domains (e.g. onlyfans.com → adult creator; patreon.com → subscription creator).
-3. Infer monetization_model from link-in-bio destinations (onlyfans/fanvue → subscription; patreon → subscription; shop/store → ecommerce; otherwise unknown).
-4. List every account you can identify:
-   - The input handle itself as a `proposed_account` with `is_primary=true`. Copy `display_name`, `bio`, and `follower_count` from the provided context into this primary account — do not leave them null when context has them.
-   - Each link_in_bio_destination as a separate proposed_account. Infer platform from the domain; choose account_type per this mapping:
-     - `monetization` for onlyfans.com, patreon.com, fanvue.com, fanplace.com, amazon.com/shop, *.tiktok.com/shop, any storefront / subscription-commerce URL
-     - `link_in_bio` for linktr.ee, beacons.ai, beacons.page
-     - `messaging` for t.me (Telegram) and Telegram cupidbot links
-     - `social` for any other social-network domain (twitter/x.com, facebook.com, youtube.com, etc.)
-5. Propose funnel edges from the input handle to each destination (edge_type=link_in_bio when routed via an aggregator; direct_link when listed directly in externalUrls).
-6. Confidence 0.9+ only when the account appears literally in the context. 0.5–0.8 for strong inference (e.g. matching-handle OF account from a bio hint). Below 0.5 → don't emit.
-""".strip()
+## Task — return a JSON object matching the schema with ONLY these fields:
+
+1. `canonical_name`: human-readable creator name. If not clearly stated in display_name or bio, use the handle.
+2. `known_usernames`: list of handles this creator is known by (including the input handle).
+3. `display_name_variants`: all variants of the creator's display name present in context.
+4. `primary_niche`: free-text inference from bio (e.g. "adult", "fitness", "cooking", "asmr"). Null if unclear.
+5. `monetization_model`: one of [subscription, tips, ppv, affiliate, brand_deals, ecommerce, coaching, saas, mixed, unknown]. Infer from link-in-bio destinations when present.
+6. `text_mentions`: list of handles explicitly mentioned in prose (bio text). ONLY include mentions that name a handle + platform clearly (e.g. "follow my tiktok @alice2" → platform=tiktok, handle=alice2). Do NOT include anything from external_urls — URLs are classified separately by the resolver.
+7. `raw_reasoning`: one-sentence summary of what you inferred.
+
+DO NOT classify URLs. DO NOT propose accounts. DO NOT propose funnel edges. Those are handled by the deterministic classifier + resolver layers, not by you.
+""".strip().format(ctx_json=ctx_json)
 
 
 @retry(
@@ -151,22 +95,21 @@ Do not hallucinate follower counts, niches, or accounts that aren't evidenced in
     retry=retry_if_not_exception_type(ValidationError),
     reraise=True,
 )
-def run_gemini_discovery(ctx: InputContext) -> DiscoveryResult:
+def run_gemini_discovery_v2(ctx: InputContext) -> DiscoveryResultV2:
     genai.configure(api_key=get_gemini_key())
     model = genai.GenerativeModel("gemini-2.5-flash")
-    prompt = build_prompt(ctx)
+    prompt = build_prompt_v2(ctx)
     resp = model.generate_content(
         prompt,
         generation_config=genai.GenerationConfig(
             response_mime_type="application/json",
-            response_schema=GEMINI_DISCOVERY_SCHEMA,
+            response_schema=GEMINI_V2_SCHEMA,
         ),
     )
-    return DiscoveryResult.model_validate_json(resp.text)
+    return DiscoveryResultV2.model_validate_json(resp.text)
 
 
 def _write_dead_letter(run_id: UUID, error: str) -> None:
-    """Append failed run to dead-letter file when mark_discovery_failed RPC itself fails."""
     try:
         DEAD_LETTER_PATH.parent.mkdir(parents=True, exist_ok=True)
         entry = json.dumps({"run_id": str(run_id), "error": error})
@@ -185,7 +128,6 @@ def _call_mark_discovery_failed(sb, run_id: UUID, error: str) -> None:
 
 
 def mark_discovery_failed_with_retry(sb, run_id: UUID, error: str) -> None:
-    """Call mark_discovery_failed RPC with tenacity retry; dead-letter on final failure."""
     try:
         _call_mark_discovery_failed(sb, run_id, error)
     except Exception as nested:
@@ -193,93 +135,122 @@ def mark_discovery_failed_with_retry(sb, run_id: UUID, error: str) -> None:
         _write_dead_letter(run_id, error)
 
 
-def _update_profile_from_context(sb, workspace_id: UUID, ctx: InputContext) -> None:
-    """Write fresh Apify-sourced fields directly to the primary profile.
-
-    `commit_discovery_result` upserts profiles from Gemini's `proposed_accounts`, but
-    Gemini's output may omit bio / follower_count / avatar. We already fetched those
-    authoritatively into ctx via the Apify details actor — write them here so the
-    profile row reflects ground truth even when Gemini's proposed_account is sparse.
-
-    Skips keys whose ctx value is None/empty, so we never clobber populated fields
-    with nulls.
-    """
-    updates: dict = {}
-    if ctx.display_name:
-        updates["display_name"] = ctx.display_name
-    if ctx.bio:
-        updates["bio"] = ctx.bio
-    if ctx.follower_count is not None:
-        updates["follower_count"] = ctx.follower_count
-    if ctx.following_count is not None:
-        updates["following_count"] = ctx.following_count
-    if ctx.post_count is not None:
-        updates["post_count"] = ctx.post_count
-    if ctx.avatar_url:
-        updates["avatar_url"] = ctx.avatar_url
-
-    if not updates:
-        return
-
-    updates["last_scraped_at"] = "now()"
-
-    sb.table("profiles") \
-        .update(updates) \
-        .eq("workspace_id", str(workspace_id)) \
-        .eq("platform", ctx.platform) \
-        .eq("handle", ctx.handle) \
-        .execute()
+def _classify_account_type_for(platform: str, discovered_urls: list, canonical_url: str) -> str:
+    """Map from discovered_urls list entry to account_type for the profile row."""
+    for du in discovered_urls:
+        if du.canonical_url == canonical_url:
+            return du.account_type
+    return "other"
 
 
-def commit(sb, run_id: UUID, result: DiscoveryResult):
-    data = result.model_dump(mode="json")
+def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
+                bulk_import_id: str | None) -> None:
+    """Build the v2 commit_discovery_result payload from the resolver output."""
+    seed = result.seed_context
+    gem = result.gemini_result
+
+    accounts = [{
+        "platform": seed.platform,
+        "handle": seed.handle,
+        "url": None,
+        "display_name": seed.display_name,
+        "bio": seed.bio,
+        "follower_count": seed.follower_count,
+        "account_type": "social",
+        "is_primary": True,
+        "discovery_confidence": 1.0,
+        "reasoning": "seed",
+    }]
+
+    for canon, ctx in result.enriched_contexts.items():
+        accounts.append({
+            "platform": ctx.platform,
+            "handle": ctx.handle,
+            "url": canon,
+            "display_name": ctx.display_name,
+            "bio": ctx.bio,
+            "follower_count": ctx.follower_count,
+            "account_type": _classify_account_type_for(ctx.platform, result.discovered_urls, canon),
+            "is_primary": False,
+            "discovery_confidence": 0.9,
+            "reasoning": ctx.source_note,
+        })
+
+    funnel_edges = []
+    for canon, ctx in result.enriched_contexts.items():
+        funnel_edges.append({
+            "from_platform": seed.platform,
+            "from_handle": seed.handle,
+            "to_platform": ctx.platform,
+            "to_handle": ctx.handle,
+            "edge_type": "link_in_bio",
+            "confidence": 0.9,
+        })
+
     creator_data = {
-        "canonical_name": data["canonical_name"],
-        "known_usernames": data["known_usernames"],
-        "display_name_variants": data["display_name_variants"],
-        "primary_platform": data["primary_platform"],
-        "primary_niche": data["primary_niche"],
-        "monetization_model": data["monetization_model"],
+        "canonical_name": gem.canonical_name,
+        "known_usernames": gem.known_usernames,
+        "display_name_variants": gem.display_name_variants,
+        "primary_platform": seed.platform,
+        "primary_niche": gem.primary_niche,
+        "monetization_model": gem.monetization_model,
     }
+
+    discovered_urls_payload = [du.model_dump() for du in result.discovered_urls]
+
     sb.rpc("commit_discovery_result", {
         "p_run_id": str(run_id),
         "p_creator_data": creator_data,
-        "p_accounts": data["proposed_accounts"],
-        "p_funnel_edges": data["proposed_funnel_edges"],
+        "p_accounts": accounts,
+        "p_funnel_edges": funnel_edges,
+        "p_discovered_urls": discovered_urls_payload,
+        "p_bulk_import_id": bulk_import_id,
     }).execute()
-    console.log(f"[green]Committed discovery run {run_id}[/green]")
+    console.log(f"[green]Committed v2 discovery run {run_id}[/green]")
 
 
-def run(inp: DiscoveryInput) -> None:
+def run(inp: DiscoveryInput, bulk_import_id: str | None = None,
+        cap_cents: int | None = None) -> None:
+    """Run discovery for one seed. v2 pipeline.
+
+    bulk_import_id: if set, passed to commit for counter updates.
+    cap_cents: per-seed Apify budget. Defaults to env BULK_IMPORT_APIFY_USD_CAP (×100).
+    """
     sb = get_supabase()
+    if cap_cents is None:
+        cap_cents = int(float(os.environ.get("BULK_IMPORT_APIFY_USD_CAP", "5")) * 100)
+
+    budget = BudgetTracker(
+        cap_cents=cap_cents,
+        on_warning=lambda msg: console.log(f"[yellow]{msg}[/yellow]"),
+    )
     try:
-        console.log(f"[blue]Starting discovery run {inp.run_id} (@{inp.input_handle}, {inp.input_platform_hint})[/blue]")
-        ctx = fetch_input_context(inp)
-        console.log(f"[cyan]Context: bio={bool(ctx.bio)} followers={ctx.follower_count} external_urls={len(ctx.external_urls)} destinations={len(ctx.link_in_bio_destinations)}[/cyan]")
+        console.log(f"[blue]Starting v2 discovery run {inp.run_id} "
+                    f"(@{inp.input_handle}, {inp.input_platform_hint})[/blue]")
+        result = resolve_seed(
+            handle=inp.input_handle,
+            platform_hint=inp.input_platform_hint,
+            supabase=sb,
+            apify_client=get_apify_client(),
+            budget=budget,
+        )
 
-        result = run_gemini_discovery(ctx)
-        commit(sb, inp.run_id, result)
+        _commit_v2(sb, inp.run_id, inp.workspace_id, result, bulk_import_id)
 
-        # Write the Apify-sourced profile fields (bio / follower counts / avatar)
-        # directly. Gemini's proposed_accounts may omit them; the upsert in
-        # commit_discovery_result preserves existing values on conflict, so this
-        # update fills in whatever's missing.
-        _update_profile_from_context(sb, inp.workspace_id, ctx)
+        sb.table("discovery_runs").update({
+            "apify_cost_cents": budget.spent_cents,
+        }).eq("id", str(inp.run_id)).execute()
 
-        # Kick off a small IG posts scrape for the primary account
-        ig_accounts = [a for a in result.proposed_accounts if a.platform == "instagram"]
-        if ig_accounts:
-            ig_handle = ig_accounts[0].handle
-            if not ig_handle and ig_accounts[0].url:
-                path_parts = urlparse(ig_accounts[0].url).path.strip("/").split("/")
-                ig_handle = path_parts[0] if path_parts and path_parts[0] else None
-            if ig_handle:
-                console.log(f"[cyan]Dispatching Apify posts scrape for @{ig_handle}[/cyan]")
-                scrape_instagram_profile(str(inp.workspace_id), ig_handle, limit=5)
+        if result.seed_context.platform == "instagram":
+            console.log(f"[cyan]Dispatching Apify posts scrape for @{inp.input_handle}[/cyan]")
+            scrape_instagram_profile(str(inp.workspace_id), inp.input_handle, limit=5)
 
     except EmptyDatasetError as e:
         console.log(f"[yellow]Discovery aborted — empty context: {e}[/yellow]")
         mark_discovery_failed_with_retry(sb, inp.run_id, f"empty_context: {e}")
+    except BudgetExhaustedError as e:
+        console.log(f"[yellow]Discovery blocked by budget: {e}[/yellow]")
+        mark_discovery_failed_with_retry(sb, inp.run_id, f"budget_exceeded: {e}")
     except Exception as e:
         console.log(f"[red]Fatal discovery error: {e}[/red]")
         mark_discovery_failed_with_retry(sb, inp.run_id, str(e))
@@ -305,4 +276,4 @@ if __name__ == "__main__":
         input_url=data["input_url"],
         input_platform_hint=data["input_platform_hint"],
     )
-    run(inp)
+    run(inp, bulk_import_id=data.get("bulk_import_id"))
