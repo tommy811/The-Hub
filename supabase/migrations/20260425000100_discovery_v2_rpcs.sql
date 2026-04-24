@@ -186,14 +186,13 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Mark the run as completed
+  -- Mark the run as completed (discovery_runs has no updated_at column)
   UPDATE discovery_runs SET
     status = 'completed',
     completed_at = NOW(),
     assets_discovered_count = v_accounts_upserted,
     funnel_edges_discovered_count = jsonb_array_length(p_funnel_edges),
-    bulk_import_id = COALESCE(p_bulk_import_id, bulk_import_id),
-    updated_at = NOW()
+    bulk_import_id = COALESCE(p_bulk_import_id, bulk_import_id)
   WHERE id = p_run_id;
 
   -- Bump bulk_imports counter if applicable
