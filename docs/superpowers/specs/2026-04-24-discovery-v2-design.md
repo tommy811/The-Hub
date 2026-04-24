@@ -92,7 +92,10 @@ Pure function: `canonical_url → (platform, account_type, reason) | None`.
 
 ### 3.4 Identity scorer — rule cascade, not weighted sum
 
-Runs at two points: (a) within one seed's discovered profiles, (b) across all seeds in a bulk import after they commit.
+Runs at three points:
+- **(a) intra-seed**: within one seed's discovered profiles (catches internal inconsistencies — rare but possible if Gemini's `text_mentions` duplicates a URL the resolver already found).
+- **(b) within-bulk**: across all seeds in a single bulk import, after they commit.
+- **(c) cross-workspace (every commit)**: whenever a new profile is committed to the workspace — whether from a seed, a bulk import, a manual Add Account, or a re-run — the scorer checks the new profile's `profile_destination_links` against the workspace's full existing index. This is the "late-arriving evidence" case: Creator A was imported last week with a partial footprint; Creator B is imported today and their Linktree shares a destination with A; the system raises a merge candidate (or auto-merges on strong signals) linking the new profile into A's existing creator record. The `profile_destination_links` index is a **persistent, per-workspace query structure** — it doesn't exist only during a bulk import.
 
 Rules evaluated in strict order; first match wins:
 
@@ -108,7 +111,20 @@ Rules evaluated in strict order; first match wins:
 
 Each merge/candidate records `evidence` JSONB with the reason string and the raw signal values, so humans reviewing can see exactly why.
 
-**Index-inverted dedup** for cross-seed pass: after all seeds in a bulk import commit, build `destination_url → [profile_id, ...]` and `monetization_handle → [profile_id, ...]` indices. Any entry with >1 profile is an instant candidate bucket. Expensive per-pair work (CLIP similarity, name fuzzy match) runs only inside buckets. O(n) for strong signals; pairwise O(k²) only within k-sized buckets (usually k ≤ 3).
+**Index-inverted dedup** works the same way for all three contexts. `profile_destination_links` is a materialized index (see §4.1). When a new profile is committed:
+
+1. Its canonical destination URLs are written to `profile_destination_links`.
+2. A `SELECT` on each URL returns all other `profile_id`s that share it.
+3. Any URL with ≥1 prior profile forms a candidate bucket (with the new profile + prior matches).
+4. Rule cascade fires per bucket; expensive per-pair work (CLIP similarity, name fuzzy match) runs only inside buckets.
+
+Result: intra-seed, within-bulk, and cross-workspace dedup all use the same machinery. O(1) index lookup per URL per new profile. Pairwise work stays bounded by bucket size (empirically k ≤ 3 for real creators).
+
+**Merge action semantics** when a strong-signal match fires:
+
+- **Both profiles are newly discovered (within a bulk import)** → the cascade raises a `creator_merge_candidate(a, b)` (ordered so `a < b`). Auto-merge at confidence 1.0 calls `merge_creators(keep=a, merge=b)` internally.
+- **New profile matches an existing creator** (cross-workspace case) → cascade raises `creator_merge_candidate(existing_creator, new_creator)`. Auto-merge at confidence 1.0 calls `merge_creators(keep=existing_creator, merge=new_creator)` — preserves the older canonical creator, migrates the new profile + any new funnel_edges + new `known_usernames[]` onto it, archives the transient new creator row.
+- **Below 1.0** → the candidate surfaces in the existing merge-review UI for human confirmation. No silent merges on weak signals.
 
 ### 3.5 CLIP avatar similarity
 
@@ -130,7 +146,26 @@ Every URL entering the pipeline is canonicalized first:
 
 Canonicalization is idempotent and its output is the key for both the classifier cache and the identity indices. If we canonicalize incorrectly, we build duplicates. Tested with ~30 fixture URLs covering each rule.
 
-### 3.7 Apify budget
+### 3.7 Manual Add Account flow
+
+A creator's full footprint will never be fully automated on the first pass. The team needs a way to add a known account manually when they spot one (e.g., a new OF URL in a DM, a backup IG the creator mentioned) — and the system should treat that manual addition exactly like a mini-discovery seed so the rest of the newly visible network (whatever that account's bio and link-in-bio reveal) gets picked up too.
+
+**UI**: The existing `AddAccountDialog.tsx` (Phase 1) stays in place. It adds one field:
+
+- `[x] Run discovery on this account after adding` — default on. When checked, the server action enqueues enrichment + resolver expansion. When unchecked, it inserts a URL-only stub (same as today's behavior).
+
+**Server action**: `addProfileToCreator(creator_id, platform, handle, account_type, run_discovery: boolean)` does:
+
+1. Inserts a `profiles` row with `creator_id = <existing>`, `discovery_confidence = 1.0` (human-confirmed), `discovery_reason = 'manual_add'`.
+2. If `run_discovery`: creates a `discovery_runs` row with `creator_id = <existing>`, `source = 'manual_add'`, `bulk_import_id = NULL`. Returns immediately. Worker picks it up.
+
+**Worker behavior on `source = 'manual_add'`**: the resolver runs normally — Stage A fetches the new handle, Stage B expands its externalUrls, Gemini does canonicalization but the existing creator's `canonical_name` / `primary_niche` / `monetization_model` are **not overwritten** (the human already classified this creator in a prior session). Only additive fields update: new `known_usernames[]` entries are union-merged, new profile rows are inserted, new funnel_edges are added.
+
+**Cross-workspace dedup still runs**: if the manually added handle turns out to share a monetization URL with a *different* existing creator, the rule cascade will raise a merge candidate — the human will see "hey, you just added this to Creator A but it also matches Creator B." Surface in the merge review UI; no silent merge. This is the safety net against a user accidentally attaching the wrong account.
+
+**Why this matters for data completeness**: today, if discovery misses an asset and we later manually add it, we just get the stub. With v2, manual-add triggers the same resolver expansion — so adding "@esmae_backup" doesn't just create one profile row, it can reveal Esmae's additional monetization links, its own link-in-bio, etc. The manual add becomes a *recovery seed* for the partial footprint.
+
+### 3.8 Apify budget
 
 Each bulk import gets a dollar cap (env var `BULK_IMPORT_APIFY_USD_CAP`, default `$5`). `budget.py` tracks per-actor cost (Apify per-actor cost table, hand-maintained) and debits as fetches fire. Soft warning logs at 50% and 80%. Hard abort at 100% — remaining seeds marked `blocked_by_budget` in `discovery_runs`, bulk import status becomes `partial_budget_exceeded`.
 
@@ -177,9 +212,10 @@ CREATE INDEX profile_destination_links_class_idx ON profile_destination_links(de
 
 ### 4.2 New columns on existing tables
 
-- `discovery_runs.bulk_import_id uuid REFERENCES bulk_imports(id) ON DELETE SET NULL` (nullable — single-handle discovery via Re-run Discovery button has no bulk_import)
+- `discovery_runs.bulk_import_id uuid REFERENCES bulk_imports(id) ON DELETE SET NULL` (nullable — single-handle discovery, retries, and manual adds have no bulk_import)
 - `discovery_runs.apify_cost_cents int DEFAULT 0`
-- `profiles.discovery_reason text` — which classifier rule or LLM guess classified this profile (audit trail)
+- `discovery_runs.source text NOT NULL DEFAULT 'seed' CHECK (source IN ('seed','manual_add','retry','auto_expand'))` — audit trail for how the run was triggered. `seed` = bulk or single-handle import. `manual_add` = user added a profile to an existing creator via UI and opted into discovery. `retry` = Re-run Discovery button. `auto_expand` = reserved for a future case where the cross-workspace merge pass decides to kick off discovery on a newly-surfaced secondary.
+- `profiles.discovery_reason text` — which classifier rule, LLM guess, or human action classified this profile (`rule:instagram_social`, `llm:high_confidence`, `manual_add`, etc.).
 
 ### 4.3 New constraints
 
@@ -318,10 +354,12 @@ Platform fetchers FB + X are stubbed (fetcher class exists, returns empty InputC
 - `supabase/migrations/{ts}_discovery_v2_schema.sql`
 
 **Modified**:
-- `scripts/discover_creator.py` → becomes a thin entry point that calls `pipeline.resolver`; the Gemini prompt narrows to canonicalization+niche+text_mentions.
-- `scripts/worker.py` → supports `run_cross_seed_merge_pass` invocation after seeds in a bulk terminate.
+- `scripts/discover_creator.py` → becomes a thin entry point that calls `pipeline.resolver`; the Gemini prompt narrows to canonicalization+niche+text_mentions; respects `source = 'manual_add'` by not overwriting existing creator canonical fields.
+- `scripts/worker.py` → supports `run_cross_seed_merge_pass` invocation after seeds in a bulk terminate; routes all `discovery_runs.source` values through the same resolver.
 - `scripts/schemas.py` → adds `DiscoveredUrl`, `BulkImportRecord`, narrows `DiscoveryResult` shape.
 - `scripts/requirements.txt` → adds `curl_cffi`, `yt-dlp`, `sentence-transformers`, `Pillow`.
+- `src/app/(dashboard)/creators/actions.ts` → `addProfileToCreator` extended to accept `run_discovery: boolean` and create a `discovery_runs` row with `source = 'manual_add'` when true.
+- `src/components/creators/AddAccountDialog.tsx` → new "Run discovery on this account after adding" checkbox (default checked).
 
 **Deleted** (after flag flip, separate commit):
 - `scripts/apify_details.py` (content migrated to `fetchers/instagram.py` + `fetchers/tiktok.py`).
@@ -334,7 +372,8 @@ Platform fetchers FB + X are stubbed (fetcher class exists, returns empty InputC
 - **URL classifier owns `(platform, account_type)`.** Gemini owns canonicalization + niche + text mentions only.
 - **WhatsMyName gazetteer + hand-curated monetization overlay** as classifier seed data.
 - **Rule cascade for identity resolution, not weighted sum.** Each merge has a stored reason in `evidence`.
-- **Index-inverted cross-seed dedup.** O(n) strong signals; per-pair work only in candidate buckets.
+- **Index-inverted dedup runs at every commit, cross-workspace.** The `profile_destination_links` index is persistent, not per-batch — every new profile (seed, bulk, manual add, retry) is checked against the workspace's full existing history. Late-arriving evidence merges into existing creators.
+- **Manual Add Account triggers resolver expansion.** Adding an account via the UI creates a `discovery_runs` row with `source = 'manual_add'` and runs the full resolver (with canonical fields protected). Manual add becomes a *recovery seed* for incomplete footprints.
 - **CLIP (ViT-B/32) for avatar similarity**, not pHash. Only as a bucket tiebreak.
 - **`bulk_imports` as first-class observable job.** Not an implicit worker loop.
 - **Unique index on `creator_merge_candidates(a,b)` pairs** for idempotency.
