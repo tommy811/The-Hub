@@ -120,6 +120,90 @@ export type Database = {
           },
         ]
       }
+      bulk_imports: {
+        Row: {
+          cost_apify_cents: number
+          created_at: string
+          id: string
+          initiated_by: string | null
+          merge_pass_completed_at: string | null
+          seeds_blocked_by_budget: number
+          seeds_committed: number
+          seeds_failed: number
+          seeds_total: number
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          cost_apify_cents?: number
+          created_at?: string
+          id?: string
+          initiated_by?: string | null
+          merge_pass_completed_at?: string | null
+          seeds_blocked_by_budget?: number
+          seeds_committed?: number
+          seeds_failed?: number
+          seeds_total: number
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          cost_apify_cents?: number
+          created_at?: string
+          id?: string
+          initiated_by?: string | null
+          merge_pass_completed_at?: string | null
+          seeds_blocked_by_budget?: number
+          seeds_committed?: number
+          seeds_failed?: number
+          seeds_total?: number
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_imports_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classifier_llm_guesses: {
+        Row: {
+          account_type_guess: Database["public"]["Enums"]["account_type"] | null
+          canonical_url: string
+          classified_at: string
+          confidence: number
+          model_version: string
+          platform_guess: Database["public"]["Enums"]["platform"] | null
+        }
+        Insert: {
+          account_type_guess?:
+            | Database["public"]["Enums"]["account_type"]
+            | null
+          canonical_url: string
+          classified_at?: string
+          confidence: number
+          model_version: string
+          platform_guess?: Database["public"]["Enums"]["platform"] | null
+        }
+        Update: {
+          account_type_guess?:
+            | Database["public"]["Enums"]["account_type"]
+            | null
+          canonical_url?: string
+          classified_at?: string
+          confidence?: number
+          model_version?: string
+          platform_guess?: Database["public"]["Enums"]["platform"] | null
+        }
+        Relationships: []
+      }
       content_analysis: {
         Row: {
           analysis_version: string | null
@@ -581,8 +665,10 @@ export type Database = {
       }
       discovery_runs: {
         Row: {
+          apify_cost_cents: number
           assets_discovered_count: number | null
           attempt_number: number | null
+          bulk_import_id: string | null
           completed_at: string | null
           created_at: string | null
           creator_id: string
@@ -596,13 +682,16 @@ export type Database = {
           input_url: string | null
           merge_candidates_raised: number | null
           raw_gemini_response: Json | null
+          source: string
           started_at: string | null
           status: Database["public"]["Enums"]["discovery_run_status"] | null
           workspace_id: string
         }
         Insert: {
+          apify_cost_cents?: number
           assets_discovered_count?: number | null
           attempt_number?: number | null
+          bulk_import_id?: string | null
           completed_at?: string | null
           created_at?: string | null
           creator_id: string
@@ -616,13 +705,16 @@ export type Database = {
           input_url?: string | null
           merge_candidates_raised?: number | null
           raw_gemini_response?: Json | null
+          source?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["discovery_run_status"] | null
           workspace_id: string
         }
         Update: {
+          apify_cost_cents?: number
           assets_discovered_count?: number | null
           attempt_number?: number | null
+          bulk_import_id?: string | null
           completed_at?: string | null
           created_at?: string | null
           creator_id?: string
@@ -636,11 +728,19 @@ export type Database = {
           input_url?: string | null
           merge_candidates_raised?: number | null
           raw_gemini_response?: Json | null
+          source?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["discovery_run_status"] | null
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "discovery_runs_bulk_import_id_fkey"
+            columns: ["bulk_import_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_imports"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "discovery_runs_creator_id_fkey"
             columns: ["creator_id"]
@@ -712,6 +812,45 @@ export type Database = {
           },
           {
             foreignKeyName: "funnel_edges_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_destination_links: {
+        Row: {
+          canonical_url: string
+          created_at: string
+          destination_class: string
+          profile_id: string
+          workspace_id: string
+        }
+        Insert: {
+          canonical_url: string
+          created_at?: string
+          destination_class: string
+          profile_id: string
+          workspace_id: string
+        }
+        Update: {
+          canonical_url?: string
+          created_at?: string
+          destination_class?: string
+          profile_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_destination_links_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_destination_links_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -799,6 +938,7 @@ export type Database = {
           created_at: string | null
           creator_id: string | null
           discovery_confidence: number | null
+          discovery_reason: string | null
           display_name: string | null
           follower_count: number | null
           following_count: number | null
@@ -826,6 +966,7 @@ export type Database = {
           created_at?: string | null
           creator_id?: string | null
           discovery_confidence?: number | null
+          discovery_reason?: string | null
           display_name?: string | null
           follower_count?: number | null
           following_count?: number | null
@@ -853,6 +994,7 @@ export type Database = {
           created_at?: string | null
           creator_id?: string | null
           discovery_confidence?: number | null
+          discovery_reason?: string | null
           display_name?: string | null
           follower_count?: number | null
           following_count?: number | null
