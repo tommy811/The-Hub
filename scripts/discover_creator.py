@@ -1,76 +1,56 @@
-# scripts/discover_creator.py — Discovery and Network Analysis Logic
+# scripts/discover_creator.py — Discovery and network analysis logic
 import json
 import argparse
-from typing import Optional, Literal
+import os
+from pathlib import Path
+from typing import Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
-import httpx
-from bs4 import BeautifulSoup
+
 import google.generativeai as genai
 from tenacity import retry, stop_after_attempt, wait_exponential
+
 from common import get_supabase, get_gemini_key, console
-from apify_scraper import scrape_instagram_profile
+from schemas import (
+    DiscoveryInput,
+    DiscoveryResult,
+    InputContext,
+    PLATFORM_VALUES,
+)
+from apify_details import (
+    EmptyDatasetError,
+    fetch_instagram_details,
+    fetch_tiktok_details,
+)
+from apify_scraper import get_apify_client, scrape_instagram_profile
+from link_in_bio import is_aggregator_url, resolve_link_in_bio
 
-# --- Models ---
-class DiscoveryInput(BaseModel):
-    run_id: UUID
-    creator_id: UUID
-    workspace_id: UUID
-    input_handle: Optional[str] = None
-    input_url: Optional[str] = None
-    input_platform_hint: Optional[str] = None
+DEAD_LETTER_PATH = Path(os.environ.get(
+    "DISCOVERY_DEAD_LETTER_PATH",
+    str(Path(__file__).resolve().parent / "discovery_dead_letter.jsonl"),
+))
 
-class ProposedAccount(BaseModel):
-    account_type: Literal['social','monetization','link_in_bio','messaging','other']
-    platform: str
-    handle: Optional[str] = None
-    url: Optional[str] = None
-    display_name: Optional[str] = None
-    bio: Optional[str] = None
-    follower_count: Optional[int] = None
-    is_primary: bool = False
-    discovery_confidence: float = Field(ge=0.0, le=1.0)
-    reasoning: str
-
-class ProposedFunnelEdge(BaseModel):
-    from_handle: str
-    from_platform: str
-    to_handle: str
-    to_platform: str
-    edge_type: Literal['link_in_bio','direct_link','cta_mention','qr_code','inferred']
-    confidence: float
-
-class DiscoveryResult(BaseModel):
-    canonical_name: str
-    known_usernames: list[str]
-    display_name_variants: list[str]
-    primary_platform: str
-    primary_niche: Optional[str] = None
-    monetization_model: str
-    proposed_accounts: list[ProposedAccount]
-    proposed_funnel_edges: list[ProposedFunnelEdge]
-    raw_reasoning: str
 
 def _clean_schema(obj):
-    """Recursively make a schema Gemini-compatible.
-    - Strips keys Gemini rejects: default, title
-    - Collapses anyOf/oneOf with a null variant into just the non-null type
-      (Gemini doesn't support anyOf; Optional[X] must become just X)
-    """
     if isinstance(obj, dict):
-        # Collapse Optional[X] = anyOf[X, null] → X
         if "anyOf" in obj or "oneOf" in obj:
             variants = obj.get("anyOf") or obj.get("oneOf")
             non_null = [v for v in variants if not (isinstance(v, dict) and v.get("type") == "null")]
             if len(non_null) == 1:
-                return _clean_schema({**non_null[0], **{k: v for k, v in obj.items() if k not in ("anyOf", "oneOf", "default", "title")}})
-        return {k: _clean_schema(v) for k, v in obj.items() if k not in ("default", "title", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")}
+                return _clean_schema({
+                    **non_null[0],
+                    **{k: v for k, v in obj.items() if k not in ("anyOf", "oneOf", "default", "title")},
+                })
+        return {
+            k: _clean_schema(v)
+            for k, v in obj.items()
+            if k not in ("default", "title", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
+        }
     if isinstance(obj, list):
         return [_clean_schema(i) for i in obj]
     return obj
 
+
 def _inline_refs(schema: dict) -> dict:
-    """Resolve $ref pointers so Gemini receives a flat schema with no $defs."""
     defs = schema.get("$defs", {})
 
     def resolve(obj):
@@ -85,177 +65,181 @@ def _inline_refs(schema: dict) -> dict:
 
     return resolve(schema)
 
-# Build a Gemini-compatible schema: inline $refs, strip unsupported keys, inject platform enum
-_raw_schema = DiscoveryResult.model_json_schema()
-_PLATFORM_ENUM = [
-    "instagram", "tiktok", "youtube", "facebook", "twitter", "linkedin",
-    "onlyfans", "fanvue", "fanplace", "amazon_storefront", "tiktok_shop",
-    "linktree", "beacons", "telegram_channel", "telegram_cupidbot", "custom_domain", "other"
-]
-try:
-    _raw_schema["$defs"]["ProposedAccount"]["properties"]["platform"]["enum"] = _PLATFORM_ENUM
-except KeyError:
-    pass
-GEMINI_DISCOVERY_SCHEMA = _clean_schema(_inline_refs(_raw_schema))
 
-def fetch_input_context(inp: DiscoveryInput) -> dict:
-    url = inp.input_url
-    if not url and inp.input_handle and inp.input_platform_hint:
-         # Basic heuristic URL builder
-         domain_map = {
-             "instagram": f"https://instagram.com/{inp.input_handle}",
-             "tiktok": f"https://tiktok.com/@{inp.input_handle}",
-             "twitter": f"https://x.com/{inp.input_handle}",
-         }
-         url = domain_map.get(inp.input_platform_hint)
+GEMINI_DISCOVERY_SCHEMA = _clean_schema(_inline_refs(DiscoveryResult.model_json_schema()))
 
-    context = {"raw_input": inp.model_dump(mode='json'), "scraped_data": None}
-    if url:
-        try:
-            r = httpx.get(url, timeout=10.0, follow_redirects=True)
-            soup = BeautifulSoup(r.text, 'html.parser')
-            # Extract basic text content and links
-            text_content = soup.get_text(separator=' ', strip=True)[:5000] # Cap 5k chars
-            links = [a['href'] for a in soup.find_all('a', href=True) if a['href'].startswith('http')][:50]
-            context["scraped_data"] = {
-                "page_title": soup.title.string if soup.title else None,
-                "text_sample": text_content,
-                "outbound_links": links
-            }
-        except Exception as e:
-             console.log(f"[yellow]Failed to fetch URL context {url}: {e}[/yellow]")
-             
-    return context
 
-def resolve_link_in_bio(url: str) -> list[str]:
-    # Placeholder for actual Linktree/Beacons resolution logic.
-    # A complete implementation would fetch the page and extract URLs linking out.
-    return []
+def fetch_input_context(inp: DiscoveryInput) -> InputContext:
+    """Fetch structured profile context via Apify. Raises EmptyDatasetError on login wall."""
+    if not inp.input_handle:
+        raise ValueError("input_handle is required — legacy input_url-only path removed")
+
+    platform = (inp.input_platform_hint or "").lower()
+    client = get_apify_client()
+
+    if platform == "instagram":
+        ctx = fetch_instagram_details(client, inp.input_handle)
+    elif platform == "tiktok":
+        ctx = fetch_tiktok_details(client, inp.input_handle)
+    else:
+        raise ValueError(
+            f"Unsupported input_platform_hint={platform!r}. "
+            f"Supported: instagram, tiktok."
+        )
+
+    # Resolve aggregator URLs (Linktree/Beacons) found in the bio
+    destinations: list[str] = []
+    for url in ctx.external_urls:
+        if is_aggregator_url(url):
+            destinations.extend(resolve_link_in_bio(url))
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_destinations: list[str] = []
+    for d in destinations:
+        if d not in seen:
+            seen.add(d)
+            unique_destinations.append(d)
+
+    ctx.link_in_bio_destinations = unique_destinations
+    return ctx
+
+
+def build_prompt(ctx: InputContext) -> str:
+    ctx_json = ctx.model_dump_json(indent=2)
+    return f"""
+You are analyzing a creator's online footprint to discover their true identity, aliases, and platforms.
+
+**Ground every field in the provided context.** Do not rely on prior knowledge of this handle. If a field cannot be determined from the context (bio, external URLs, link-in-bio destinations), return null / "unknown" / an empty list rather than guessing.
+
+Do not hallucinate follower counts, niches, or accounts that aren't evidenced in the context.
+
+## Context
+```
+{ctx_json}
+```
+
+## Task
+1. Determine the creator's canonical name. If not clearly stated in display_name or bio, use the handle.
+2. Infer primary_niche from bio and link-in-bio destination domains (e.g. onlyfans.com → adult creator; patreon.com → subscription creator).
+3. Infer monetization_model from link-in-bio destinations (onlyfans/fanvue → subscription; patreon → subscription; shop/store → ecommerce; otherwise unknown).
+4. List every account you can identify:
+   - The input handle itself as a `proposed_account` with `is_primary=true`.
+   - Each link_in_bio_destination as a separate proposed_account (platform inferred from the domain; account_type = monetization for onlyfans/patreon/fanvue/fanplace, link_in_bio for linktr.ee/beacons.ai, social otherwise).
+5. Propose funnel edges from the input handle to each destination (edge_type=link_in_bio when routed via an aggregator; direct_link when listed directly in externalUrls).
+6. Confidence 0.9+ only when the account appears literally in the context. 0.5–0.8 for strong inference (e.g. matching-handle OF account from a bio hint). Below 0.5 → don't emit.
+""".strip()
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def run_gemini_discovery(context: dict, link_destinations: list[str]) -> DiscoveryResult:
+def run_gemini_discovery(ctx: InputContext) -> DiscoveryResult:
     genai.configure(api_key=get_gemini_key())
-    # Use gemini-1.5-pro for high complexity reasoning
-    model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    prompt = f"""
-    Analyze the following creator footprint data and discover their true identity, aliases, and platforms.
-    Context Data:
-    {json.dumps(context, indent=2)}
-    
-    Link in Bio Destinations (if any found):
-    {json.dumps(link_destinations, indent=2)}
-    """
-    
-    # Passing structured model for strict JSON extraction
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    prompt = build_prompt(ctx)
     resp = model.generate_content(
         prompt,
         generation_config=genai.GenerationConfig(
             response_mime_type="application/json",
-            response_schema=GEMINI_DISCOVERY_SCHEMA
-        )
+            response_schema=GEMINI_DISCOVERY_SCHEMA,
+        ),
     )
-    
     return DiscoveryResult.model_validate_json(resp.text)
 
-_VALID_MONETIZATION_MODELS = {
-    "subscription", "tips", "ppv", "affiliate",
-    "brand_deals", "ecommerce", "coaching", "saas", "mixed", "unknown"
-}
 
-def _normalize_monetization_model(value: str) -> str:
-    if value and value.lower() in _VALID_MONETIZATION_MODELS:
-        return value.lower()
-    return "unknown"
+def _write_dead_letter(run_id: UUID, error: str) -> None:
+    """Append failed run to dead-letter file when mark_discovery_failed RPC itself fails."""
+    try:
+        DEAD_LETTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        entry = json.dumps({"run_id": str(run_id), "error": error})
+        with DEAD_LETTER_PATH.open("a") as f:
+            f.write(entry + "\n")
+    except Exception as e:
+        console.log(f"[red]Dead-letter write failed: {e}[/red]")
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=5), reraise=True)
+def _call_mark_discovery_failed(sb, run_id: UUID, error: str) -> None:
+    sb.rpc("mark_discovery_failed", {
+        "p_run_id": str(run_id),
+        "p_error": error,
+    }).execute()
+
+
+def mark_discovery_failed_with_retry(sb, run_id: UUID, error: str) -> None:
+    """Call mark_discovery_failed RPC with tenacity retry; dead-letter on final failure."""
+    try:
+        _call_mark_discovery_failed(sb, run_id, error)
+    except Exception as nested:
+        console.log(f"[red]mark_discovery_failed exhausted retries: {nested}[/red]")
+        _write_dead_letter(run_id, error)
+
 
 def commit(run_id: UUID, result: DiscoveryResult):
     sb = get_supabase()
-    data = result.model_dump(mode='json')
+    data = result.model_dump(mode="json")
     creator_data = {
-       "canonical_name": data["canonical_name"],
-       "known_usernames": data["known_usernames"],
-       "display_name_variants": data["display_name_variants"],
-       "primary_platform": data["primary_platform"],
-       "primary_niche": data["primary_niche"],
-       "monetization_model": _normalize_monetization_model(data["monetization_model"])
+        "canonical_name": data["canonical_name"],
+        "known_usernames": data["known_usernames"],
+        "display_name_variants": data["display_name_variants"],
+        "primary_platform": data["primary_platform"],
+        "primary_niche": data["primary_niche"],
+        "monetization_model": data["monetization_model"],
     }
-    accounts_data = data["proposed_accounts"]
-    funnel_edges = data["proposed_funnel_edges"]
-    
-    try:
-        res = sb.rpc("commit_discovery_result", {
-            "p_run_id": str(run_id),
-            "p_creator_data": creator_data,
-            "p_accounts": accounts_data,
-            "p_funnel_edges": funnel_edges
-        }).execute()
-        console.log(f"[green]Successfully committed discovery run {run_id}.[/green]")
-    except Exception as e:
-        console.log(f"[red]Commit failed: {e}[/red]")
-        raise e
+    sb.rpc("commit_discovery_result", {
+        "p_run_id": str(run_id),
+        "p_creator_data": creator_data,
+        "p_accounts": data["proposed_accounts"],
+        "p_funnel_edges": data["proposed_funnel_edges"],
+    }).execute()
+    console.log(f"[green]Committed discovery run {run_id}[/green]")
+
 
 def run(inp: DiscoveryInput) -> None:
     sb = get_supabase()
     try:
-        console.log(f"[blue]Starting discovery run {inp.run_id}[/blue]")
+        console.log(f"[blue]Starting discovery run {inp.run_id} (@{inp.input_handle}, {inp.input_platform_hint})[/blue]")
         ctx = fetch_input_context(inp)
-        
-        links = []
-        if ctx.get("scraped_data"):
-             links = ctx["scraped_data"].get("outbound_links", [])
-             
-        # Optional: actively resolve linktree
-        resolved = []
-        for l in links:
-             if "linktr.ee" in l or "beacons.ai" in l:
-                 resolved.extend(resolve_link_in_bio(l))
-                 
-        res = run_gemini_discovery(ctx, resolved)
-        commit(inp.run_id, res)
-        
-        # Trigger follow-up Apify Scrape if we found an IG account
-        console.log("[cyan]Checking if Apify scrape is needed...[/cyan]")
-        ig_accounts = [acc for acc in res.proposed_accounts if acc.platform == "instagram"]
-        
+        console.log(f"[cyan]Context: bio={bool(ctx.bio)} followers={ctx.follower_count} external_urls={len(ctx.external_urls)} destinations={len(ctx.link_in_bio_destinations)}[/cyan]")
+
+        result = run_gemini_discovery(ctx)
+        commit(inp.run_id, result)
+
+        # Kick off a small IG posts scrape for the primary account
+        ig_accounts = [a for a in result.proposed_accounts if a.platform == "instagram"]
         if ig_accounts:
-            ig_handle = ig_accounts[0].handle
-            if not ig_handle and ig_accounts[0].url:
-                 ig_handle = ig_accounts[0].url.strip('/').split('/')[-1]
-                 
+            ig_handle = ig_accounts[0].handle or (
+                ig_accounts[0].url.strip("/").split("/")[-1] if ig_accounts[0].url else None
+            )
             if ig_handle:
-                console.log(f"[cyan]Dispatching Apify scrape for detected IG handle: {ig_handle}[/cyan]")
-                # We do a small scrape (5 posts) on initial discovery to populate recent content
+                console.log(f"[cyan]Dispatching Apify posts scrape for @{ig_handle}[/cyan]")
                 scrape_instagram_profile(str(inp.workspace_id), ig_handle, limit=5)
-            
+
+    except EmptyDatasetError as e:
+        console.log(f"[yellow]Discovery aborted — empty context: {e}[/yellow]")
+        mark_discovery_failed_with_retry(sb, inp.run_id, f"empty_context: {e}")
     except Exception as e:
-        console.log(f"[red]Fatal discovery error: {str(e)}[/red]")
-        try:
-            sb.rpc("mark_discovery_failed", {
-                "p_run_id": str(inp.run_id),
-                "p_error": str(e)
-            }).execute()
-        except Exception as nested_e:
-            console.log(f"[red]Failed to run error RPC: {nested_e}[/red]")
+        console.log(f"[red]Fatal discovery error: {e}[/red]")
+        mark_discovery_failed_with_retry(sb, inp.run_id, str(e))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-id", required=True, type=str)
     args = parser.parse_args()
-    
+
     sb = get_supabase()
-    # Fetch run details to construct input
     resp = sb.table("discovery_runs").select("*").eq("id", args.run_id).single().execute()
     data = resp.data
     if not data:
-         console.log(f"[red]Run {args.run_id} not found[/red]")
-         exit(1)
-         
+        console.log(f"[red]Run {args.run_id} not found[/red]")
+        exit(1)
+
     inp = DiscoveryInput(
         run_id=data["id"],
         creator_id=data["creator_id"],
         workspace_id=data["workspace_id"],
         input_handle=data["input_handle"],
         input_url=data["input_url"],
-        input_platform_hint=data["input_platform_hint"]
+        input_platform_hint=data["input_platform_hint"],
     )
     run(inp)
