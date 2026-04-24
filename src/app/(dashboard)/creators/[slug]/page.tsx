@@ -6,7 +6,8 @@ import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
-import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle, Sparkles, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
@@ -141,7 +142,19 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
         <div className="flex flex-col gap-1.5 flex-1 min-w-0 mt-1">
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold tracking-tight leading-none">{creator.canonical_name}</h1>
-            <RerunDiscoveryButton creatorId={creator.id} isProcessing={creator.onboarding_status === 'processing'} />
+            <div className="flex items-center gap-2 shrink-0">
+              <AddAccountDialog
+                creatorId={creator.id}
+                defaultAccountType="social"
+                trigger={
+                  <Button variant="outline" size="sm" className="h-8">
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add Account
+                  </Button>
+                }
+              />
+              <RerunDiscoveryButton creatorId={creator.id} isProcessing={creator.onboarding_status === 'processing'} />
+            </div>
           </div>
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
@@ -154,12 +167,6 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
               </Badge>
             )}
           </div>
-
-          {primaryProfile?.bio && (
-            <p className="text-sm text-muted-foreground leading-snug line-clamp-2 max-w-xl mt-0.5">
-              {primaryProfile.bio}
-            </p>
-          )}
 
           {(creator.tags?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-1 mt-0.5">
@@ -213,6 +220,17 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
         />
       </div>
 
+      {/* Brand Summary placeholder — Phase 3 surface for Claude brand-analysis output */}
+      <div className="rounded-xl border border-dashed border-border/40 bg-muted/5 p-6 flex items-start gap-4">
+        <Sparkles className="h-5 w-5 text-muted-foreground/60 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-muted-foreground">Brand Summary — Phase 3</div>
+          <div className="text-xs text-muted-foreground/70 mt-1">
+            Niche, archetype, vibe, monetization model, and SEO keywords will be filled by the Claude brand-analysis agent.
+          </div>
+        </div>
+      </div>
+
       {/* Status banners */}
       {creator.onboarding_status === 'processing' && (
         <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl text-indigo-400 flex items-center gap-3">
@@ -231,8 +249,8 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs defaultValue="network" className="w-full">
+      {/* Tabs — explicit horizontal orientation: list above content, full width */}
+      <Tabs defaultValue="network" orientation="horizontal" className="w-full flex flex-col gap-4">
         <TabsList className="w-full justify-start bg-transparent border-b border-border/50 rounded-none h-auto p-0 gap-6">
           <TabsTrigger value="network" className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-0 pb-3 pt-2 text-sm">
             Network Mapping
@@ -248,14 +266,14 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="network" className="mt-6 space-y-6">
-          <NetworkSection title="Social & Media" icon={Globe} accounts={socialAccounts} creatorId={creator.id} />
-          <NetworkSection title="Link-in-Bio" icon={Link2} accounts={linkInBioAccounts} creatorId={creator.id} />
-          <NetworkSection title="Monetization" icon={DollarSign} accounts={monetizationAccounts} creatorId={creator.id} />
-          <NetworkSection title="Messaging & Communities" icon={MessageCircle} accounts={messagingAccounts} creatorId={creator.id} />
+        <TabsContent value="network" className="space-y-6">
+          <NetworkSection title="Social & Media" icon={Globe} accounts={socialAccounts} />
+          <NetworkSection title="Link-in-Bio" icon={Link2} accounts={linkInBioAccounts} />
+          <NetworkSection title="Monetization" icon={DollarSign} accounts={monetizationAccounts} />
+          <NetworkSection title="Messaging & Communities" icon={MessageCircle} accounts={messagingAccounts} />
         </TabsContent>
 
-        <TabsContent value="funnel" className="mt-6">
+        <TabsContent value="funnel">
           <ComingSoon
             phase={4}
             feature="Funnel visualization"
@@ -267,18 +285,15 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
   );
 }
 
-function NetworkSection({ title, icon: Icon, accounts, creatorId }: { title: string, icon: React.ElementType, accounts: any[], creatorId: string }) {
+function NetworkSection({ title, icon: Icon, accounts }: { title: string, icon: React.ElementType, accounts: any[] }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">
-            {title}
-          </h3>
-          <span className="text-muted-foreground/50 font-mono text-xs">{accounts.length}</span>
-        </div>
-        <AddAccountDialog creatorId={creatorId} />
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <h3 className="font-semibold text-sm">
+          {title}
+        </h3>
+        <span className="text-muted-foreground/50 font-mono text-xs">{accounts.length}</span>
       </div>
       <div className="flex flex-col gap-1.5">
         {accounts.length === 0 ? (

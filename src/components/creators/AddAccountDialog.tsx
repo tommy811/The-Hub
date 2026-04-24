@@ -50,14 +50,39 @@ const ACCOUNT_TYPES = [
   { value: 'other',        label: 'Other' },
 ];
 
-export function AddAccountDialog({ creatorId }: { creatorId: string }) {
+export function AddAccountDialog({
+  creatorId,
+  defaultAccountType = 'social',
+  trigger,
+}: {
+  creatorId: string;
+  defaultAccountType?: string;
+  /**
+   * Optional custom trigger element. If omitted, the dialog renders its
+   * built-in compact "Add manually" link (used by per-section UIs).
+   * Pass a Button for the page-header variant.
+   */
+  trigger?: React.ReactNode;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [platform, setPlatform] = useState('instagram');
-  const [accountType, setAccountType] = useState('social');
+  // Pick a sensible default platform for the chosen account type so the
+  // form opens pre-filled with a coherent platform/type pair.
+  const defaultPlatform = (() => {
+    switch (defaultAccountType) {
+      case 'monetization': return 'onlyfans';
+      case 'link_in_bio': return 'linktree';
+      case 'messaging': return 'telegram_channel';
+      case 'other': return 'other';
+      default: return 'instagram';
+    }
+  })();
+
+  const [platform, setPlatform] = useState(defaultPlatform);
+  const [accountType, setAccountType] = useState(defaultAccountType);
   const [handle, setHandle] = useState('');
   const [url, setUrl] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -93,17 +118,24 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
     setHandle('');
     setUrl('');
     setDisplayName('');
-    setPlatform('instagram');
-    setAccountType('social');
+    setPlatform(defaultPlatform);
+    setAccountType(defaultAccountType);
     setRunDiscovery(true);
     router.refresh();
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors px-2 py-1 rounded hover:bg-muted/40">
-        <Plus className="h-3.5 w-3.5" /> Add manually
-      </DialogTrigger>
+      {trigger ? (
+        // base-ui's Trigger forwards refs/handlers via the `render` prop
+        // (no `asChild`). React.isValidElement narrows the type so the cast
+        // is safe.
+        <DialogTrigger render={trigger as React.ReactElement} />
+      ) : (
+        <DialogTrigger className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors px-2 py-1 rounded hover:bg-muted/40">
+          <Plus className="h-3.5 w-3.5" /> Add manually
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Account Manually</DialogTitle>

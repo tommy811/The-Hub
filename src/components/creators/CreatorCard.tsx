@@ -164,7 +164,7 @@ export function CreatorCard({
                 disabled={isPending}
                 className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 border border-red-900/50 rounded-full px-4 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} /> {isPending ? 'Retrying…' : 'Retry Discovery'}
+                <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} /> {isPending ? 'Retrying…' : 'Re-run Discovery'}
               </button>
             </div>
           </CreatorCardContainer>

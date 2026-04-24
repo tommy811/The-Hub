@@ -269,3 +269,55 @@ export async function addAccountToCreator(
     return err(e?.message ?? "Add account failed")
   }
 }
+
+// ---------- removeAccountFromCreator ----------
+// Soft-removes a profile by setting is_active = false. Preserves the row +
+// history so we never lose discovery data; the profile just stops surfacing
+// on the creator detail page.
+
+export async function removeAccountFromCreator(
+  profileId: string
+): Promise<Result<{ ok: true }>> {
+  try {
+    const wsId = await getCurrentWorkspaceId()
+    const supabase = createServiceClient()
+
+    // 1. Look up the profile so we can verify workspace access + revalidate
+    //    the right creator detail path.
+    const { data: profile, error: fetchErr } = await supabase
+      .from("profiles")
+      .select("id, creator_id, workspace_id")
+      .eq("id", profileId)
+      .eq("workspace_id", wsId)
+      .maybeSingle()
+    if (fetchErr) return err(fetchErr.message)
+    if (!profile) return err("Profile not found")
+
+    // 2. Soft-delete: is_active = false.
+    const { error: updateErr } = await supabase
+      .from("profiles")
+      .update({ is_active: false })
+      .eq("id", profileId)
+      .eq("workspace_id", wsId)
+    if (updateErr) return err(updateErr.message)
+
+    // 3. Revalidate the creator detail page. We need the slug for the
+    //    canonical path, but revalidatePath also accepts the id form we
+    //    use elsewhere; both work because the page reads via slug param
+    //    and revalidatePath invalidates the cache key for any matching path.
+    if (profile.creator_id) {
+      const { data: creator } = await supabase
+        .from("creators")
+        .select("slug")
+        .eq("id", profile.creator_id)
+        .maybeSingle()
+      if (creator?.slug) {
+        revalidatePath(`/creators/${creator.slug}`)
+      }
+    }
+
+    return ok({ ok: true })
+  } catch (e: any) {
+    return err(e?.message ?? "Remove account failed")
+  }
+}
