@@ -1,0 +1,21 @@
+[
+  {
+    "id": "123456789",
+    "username": "gothgirlnatalie",
+    "url": "https://www.instagram.com/gothgirlnatalie/",
+    "fullName": "Natalie Vox",
+    "biography": "goth girl ✦ 18+ link below",
+    "externalUrls": [
+      {"url": "https://linktr.ee/gothgirlnatalie", "title": null}
+    ],
+    "followersCount": 48200,
+    "followsCount": 612,
+    "postsCount": 142,
+    "profilePicUrl": "https://instagram.com/pic.jpg",
+    "profilePicUrlHD": "https://instagram.com/pic_hd.jpg",
+    "verified": false,
+    "isBusinessAccount": false,
+    "isPrivate": false,
+    "businessCategoryName": null
+  }
+]

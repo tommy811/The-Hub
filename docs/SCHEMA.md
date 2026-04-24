@@ -27,6 +27,7 @@ Tables with a `workspace_id` column (row-level RLS isolates by workspace):
 - `content_category`: comedy_entertainment | fashion_style | fitness | lifestyle | beauty | travel | food | music | gaming | education | other
 - `content_vibe`: playful | girl_next_door | body_worship | wifey | luxury | edgy | wholesome | mysterious | confident | aspirational
 - `discovery_run_status`: pending | processing | completed | failed
+- `edge_type`: link_in_bio | direct_link | cta_mention | qr_code | inferred (funnel_edges.edge_type)
 - `label_type`: content_format | trend_pattern | hook_style | visual_style | other
 - `merge_candidate_status`: pending | merged | dismissed
 - `monetization_model`: subscription | tips | ppv | affiliate | brand_deals | ecommerce | coaching | saas | mixed | unknown
@@ -236,7 +237,7 @@ _RLS: members insert discovery_runs(INSERT), members select discovery_runs(SELEC
 - **workspace_id**: uuid — NN FK→workspaces.id
 - **from_profile_id**: uuid — NN FK→profiles.id
 - **to_profile_id**: uuid — NN FK→profiles.id
-- **edge_type**: text — DEF 'inferred'::text
+- **edge_type**: edge_type — DEF 'inferred'::edge_type
 - **confidence**: numeric — DEF 1.0
 - **detected_at**: timestamp with time zone — DEF now()
 
