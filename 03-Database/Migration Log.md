@@ -1,5 +1,27 @@
 # Migration Log
 
+## 2026-04-24 — fix_funnel_edges_creator_id
+**File:** `supabase/migrations/20260424160000_fix_funnel_edges_creator_id.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-rebuild` → PR #2 merged
+
+### What Changed
+Patched `commit_discovery_result` RPC to include `creator_id` in the `funnel_edges` INSERT. The column is NOT NULL, so the RPC crashed the first time Gemini produced real funnel edges during the discovery rebuild smoke test. Fix is a one-line change to the RPC body.
+
+---
+
+## 2026-04-24 — create_edge_type_enum (fix latent RPC crash)
+**File:** `supabase/migrations/20260424150000_create_edge_type_enum.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-rebuild` → PR #2 merged
+
+### What Changed
+Creates `edge_type` enum (5 values: link_in_bio, direct_link, cta_mention, qr_code, inferred) and retypes `funnel_edges.edge_type` from `text` to `edge_type`. Fixes audit item §1.1.7 — `commit_discovery_result` cast `(v_edge->>'edge_type')::edge_type` against a nonexistent type, a latent crash since the column was added.
+
+Guarded: migration aborts if `funnel_edges` has any rows. Safe because `funnel_edges` was empty (crash had never been triggered).
+
+---
+
 ## 2026-04-24 — Phase 2 schema migration (trends + labels + archetype/vibe move)
 **File:** `supabase/migrations/20260424170000_phase_2_schema_migration.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP

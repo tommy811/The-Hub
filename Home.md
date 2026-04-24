@@ -10,15 +10,15 @@
 - [[06-Sessions/|📅 Sessions]] — daily work logs
 
 ## Current Status
-- Phase: **Phase 2 in progress 🔄** (schema landed; pipeline rebuild next)
+- Phase: **Phase 2 in progress 🔄** (discovery rebuild + schema both landed; scraping + trends next)
 - Database: ✅ Supabase (Content OS project) — 20 tables live
 - Repo: github.com/tommy811/The-Hub
-- Open PR: [#3 phase-2-schema-migration](https://github.com/tommy811/The-Hub/pull/3)
 - Last session: [[06-Sessions/2026-04-24]]
 
 ## Active Work
-- ✅ Phase 2 schema migration — `trends` + `creator_label_assignments`, `trend_type` / `llm_model` / `content_archetype` enums, `creators.archetype`+`vibe`, `scraped_content.trend_id`
-- 🔜 **Phase 2 first task:** rebuild `scripts/discover_creator.py` on Apify `resultsType: "details"` — `httpx` is blocked by Instagram
+- ✅ Discovery pipeline rebuilt — Apify-grounded context, Linktree/Beacons resolver, grounded Gemini prompt, dead-letter retry, 45 pytest tests (PR #2)
+- ✅ Phase 2 schema migration — `trends` + `creator_label_assignments`, `trend_type` / `llm_model` / `content_archetype` enums, `creators.archetype`+`vibe`, `scraped_content.trend_id` (PR #3)
 - 🔜 Wire `/content` and `/trends` routes
 - 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, `flag_outliers` live, Outliers page)
 - 🔜 Trend linking — audio signature extraction populates `scraped_content.trend_id`
+- 🔜 `quality_flag` + `quality_reason` columns on `scraped_content` (runtime watchdog)

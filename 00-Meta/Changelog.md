@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-04-24 (sync 9 — Phase 2 discovery rebuild + schema migration both merged)
+- Merged: PR #2 (`phase-2-discovery-rebuild`) — discovery pipeline rewritten on Apify-grounded context; Linktree/Beacons resolver; grounded Gemini prompt; `edge_type` enum + funnel_edges creator_id fix; pytest scaffolding; 45 tests; dead-letter replay script.
+- Merged: PR #3 (`phase-2-schema-migration`) — rebased onto main after PR #2; `trends` + `creator_label_assignments` tables; `trend_type` / `llm_model` / `content_archetype` enums; `creator_niche` on `label_type`; `archetype`+`vibe` moved to creators; `scraped_content.trend_id` FK.
+- Changed: Phase 2 status on Home + Phase Roadmap — discovery rebuild now ✅, schema migration ✅; remaining Phase 2 work is scraping ingestion + trends linking + `quality_flag` on `scraped_content`.
+- Added: Migration Log entries for `20260424150000_create_edge_type_enum` and `20260424160000_fix_funnel_edges_creator_id` (were live but not documented in vault).
+
 ## 2026-04-24 (sync 8 — Phase 2 schema migration)
 - Added: `trends` table + `trend_type` enum (audio / dance / lipsync / transition / meme / challenge)
 - Added: `creator_label_assignments` table (mirrors `content_label_assignments`, reuses `increment_label_usage` trigger)

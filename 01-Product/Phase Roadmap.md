@@ -29,8 +29,8 @@ See [[PROJECT_STATE#16. Per-Phase Agent Requirements]] for full agent requiremen
 
 ### Feature Work
 - ✅ Wire `/platforms/instagram/accounts` + `/platforms/tiktok/accounts` to live data
+- ✅ Discovery pipeline rebuild — `fetch_input_context` replaced with Apify (`apify/instagram-scraper` details mode for IG, `clockworks/tiktok-scraper` for TT); Linktree/Beacons resolver; Gemini prompt grounded in provided context; `edge_type` enum + funnel_edges fix; 45 pytest tests (PR #2 merged to main)
 - ✅ Phase 2 schema migration: `trends` + `creator_label_assignments` tables; `trend_type` / `llm_model` / `content_archetype` enums; `creator_niche` on `label_type`; `archetype`+`vibe` moved from `content_analysis` → `creators`; `scraped_content.trend_id` FK. (Migration `20260424170000_phase_2_schema_migration`, PR #3.)
-- 🔜 Discovery pipeline rebuild — replace `httpx.get()` with Apify `resultsType: "details"` in `scripts/discover_creator.py` (Phase 2 first task — see PROJECT_STATE §20)
 - 🔜 Wire `/content` and `/trends` routes
 - 🔜 Per-platform scraping: IG + TikTok via Apify (scheduled via GitHub Actions every 12h)
 - 🔜 Normalizer modules (`normalize_instagram.py`, `normalize_tiktok.py`)
