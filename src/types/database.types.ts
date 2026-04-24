@@ -124,7 +124,6 @@ export type Database = {
         Row: {
           analysis_version: string | null
           analyzed_at: string | null
-          archetype: string | null
           category: Database["public"]["Enums"]["content_category"] | null
           content_id: string | null
           gemini_raw_response: Json | null
@@ -134,13 +133,11 @@ export type Database = {
           model_version: string | null
           quality_score: number | null
           transcription: string | null
-          vibe: Database["public"]["Enums"]["content_vibe"] | null
           visual_tags: string[] | null
         }
         Insert: {
           analysis_version?: string | null
           analyzed_at?: string | null
-          archetype?: string | null
           category?: Database["public"]["Enums"]["content_category"] | null
           content_id?: string | null
           gemini_raw_response?: Json | null
@@ -150,13 +147,11 @@ export type Database = {
           model_version?: string | null
           quality_score?: number | null
           transcription?: string | null
-          vibe?: Database["public"]["Enums"]["content_vibe"] | null
           visual_tags?: string[] | null
         }
         Update: {
           analysis_version?: string | null
           analyzed_at?: string | null
-          archetype?: string | null
           category?: Database["public"]["Enums"]["content_category"] | null
           content_id?: string | null
           gemini_raw_response?: Json | null
@@ -166,7 +161,6 @@ export type Database = {
           model_version?: string | null
           quality_score?: number | null
           transcription?: string | null
-          vibe?: Database["public"]["Enums"]["content_vibe"] | null
           visual_tags?: string[] | null
         }
         Relationships: [
@@ -376,6 +370,45 @@ export type Database = {
           },
         ]
       }
+      creator_label_assignments: {
+        Row: {
+          assigned_by_ai: boolean
+          confidence: number | null
+          created_at: string
+          creator_id: string
+          label_id: string
+        }
+        Insert: {
+          assigned_by_ai?: boolean
+          confidence?: number | null
+          created_at?: string
+          creator_id: string
+          label_id: string
+        }
+        Update: {
+          assigned_by_ai?: boolean
+          confidence?: number | null
+          created_at?: string
+          creator_id?: string
+          label_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_label_assignments_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "creators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creator_label_assignments_label_id_fkey"
+            columns: ["label_id"]
+            isOneToOne: false
+            referencedRelation: "content_labels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creator_merge_candidates: {
         Row: {
           confidence: number
@@ -450,6 +483,7 @@ export type Database = {
       creators: {
         Row: {
           added_by: string | null
+          archetype: Database["public"]["Enums"]["content_archetype"] | null
           canonical_name: string
           created_at: string | null
           display_name_variants: string[] | null
@@ -471,10 +505,12 @@ export type Database = {
           tags: string[] | null
           tracking_type: Database["public"]["Enums"]["tracking_type"] | null
           updated_at: string | null
+          vibe: Database["public"]["Enums"]["content_vibe"] | null
           workspace_id: string
         }
         Insert: {
           added_by?: string | null
+          archetype?: Database["public"]["Enums"]["content_archetype"] | null
           canonical_name: string
           created_at?: string | null
           display_name_variants?: string[] | null
@@ -496,10 +532,12 @@ export type Database = {
           tags?: string[] | null
           tracking_type?: Database["public"]["Enums"]["tracking_type"] | null
           updated_at?: string | null
+          vibe?: Database["public"]["Enums"]["content_vibe"] | null
           workspace_id: string
         }
         Update: {
           added_by?: string | null
+          archetype?: Database["public"]["Enums"]["content_archetype"] | null
           canonical_name?: string
           created_at?: string | null
           display_name_variants?: string[] | null
@@ -521,6 +559,7 @@ export type Database = {
           tags?: string[] | null
           tracking_type?: Database["public"]["Enums"]["tracking_type"] | null
           updated_at?: string | null
+          vibe?: Database["public"]["Enums"]["content_vibe"] | null
           workspace_id?: string
         }
         Relationships: [
@@ -872,6 +911,7 @@ export type Database = {
           save_count: number | null
           share_count: number | null
           thumbnail_url: string | null
+          trend_id: string | null
           updated_at: string | null
           view_count: number | null
         }
@@ -897,6 +937,7 @@ export type Database = {
           save_count?: number | null
           share_count?: number | null
           thumbnail_url?: string | null
+          trend_id?: string | null
           updated_at?: string | null
           view_count?: number | null
         }
@@ -922,6 +963,7 @@ export type Database = {
           save_count?: number | null
           share_count?: number | null
           thumbnail_url?: string | null
+          trend_id?: string | null
           updated_at?: string | null
           view_count?: number | null
         }
@@ -931,6 +973,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scraped_content_trend_id_fkey"
+            columns: ["trend_id"]
+            isOneToOne: false
+            referencedRelation: "trends"
             referencedColumns: ["id"]
           },
         ]
@@ -986,6 +1035,62 @@ export type Database = {
           },
           {
             foreignKeyName: "trend_signals_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trends: {
+        Row: {
+          audio_artist: string | null
+          audio_signature: string | null
+          audio_title: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_canonical: boolean
+          name: string
+          peak_detected_at: string | null
+          trend_type: Database["public"]["Enums"]["trend_type"]
+          updated_at: string
+          usage_count: number
+          workspace_id: string
+        }
+        Insert: {
+          audio_artist?: string | null
+          audio_signature?: string | null
+          audio_title?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_canonical?: boolean
+          name: string
+          peak_detected_at?: string | null
+          trend_type: Database["public"]["Enums"]["trend_type"]
+          updated_at?: string
+          usage_count?: number
+          workspace_id: string
+        }
+        Update: {
+          audio_artist?: string | null
+          audio_signature?: string | null
+          audio_title?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_canonical?: boolean
+          name?: string
+          peak_detected_at?: string | null
+          trend_type?: Database["public"]["Enums"]["trend_type"]
+          updated_at?: string
+          usage_count?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trends_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1107,6 +1212,19 @@ export type Database = {
         | "link_in_bio"
         | "messaging"
         | "other"
+      content_archetype:
+        | "the_jester"
+        | "the_caregiver"
+        | "the_lover"
+        | "the_everyman"
+        | "the_creator"
+        | "the_hero"
+        | "the_sage"
+        | "the_innocent"
+        | "the_explorer"
+        | "the_rebel"
+        | "the_magician"
+        | "the_ruler"
       content_category:
         | "comedy_entertainment"
         | "fashion_style"
@@ -1143,6 +1261,8 @@ export type Database = {
         | "hook_style"
         | "visual_style"
         | "other"
+        | "creator_niche"
+      llm_model: "gemini_pro" | "gemini_flash" | "claude_opus" | "claude_sonnet"
       merge_candidate_status: "pending" | "merged" | "dismissed"
       monetization_model:
         | "subscription"
@@ -1207,6 +1327,13 @@ export type Database = {
         | "hybrid_ai"
         | "coach"
         | "unreviewed"
+      trend_type:
+        | "audio"
+        | "dance"
+        | "lipsync"
+        | "transition"
+        | "meme"
+        | "challenge"
       workspace_role: "owner" | "admin" | "member"
     }
     CompositeTypes: {
@@ -1342,6 +1469,20 @@ export const Constants = {
         "messaging",
         "other",
       ],
+      content_archetype: [
+        "the_jester",
+        "the_caregiver",
+        "the_lover",
+        "the_everyman",
+        "the_creator",
+        "the_hero",
+        "the_sage",
+        "the_innocent",
+        "the_explorer",
+        "the_rebel",
+        "the_magician",
+        "the_ruler",
+      ],
       content_category: [
         "comedy_entertainment",
         "fashion_style",
@@ -1381,7 +1522,9 @@ export const Constants = {
         "hook_style",
         "visual_style",
         "other",
+        "creator_niche",
       ],
+      llm_model: ["gemini_pro", "gemini_flash", "claude_opus", "claude_sonnet"],
       merge_candidate_status: ["pending", "merged", "dismissed"],
       monetization_model: [
         "subscription",
@@ -1444,6 +1587,14 @@ export const Constants = {
         "hybrid_ai",
         "coach",
         "unreviewed",
+      ],
+      trend_type: [
+        "audio",
+        "dance",
+        "lipsync",
+        "transition",
+        "meme",
+        "challenge",
       ],
       workspace_role: ["owner", "admin", "member"],
     },

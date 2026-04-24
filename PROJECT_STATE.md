@@ -1,7 +1,7 @@
 # PROJECT_STATE.md
 
 **The Hub — Creator Intelligence Platform**
-Last synced: 2026-04-24 (sync 8 — Phase 2 discovery rebuild)
+Last synced: 2026-04-24 (sync 9 — Phase 2 schema migration rebased onto discovery rebuild)
 
 > This file is the master technical reference. Every AI Studio session starts by pasting this. Claude Code reads this first on every session. Repo and Obsidian vault share one folder — this file is directly visible in both.
 
@@ -42,14 +42,14 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 
 ## 4. Complete Schema (Live + Pending)
 
-### 4.1 Currently live in Supabase (18 tables)
+### 4.1 Currently live in Supabase (20 tables)
 
 **Tenancy**
 - `workspaces` — id, name, slug, owner_id, created_at
 - `workspace_members` — workspace_id, user_id, role (`workspace_role`), joined_at
 
 **Creator layer (root)**
-- `creators` — id, workspace_id, canonical_name, slug, known_usernames[], display_name_variants[], primary_niche, primary_platform, monetization_model, tracking_type, tags[], notes, onboarding_status, import_source, last_discovery_run_id (FK→discovery_runs), last_discovery_error, added_by, timestamps
+- `creators` — id, workspace_id, canonical_name, slug, known_usernames[], display_name_variants[], primary_niche, primary_platform, monetization_model, tracking_type, tags[], notes, onboarding_status, import_source, last_discovery_run_id (FK→discovery_runs), last_discovery_error, archetype (content_archetype nullable), vibe (content_vibe nullable), added_by, timestamps
 - `creator_accounts` alias = `profiles` (same table)
 - `profiles` — id, workspace_id, creator_id (FK nullable for legacy), platform, handle, display_name, profile_url, url, avatar_url, bio, follower_count, following_count, post_count, tracking_type, tags[], is_clean, analysis_version, last_scraped_at, added_by, is_active, account_type, discovery_confidence, is_primary (bool, default false), timestamps
 - `discovery_runs` — id, workspace_id, creator_id, input_handle, input_url, input_platform_hint, input_screenshot_path, status, raw_gemini_response, assets_discovered_count, funnel_edges_discovered_count, merge_candidates_raised, attempt_number, error_message, initiated_by, started_at, completed_at, timestamps
@@ -58,68 +58,39 @@ Daily job: discover creators → scrape their content across platforms → AI-sc
 - `creator_brand_analyses` — id, creator_id, workspace_id, version, niche_summary, usp, brand_keywords[], seo_keywords[], funnel_map (jsonb), monetization_summary, platforms_included[], gemini_raw_response, analyzed_at
 
 **Content layer**
-- `scraped_content` — id, profile_id, platform, platform_post_id (unique per platform), post_url, post_type, caption, hook_text, posted_at, view_count, like_count, comment_count, share_count, save_count, engagement_rate (generated), platform_metrics (jsonb), media_urls[], thumbnail_url, is_outlier, outlier_multiplier, raw_apify_payload (jsonb), timestamps
-- `content_analysis` — id, content_id (unique), quality_score, archetype TEXT, vibe content_vibe, category, visual_tags[], transcription, hook_analysis, is_clean, analysis_version, gemini_raw_response, model_version, analyzed_at *(archetype + vibe drop in Phase 2 migration — see §4.2)*
+- `scraped_content` — id, profile_id, platform, platform_post_id (unique per platform), post_url, post_type, caption, hook_text, posted_at, view_count, like_count, comment_count, share_count, save_count, engagement_rate (generated), platform_metrics (jsonb), media_urls[], thumbnail_url, is_outlier, outlier_multiplier, raw_apify_payload (jsonb), trend_id (FK→trends nullable), timestamps
+- `content_analysis` — id, content_id (unique), quality_score, category, visual_tags[], transcription, hook_analysis, is_clean, analysis_version, gemini_raw_response, model_version, analyzed_at
 - `content_metrics_snapshots` — content_id, snapshot_date, view_count, like_count, comment_count, share_count, save_count, velocity, PK (content_id, snapshot_date)
 - `profile_metrics_snapshots` — profile_id, snapshot_date, follower_count, median_views, avg_engagement_rate, outlier_count, quality_score, PK (profile_id, snapshot_date)
 - `profile_scores` — profile_id (unique), current_score, current_rank (generated from `calculate_rank`), scored_content_count, last_computed_at
 
 **Labels & taxonomy**
-- `content_labels` — id, workspace_id, label_type (`content_format|trend_pattern|hook_style|visual_style|other`), name, slug, description, usage_count, is_canonical, merged_into_id (self FK), created_by, created_at
+- `content_labels` — id, workspace_id, label_type (`content_format|trend_pattern|hook_style|visual_style|creator_niche|other`), name, slug, description, usage_count, is_canonical, merged_into_id (self FK), created_by, created_at
 - `content_label_assignments` — content_id, label_id, assigned_by_ai, confidence, PK (content_id, label_id)
+- `creator_label_assignments` — creator_id, label_id, assigned_by_ai, confidence, created_at, PK (creator_id, label_id). Trigger: `increment_label_usage`.
+
+**Trends**
+- `trends` — id, workspace_id, name, trend_type (`audio|dance|lipsync|transition|meme|challenge`), audio_signature, audio_artist, audio_title, description, usage_count, is_canonical, peak_detected_at, timestamps. UNIQUE (workspace_id, audio_signature) WHERE audio_signature IS NOT NULL. Referenced by `scraped_content.trend_id`.
 
 **Signals & alerts**
 - `trend_signals` — id, workspace_id, signal_type, profile_id (FK→profiles), content_id (FK→scraped_content), score, detected_at, metadata (jsonb), is_dismissed
 - `alerts_config` — id, workspace_id, name, rule_type, threshold_json, target_profile_ids[], is_enabled, notify_emails[], created_by
 - `alerts_feed` — id, workspace_id, config_id, content_id (FK→scraped_content), profile_id (FK→profiles), triggered_at, is_read, payload (jsonb)
 
-### 4.2 Pending migration (Phase 2 entry point)
+### 4.2 Phase 2 migration — applied (migration `20260424170000_phase_2_schema_migration`)
 
-Two new tables + enum extension + column adds. This migration runs when Phase 2 ingestion starts.
+All items previously listed as "pending" are now live and reflected in §4.1:
 
-**New table: `trends`**
-```
-id uuid PK
-workspace_id uuid FK workspaces
-name text             — e.g. "Espresso – Sabrina Carpenter"
-trend_type enum (new): audio | dance | lipsync | transition | meme | challenge
-audio_signature text  — normalized: "espresso-sabrina-carpenter"
-audio_artist text (nullable)
-audio_title text (nullable)
-description text
-usage_count int
-is_canonical boolean
-peak_detected_at timestamptz
-created_at timestamptz
-UNIQUE (workspace_id, audio_signature) WHERE audio_signature IS NOT NULL
-```
+- ✅ `trends` table + `trend_type` enum (6 values)
+- ✅ `creator_label_assignments` table (mirrors `content_label_assignments`, reuses `increment_label_usage` trigger)
+- ✅ `label_type` enum extended with `creator_niche`
+- ✅ `llm_model` enum (4 values: gemini_pro, gemini_flash, claude_opus, claude_sonnet) — reserved for analysis pipelines
+- ✅ `content_archetype` enum (12 Jungian values, was documented but missing from DB — audit gap closed)
+- ✅ `creators.archetype` (nullable `content_archetype`) and `creators.vibe` (nullable `content_vibe`) added; filled by Phase 3 brand analysis
+- ✅ `scraped_content.trend_id` (nullable FK→trends, ON DELETE SET NULL)
+- ✅ `content_analysis.archetype` and `content_analysis.vibe` dropped (table was empty, no data loss)
 
-**New table: `creator_label_assignments`** (mirrors `content_label_assignments`)
-```
-creator_id uuid FK creators
-label_id uuid FK content_labels
-assigned_by_ai boolean
-confidence numeric(3,2)
-PK (creator_id, label_id)
-```
-
-**Enum additions:**
-- `label_type` += `creator_niche`
-- New enum `trend_type`: `audio | dance | lipsync | transition | meme | challenge`
-- New enum `llm_model`: `gemini_pro | gemini_flash | claude_opus | claude_sonnet`
-
-**Column additions on `creators`:**
-- `archetype content_archetype` (nullable, filled by Phase 3 brand analysis)
-- `vibe content_vibe` (nullable, filled by Phase 3 brand analysis)
-
-**Column additions on `scraped_content`:**
-- `trend_id uuid REFERENCES trends(id)` (nullable)
-
-**Column removals from `content_analysis`:**
-- DROP COLUMN `archetype` (moved to creators — archetype is a creator-level property)
-- DROP COLUMN `vibe` (moved to creators — vibe is a creator-level property)
-
-**Rationale:** archetype and vibe describe the creator's overall brand identity, not individual posts. A single post carrying the "goth" vibe doesn't tell you much; across a creator's full body of work, it defines the brand. Content-level stays with `category`, dynamic labels, and visual tags.
+**Rationale (preserved for future reference):** archetype and vibe describe the creator's overall brand identity, not individual posts. A single post carrying the "goth" vibe doesn't tell you much; across a creator's full body of work, it defines the brand. Content-level taxonomy stays with `category`, dynamic labels, and visual tags.
 
 ---
 
@@ -140,8 +111,10 @@ PK (creator_id, label_id)
 | `content_vibe` | playful, girl_next_door, body_worship, wifey, luxury, edgy, wholesome, mysterious, confident, aspirational |
 | `content_category` | comedy_entertainment, fashion_style, fitness, lifestyle, beauty, travel, food, music, gaming, education, other |
 | `signal_type` | velocity_spike, outlier_post, emerging_archetype, hook_pattern, cadence_change, new_monetization_detected |
-| `label_type` | content_format, trend_pattern, hook_style, visual_style, creator_niche (pending), other |
-| `trend_type` (pending) | audio, dance, lipsync, transition, meme, challenge |
+| `label_type` | content_format, trend_pattern, hook_style, visual_style, creator_niche, other |
+| `trend_type` | audio, dance, lipsync, transition, meme, challenge |
+| `llm_model` | gemini_pro, gemini_flash, claude_opus, claude_sonnet |
+| `edge_type` | link_in_bio, direct_link, cta_mention, qr_code, inferred |
 | `workspace_role` | owner, admin, member |
 
 ---
@@ -297,9 +270,10 @@ MAX_CONCURRENT_RUNS=5
 3. ✅ **Phase 1 agents:** `verify-and-fix` skill built — Phase 1 fully closed
 4. ✅ **Vault merged into repo:** single folder, single source of truth, all docs committed to git
 5. 🔄 **Wire existing stub routes** to live Supabase data: ✅ `/platforms/instagram/accounts`, ✅ `/platforms/tiktok/accounts` — 🔜 `/content`, `/trends` remaining
-6. ✅ **Phase 2 discovery rebuild:** `fetch_input_context` rewritten on top of Apify (`apify/instagram-scraper` details mode for IG, `clockworks/tiktok-scraper` for TT), Linktree/Beacons resolver live, Gemini prompt grounded in provided context, `edge_type` enum + `commit_discovery_result` funnel_edges fix live, 34 pytest tests covering the pipeline. Smoke-tested end-to-end with 3 live creators.
-7. 🔜 **Phase 2 scraping:** IG + TikTok Apify ingestion, normalizers, `flag_outliers` live, Outliers page live
-4. 🔜 **Phase 2 trends:** `trends` table migration, audio signature extraction from `platform_metrics`, trend linking during content analysis
+6. ✅ **Phase 2 discovery rebuild:** `fetch_input_context` rewritten on top of Apify (`apify/instagram-scraper` details mode for IG, `clockworks/tiktok-scraper` for TT), Linktree/Beacons resolver live, Gemini prompt grounded in provided context, `edge_type` enum + `commit_discovery_result` funnel_edges fix live, 45 pytest tests covering the pipeline. Smoke-tested end-to-end with 3 live creators.
+7. ✅ **Phase 2 schema migration:** `trends` + `creator_label_assignments` tables; `trend_type` + `llm_model` + `content_archetype` enums; `creator_niche` added to `label_type`; `archetype`+`vibe` moved from `content_analysis` → `creators`; `scraped_content.trend_id` FK. Migration `20260424170000_phase_2_schema_migration`.
+8. 🔜 **Phase 2 scraping:** IG + TikTok Apify ingestion (scheduled via GitHub Actions every 12h), normalizers, `flag_outliers` live, Outliers page live
+9. 🔜 **Phase 2 trends:** audio signature extraction from `platform_metrics`, trend linking during content analysis (populates `scraped_content.trend_id` + `trends`)
 5. 🔜 **Phase 3 content analysis:** Gemini content scoring pipeline, `profile_scores` + rank tier live on UI
 6. 🔜 **Phase 3 brand analysis:** Claude-driven brand report per creator, `creator_brand_analyses` populated, creator-level archetype/vibe filled
 7. 🔜 **Phase 3 classification UI:** Content Classification + Creator Classification tabs for taxonomy curation
@@ -558,4 +532,5 @@ Add to `.claude/settings.json`:
   See docs/AGENT_USAGE.md for day-to-day usage.
 - 2026-04-24: Phase 1 schema drift resolved (migration 20260424000000). PROJECT_STATE §4 now matches live DB exactly. Phase 2 schema migration deferred to Phase 2 entry per docs/superpowers/specs/2026-04-23-phase-1-overhaul-design.md.
 - 2026-04-24: Phase 1 overhaul complete on branch `phase-1-overhaul`. All 6 layers verified by both code-side checks (`npx tsc --noEmit` returns 0) and live-browser checks via chrome-devtools-mcp. 37 tasks delivered across ~30 commits. Highlights: typed Database generic on all Supabase clients, no more anon-key fallback, every page reads via `src/lib/db/queries.ts` helpers (zero raw `.from()` in pages), all server actions return `Result<T>`, `bulk_import_creator` RPC for atomic creator+profile+run insert, sonner toasts, EmptyState/ErrorState/ComingSoon shared components, sidebar standardized on `?tracking=`, dead UI controls (search/sort/Single Handle import/merge/retry/CreatorCard retry) all wired. Plan: docs/superpowers/plans/2026-04-23-phase-1-overhaul-plan.md. Spec: docs/superpowers/specs/2026-04-23-phase-1-overhaul-design.md. Discovery pipeline rebuild + Phase 2 migration remain on the Phase 2 roadmap as documented in §14.
-- 2026-04-24: Discovery pipeline rebuilt on branch `phase-2-discovery-rebuild`. `fetch_input_context()` now dispatches to Apify (`apify/instagram-scraper` details mode for IG, `clockworks/tiktok-scraper` for TT) instead of httpx-against-login-walls. Link-in-bio resolver (`scripts/link_in_bio.py`) follows Linktree/Beacons pages. Gemini prompt explicitly grounds in provided context rather than prior knowledge (`build_prompt` includes literal "Ground every field in the provided context. Do not rely on prior knowledge."). `edge_type` enum created (migration 20260424150000) — fixes audit §1.1.7 latent crash. `commit_discovery_result` `funnel_edges` INSERT fixed to include `creator_id` (migration 20260424160000) — discovered during smoke test when Gemini produced real funnel edges for the first time. Pydantic `Literal` on `Platform` and `EdgeType` closes audit item 15 validation gap. `patreon` added to platform enum in `schemas.py`. `mark_discovery_failed` gets tenacity retry + dead-letter fallback at `scripts/discovery_dead_letter.jsonl`. Worker (`scripts/worker.py`) surfaces per-task exceptions via new `log_gather_results` instead of swallowing them. Full rewrite covered by 34 pytest tests (schemas / apify_details / link_in_bio / discover_creator / worker). Smoke-tested by re-running discovery for all 3 existing creators — Natalie Vox + Esmae came through clean with real bio/follower/avatar/funnel-edge data; ariaxswan's Apify details fetch returned empty fields (new §20 known limitation). Plan: docs/superpowers/plans/2026-04-24-discovery-pipeline-rebuild.md.
+- 2026-04-24: Discovery pipeline rebuilt on branch `phase-2-discovery-rebuild` (PR #2 merged to main). `fetch_input_context()` now dispatches to Apify (`apify/instagram-scraper` details mode for IG, `clockworks/tiktok-scraper` for TT) instead of httpx-against-login-walls. Link-in-bio resolver (`scripts/link_in_bio.py`) follows Linktree/Beacons pages. Gemini prompt explicitly grounds in provided context rather than prior knowledge (`build_prompt` includes literal "Ground every field in the provided context. Do not rely on prior knowledge."). `edge_type` enum created (migration 20260424150000) — fixes audit §1.1.7 latent crash. `commit_discovery_result` `funnel_edges` INSERT fixed to include `creator_id` (migration 20260424160000) — discovered during smoke test when Gemini produced real funnel edges for the first time. Pydantic `Literal` on `Platform` and `EdgeType` closes audit item 15 validation gap. `patreon` added to platform enum in `schemas.py`. `mark_discovery_failed` gets tenacity retry + dead-letter fallback at `scripts/discovery_dead_letter.jsonl`. Worker (`scripts/worker.py`) surfaces per-task exceptions via new `log_gather_results` instead of swallowing them. Full rewrite covered by 45 pytest tests (schemas / apify_details / link_in_bio / discover_creator / replay_dead_letter / worker). Smoke-tested by re-running discovery for all 3 existing creators — Natalie Vox + Esmae came through clean with real bio/follower/avatar/funnel-edge data; ariaxswan's Apify details fetch returned empty fields (new §20 known limitation). Plan: docs/superpowers/plans/2026-04-24-discovery-pipeline-rebuild.md.
+- 2026-04-24: Phase 2 schema migration applied on branch `phase-2-schema-migration` (migration `20260424170000_phase_2_schema_migration`, PR #3 rebased onto main after PR #2). Adds `trends` and `creator_label_assignments` tables (20 tables total); creates `trend_type`, `llm_model`, and `content_archetype` enums; extends `label_type` with `creator_niche`; adds nullable `archetype` + `vibe` columns to `creators` (filled by Phase 3 brand analysis); adds `scraped_content.trend_id` FK; drops now-obsolete `archetype` + `vibe` from `content_analysis` (table was empty — no data loss). `npx tsc --noEmit` returns 0. Unblocks Phase 2 scraping + Phase 3 brand analysis.
