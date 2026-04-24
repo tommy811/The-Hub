@@ -64,9 +64,10 @@ function StatPanel({ label, value, icon: Icon, sub }: StatPanelProps) {
   );
 }
 
-export default async function CreatorDetailPage({ params }: { params: { slug: string } }) {
+export default async function CreatorDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const wsId = await getCurrentWorkspaceId();
-  const creator = await getCreatorBySlugForWorkspace(wsId, params.slug);
+  const creator = await getCreatorBySlugForWorkspace(wsId, slug);
   if (!creator) return notFound();
 
   const [profiles, mergeCandidates] = await Promise.all([
