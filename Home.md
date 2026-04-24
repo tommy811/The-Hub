@@ -10,14 +10,17 @@
 - [[06-Sessions/|📅 Sessions]] — daily work logs
 
 ## Current Status
-- Phase: **Phase 2 in progress 🔄** (discovery rebuild + schema both landed; scraping + trends next)
-- Database: ✅ Supabase (Content OS project) — 20 tables live
+- Phase: **Phase 2 in progress 🔄** — Discovery v2 live; scraping + trends + content/trends routes next
+- Database: ✅ Supabase (Content OS project) — 23 tables live
 - Repo: github.com/tommy811/The-Hub
+- Open PR: [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4) — Discovery v2
 - Last session: [[06-Sessions/2026-04-24]]
 
 ## Active Work
 - ✅ Discovery pipeline rebuilt — Apify-grounded context, Linktree/Beacons resolver, grounded Gemini prompt, dead-letter retry, 45 pytest tests (PR #2)
 - ✅ Phase 2 schema migration — `trends` + `creator_label_assignments`, `trend_type` / `llm_model` / `content_archetype` enums, `creators.archetype`+`vibe`, `scraped_content.trend_id` (PR #3)
+- ✅ **Discovery v2 (SP1)** — two-stage resolver, deterministic classifier, rule-cascade identity scorer, 9 platform fetchers (IG/TT/YT/Patreon/OF/Fanvue/generic + FB/X stubs), `bulk_imports` observable job, cross-workspace dedup every commit, Manual Add Account triggers resolver expansion. 102 pytest tests. Live smoke passed. (PR #4)
+- 🔜 SP1.1 — provision FB + X Apify actors (fetchers are stubbed)
 - 🔜 Wire `/content` and `/trends` routes
 - 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, `flag_outliers` live, Outliers page)
 - 🔜 Trend linking — audio signature extraction populates `scraped_content.trend_id`

@@ -1,5 +1,48 @@
 # Migration Log
 
+## 20260425000200_fix_commit_discovery_result_no_updated_at
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+Hotfix caught during the v2 live smoke: `commit_discovery_result` v2 wrote `UPDATE discovery_runs SET updated_at = NOW()`, but `discovery_runs` has only `created_at` (no `updated_at` column). Crashed with Postgres `42703 column does not exist` at the end of every successful Stage A on smoke seeds Esmae and Natalie. Fix: drop the `updated_at` assignment from the discovery_runs UPDATE. `completed_at` already carries the "finished" signal; the unique `updated_at` assignment was a copy-paste from `creators`/`profiles` branches.
+
+---
+
+## 20260425000100_discovery_v2_rpcs
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+Three RPC changes:
+
+- **`commit_discovery_result` v2** — new params `p_discovered_urls jsonb DEFAULT '[]'` and `p_bulk_import_id uuid DEFAULT NULL`. Writes each discovered URL to `profile_destination_links`. Bumps `bulk_imports.seeds_committed` when `p_bulk_import_id` is provided. Source-aware: on `discovery_runs.source = 'manual_add'` only union-merges `known_usernames`, preserving the creator's human-confirmed canonical_name / primary_niche / monetization_model. Returns `{creator_id, accounts_upserted, merge_candidates_raised, urls_recorded}`.
+- **`bulk_import_creator` v2** — accepts `p_bulk_import_id uuid DEFAULT NULL`. When NULL, creates a new `bulk_imports` row (single-handle path). Returns `jsonb {bulk_import_id, creator_id, run_id}` instead of raw `uuid`. Old 6-arg overload dropped separately (so the TS type generator picks a single definition).
+- **`run_cross_workspace_merge_pass(p_workspace_id, p_bulk_import_id)` (new)** — reads `profile_destination_links` inverted index; for any URL with `destination_class IN ('monetization','aggregator')` shared across >1 creator, inserts a `creator_merge_candidates` row per pair (ordered `LEAST/GREATEST`). Idempotent via the unique pair index. Sets `bulk_imports.merge_pass_completed_at` and final status when `p_bulk_import_id` is provided.
+
+---
+
+## 20260425000000_discovery_v2_schema
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+Additive schema migration backing the v2 pipeline.
+
+**New tables (20 → 23):**
+- `bulk_imports` — first-class observable job table with `seeds_total`, `seeds_committed`, `seeds_failed`, `seeds_blocked_by_budget`, `cost_apify_cents`, `merge_pass_completed_at`, `status` (`running|completed|completed_with_failures|partial_budget_exceeded|cancelled`). RLS via `is_workspace_member`. `set_updated_at` trigger.
+- `classifier_llm_guesses` — workspace-agnostic cache keyed on `canonical_url`. Columns: `platform_guess`, `account_type_guess`, `confidence` (0-1), `model_version`, `classified_at`. No RLS — service role writes, reads keyed on URL only.
+- `profile_destination_links` — persistent reverse index. PK `(profile_id, canonical_url)`. Columns: `destination_class` (`monetization|aggregator|social|other`), `workspace_id`. Indexes on `canonical_url`, partial on `destination_class IN ('monetization','aggregator')`, composite on `(workspace_id, canonical_url)`. RLS via `is_workspace_member`.
+
+**Column additions:**
+- `discovery_runs.bulk_import_id` (FK → `bulk_imports`, nullable, ON DELETE SET NULL)
+- `discovery_runs.apify_cost_cents` (int NOT NULL DEFAULT 0)
+- `discovery_runs.source` (text NOT NULL DEFAULT 'seed', CHECK `source IN ('seed','manual_add','retry','auto_expand')`)
+- `profiles.discovery_reason` (text, audit trail for `rule:{name}` / `llm:{kind}` / `manual_add`)
+
+**New constraint:** unique functional index `creator_merge_candidates_pair_uniq` on `(LEAST(creator_a_id, creator_b_id), GREATEST(creator_a_id, creator_b_id))` — idempotent merge-candidate inserts. Enables `ON CONFLICT DO UPDATE evidence` in `run_cross_workspace_merge_pass`.
+
+No existing data touched.
+
+---
+
 ## 20260424160000_fix_funnel_edges_creator_id
 
 Applied 2026-04-24 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-rebuild`, PR #2 (merged).

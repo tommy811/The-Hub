@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-04-25 (sync 10 — Discovery v2 shipped)
+- Shipped: PR [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4). Replaces the single-hop pipeline with a two-stage resolver + deterministic URL classifier + rule-cascade identity scorer + multi-platform fetcher layer + first-class `bulk_imports` job.
+- Added: `pipeline/` module — `resolver.py` (two-stage: fetch seed → classify+enrich destinations), `classifier.py` (rule-first gazetteer + cached LLM fallback), `identity.py` (rule cascade + CLIP avatar tiebreak), `canonicalize.py` (URL normalization + short-URL resolution), `budget.py` (Apify cost cap).
+- Added: `fetchers/` module — 9 platforms: IG + TT (Apify), YT (yt-dlp), OF (curl_cffi chrome120 JA3 impersonation), Patreon + Fanvue + generic (httpx), FB + X (stubbed for SP1.1).
+- Added: `aggregators/` module — Linktree, Beacons, custom_domain (redirect chain follower).
+- Added: `data/monetization_overlay.yaml` gazetteer covering ~20 platforms.
+- Added: 3 new tables (`bulk_imports`, `classifier_llm_guesses`, `profile_destination_links`) — 23 tables total.
+- Added: `discovery_runs.{bulk_import_id, apify_cost_cents, source}` + `profiles.discovery_reason` columns.
+- Added: unique functional index `creator_merge_candidates_pair_uniq` on `(LEAST/GREATEST)` pair for idempotent merge inserts.
+- Added: `run_cross_workspace_merge_pass` RPC — inverted-index dedup that fires whenever a bulk terminates.
+- Changed: `commit_discovery_result` → v2 (accepts `p_discovered_urls` + `p_bulk_import_id`; source-aware canonical-field protection for `manual_add`).
+- Changed: `bulk_import_creator` → v2 (returns jsonb `{bulk_import_id, creator_id, run_id}`; old 6-arg overload dropped).
+- Changed: Worker passes `bulk_import_id` through to `run()`, fires merge pass when bulks terminate.
+- Changed: `AddAccountDialog` gains a "Run discovery on this account" checkbox (default on); server action inserts a `source='manual_add'` discovery_run.
+- Removed: `scripts/apify_details.py`, `scripts/link_in_bio.py` (shims) + their test files; content migrated to `fetchers/` and `aggregators/`.
+- Fixed (mid-smoke): classifier `_cache_lookup` handles supabase-py 2.x returning `None` on `.maybe_single().execute()` cache miss (commit `48849e7`).
+- Fixed (mid-smoke): `commit_discovery_result` dropped the `discovery_runs.updated_at` write (migration `20260425000200`, commit `d81e645`).
+- Tests: 45 → 102 pytest green. `npx tsc --noEmit` exit 0.
+- Live smoke: Natalie Vox + Esmae re-discovered cleanly (4–7 profiles, 5–8 destination_links, 3–6 funnel_edges each); Aria Swan correctly failed-fast with `empty_context:`. 48¢ total Apify spend.
+
 ## 2026-04-24 (sync 9 — Phase 2 discovery rebuild + schema migration both merged)
 - Merged: PR #2 (`phase-2-discovery-rebuild`) — discovery pipeline rewritten on Apify-grounded context; Linktree/Beacons resolver; grounded Gemini prompt; `edge_type` enum + funnel_edges creator_id fix; pytest scaffolding; 45 tests; dead-letter replay script.
 - Merged: PR #3 (`phase-2-schema-migration`) — rebased onto main after PR #2; `trends` + `creator_label_assignments` tables; `trend_type` / `llm_model` / `content_archetype` enums; `creator_niche` on `label_type`; `archetype`+`vibe` moved to creators; `scraped_content.trend_id` FK.

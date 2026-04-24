@@ -4,22 +4,46 @@ All callable via: `supabase.rpc('function_name', { args })`
 
 ---
 
-## commit_discovery_result
-**Called by:** Python discovery pipeline on successful Gemini response
+## commit_discovery_result (v2, 2026-04-25)
+**Called by:** Python discovery pipeline (`pipeline/resolver.py` → `discover_creator._commit_v2`) on successful resolver output
 **Args:**
 - `p_run_id` UUID
 - `p_creator_data` JSONB — `{canonical_name, known_usernames[], display_name_variants[], primary_platform, primary_niche, monetization_model}`
-- `p_accounts` JSONB — array of `{account_type, platform, handle, url, display_name, bio, follower_count, is_primary, discovery_confidence}`
+- `p_accounts` JSONB — array of `{account_type, platform, handle, url, display_name, bio, follower_count, is_primary, discovery_confidence, reasoning}`
 - `p_funnel_edges` JSONB — array of `{from_handle, from_platform, to_handle, to_platform, edge_type, confidence}`
+- `p_discovered_urls` JSONB DEFAULT `'[]'` — array of `{canonical_url, platform, account_type, destination_class, reason}` (v2)
+- `p_bulk_import_id` UUID DEFAULT NULL (v2)
 
-**Returns:** `{creator_id, accounts_upserted, merge_candidates_raised}`
+**Returns:** `{creator_id, accounts_upserted, merge_candidates_raised, urls_recorded}`
 
 **Does (transactional):**
-1. Enriches creator row with discovered data
-2. For each account: checks for handle collision with different creator → raises merge candidate if found, otherwise upserts profile row
-3. Inserts funnel edges (resolves handle → profile_id)
-4. Marks discovery_run completed
-5. Sets creator.onboarding_status = 'ready'
+1. Reads `discovery_runs.source` for this run.
+2. On `source='manual_add'`: only union-merges `known_usernames` on the existing creator (preserves human-confirmed canonical_name / primary_niche / monetization_model). On any other source: enriches creator with canonical_name / niches / monetization_model and sets `onboarding_status='ready'`.
+3. Upserts each proposed account as a `profiles` row (unique on `(workspace_id, platform, handle)`).
+4. Inserts funnel edges after resolving from/to handles to profile_ids.
+5. Records each discovered URL in `profile_destination_links` against the creator's primary profile.
+6. Marks discovery_run completed (`completed_at = NOW()`, `assets_discovered_count`, `funnel_edges_discovered_count`, `bulk_import_id`).
+7. If `p_bulk_import_id` is set, increments `bulk_imports.seeds_committed`.
+
+> **Fixed 2026-04-25 (migration `20260425000200`):** v2 initially wrote `UPDATE discovery_runs SET updated_at = NOW()`, but `discovery_runs` has only `created_at` — caused Postgres `42703 column does not exist` on every successful Stage A. `completed_at` carries the "finished" signal; `updated_at` assignment dropped.
+
+---
+
+## bulk_import_creator (v2, 2026-04-25)
+**Called by:** Server actions `bulkImportCreators` (one call per handle in the batch) and `importSingleCreator` (single-handle path).
+**Args:** `p_handle` TEXT, `p_platform_hint` TEXT, `p_tracking_type` tracking_type, `p_tags` TEXT[], `p_user_id` UUID, `p_workspace_id` UUID, `p_bulk_import_id` UUID DEFAULT NULL
+**Returns:** JSONB `{bulk_import_id, creator_id, run_id}`
+**Does:** When `p_bulk_import_id` is NULL, creates a new `bulk_imports` row (single-handle path). Inserts creator (placeholder `canonical_name = handle` until discovery fills), primary profile stub, and a pending `discovery_runs` row linked to the bulk. Returns all three ids for the caller to thread.
+
+> **Shape change (v2):** returns JSONB instead of raw UUID. Callers extract `res.data.creator_id` for anything that previously expected a single uuid. Old 6-arg overload was dropped (so the TypeScript type generator sees one signature; `p_bulk_import_id` has a DEFAULT so pre-v2 callers passing 6 args still work).
+
+---
+
+## run_cross_workspace_merge_pass (new, 2026-04-25)
+**Called by:** Python worker after each batch of runs terminates, for every `bulk_import_id` represented in the batch.
+**Args:** `p_workspace_id` UUID, `p_bulk_import_id` UUID DEFAULT NULL
+**Returns:** JSONB `{buckets_evaluated, bulk_import_id}`
+**Does:** Reads `profile_destination_links` as an inverted index. For every `canonical_url` with `destination_class IN ('monetization','aggregator')` shared across >1 creator in the workspace, inserts a `creator_merge_candidates` row per pair (ordered `LEAST/GREATEST`). Idempotent via the unique functional pair index (`ON CONFLICT DO UPDATE evidence`). When `p_bulk_import_id` is provided, sets `bulk_imports.merge_pass_completed_at` and final status based on the bulk's seed-level counters.
 
 ---
 

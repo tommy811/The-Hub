@@ -31,6 +31,8 @@ See [[PROJECT_STATE#16. Per-Phase Agent Requirements]] for full agent requiremen
 - ✅ Wire `/platforms/instagram/accounts` + `/platforms/tiktok/accounts` to live data
 - ✅ Discovery pipeline rebuild — `fetch_input_context` replaced with Apify (`apify/instagram-scraper` details mode for IG, `clockworks/tiktok-scraper` for TT); Linktree/Beacons resolver; Gemini prompt grounded in provided context; `edge_type` enum + funnel_edges fix; 45 pytest tests (PR #2 merged to main)
 - ✅ Phase 2 schema migration: `trends` + `creator_label_assignments` tables; `trend_type` / `llm_model` / `content_archetype` enums; `creator_niche` on `label_type`; `archetype`+`vibe` moved from `content_analysis` → `creators`; `scraped_content.trend_id` FK. (Migration `20260424170000_phase_2_schema_migration`, PR #3.)
+- ✅ **Discovery v2 (SP1)** — two-stage resolver, deterministic URL classifier, rule-cascade identity scorer with CLIP avatar tiebreak, 9 platform fetchers (IG/TT/YT/Patreon/OF/Fanvue/generic + FB/X stubs), `bulk_imports` observable job, cross-workspace dedup on every commit, Manual Add Account triggers resolver expansion with canonical-field protection. 102 pytest tests, live-smoke passed. Migrations `20260425000000_discovery_v2_schema` + `20260425000100_discovery_v2_rpcs` + `20260425000200_fix_commit_discovery_result_no_updated_at`. (PR #4.)
+- 🔜 SP1.1 — provision live Apify actors for Facebook + Twitter (fetchers are stubbed with `source_note='stub:not_implemented'`)
 - 🔜 Wire `/content` and `/trends` routes
 - 🔜 Per-platform scraping: IG + TikTok via Apify (scheduled via GitHub Actions every 12h)
 - 🔜 Normalizer modules (`normalize_instagram.py`, `normalize_tiktok.py`)

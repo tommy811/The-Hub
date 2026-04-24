@@ -10,6 +10,10 @@
 | workspace | alerts_config | 1:many | Alert rules scoped to workspace |
 | workspace | alerts_feed | 1:many | Alert notifications scoped to workspace |
 | workspace | trends | 1:many | Trend registry scoped per workspace |
+| workspace | bulk_imports | 1:many | Bulk discovery jobs scoped to workspace |
+| workspace | profile_destination_links | 1:many | Reverse-URL index scoped to workspace (cross-workspace dedup) |
+| bulk_imports | discovery_runs | 1:many | One bulk dispatches many seed runs |
+| profile | profile_destination_links | 1:many | Each profile records its discovered destination URLs |
 | creator | profiles | 1:many | One creator has many accounts (social, OF, Linktree, etc.) |
 | creator | discovery_runs | 1:many | Multiple attempts possible (retries) |
 | creator | creator_merge_candidates | many:many | A creator can appear in multiple candidate pairs |
@@ -38,3 +42,7 @@
 - `funnel_edges.from_profile_id` ≠ `to_profile_id` (enforced CHECK)
 - `scraped_content.trend_id` → `trends.id` (nullable, ON DELETE SET NULL — applied 2026-04-24)
 - `trends`: UNIQUE `(workspace_id, audio_signature)` WHERE `audio_signature IS NOT NULL` — prevents double-registering a track per workspace
+- `discovery_runs.bulk_import_id` → `bulk_imports.id` (nullable, ON DELETE SET NULL — applied 2026-04-25)
+- `profile_destination_links`: PK `(profile_id, canonical_url)`; workspace-scoped; drives cross-workspace identity dedup
+- `classifier_llm_guesses`: PK `canonical_url`; workspace-agnostic classification cache
+- `creator_merge_candidates`: UNIQUE functional index on `(LEAST(creator_a_id, creator_b_id), GREATEST(creator_a_id, creator_b_id))` — idempotent auto-merge inserts

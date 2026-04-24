@@ -1,5 +1,37 @@
 # Migration Log
 
+## 2026-04-25 — fix commit_discovery_result drops discovery_runs.updated_at
+**File:** `supabase/migrations/20260425000200_fix_commit_discovery_result_no_updated_at.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+Hotfix caught during v2 live smoke. `discovery_runs` has only `created_at` (no `updated_at`), but `commit_discovery_result` v2 wrote `UPDATE discovery_runs SET updated_at = NOW()` — Postgres `42703 column does not exist`, failing every successful Stage A. Removed the `updated_at` assignment. `completed_at` carries the "finished" signal.
+
+---
+
+## 2026-04-25 — Discovery v2 RPCs
+**File:** `supabase/migrations/20260425000100_discovery_v2_rpcs.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+- `commit_discovery_result` extended: `p_discovered_urls jsonb` + `p_bulk_import_id uuid`. Writes to `profile_destination_links`, bumps `bulk_imports.seeds_committed`. On `source='manual_add'`, only union-merges `known_usernames` — preserves the human-confirmed creator identity.
+- `bulk_import_creator` extended: new `p_bulk_import_id`, returns jsonb `{bulk_import_id, creator_id, run_id}`. Old 6-arg overload dropped (TS type generator picks a single definition).
+- New: `run_cross_workspace_merge_pass(p_workspace_id, p_bulk_import_id)` — reads `profile_destination_links` inverted index; raises auto-merge candidates for any monetization/aggregator URL shared across >1 creator. Idempotent via the unique pair index.
+
+---
+
+## 2026-04-25 — Discovery v2 schema
+**File:** `supabase/migrations/20260425000000_discovery_v2_schema.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+Additive schema for the v2 pipeline. 3 new tables (`bulk_imports`, `classifier_llm_guesses`, `profile_destination_links`) → 23 total. New columns: `discovery_runs.{bulk_import_id, apify_cost_cents, source}`, `profiles.discovery_reason`. Unique functional index on `creator_merge_candidates(LEAST/GREATEST pair)` for idempotent merge inserts. RLS on the two workspace-scoped new tables via `is_workspace_member`. `classifier_llm_guesses` intentionally workspace-agnostic (URL-keyed cache, service role writes).
+
+---
+
 ## 2026-04-24 — fix_funnel_edges_creator_id
 **File:** `supabase/migrations/20260424160000_fix_funnel_edges_creator_id.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP
