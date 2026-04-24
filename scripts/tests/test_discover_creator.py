@@ -79,6 +79,54 @@ class TestFetchInputContext:
         assert "x" in str(exc.value)
 
 
+class TestUpdateProfileFromContext:
+    def test_writes_non_null_ctx_fields_to_primary_profile(self):
+        fake_sb = MagicMock()
+        ctx = InputContext(
+            handle="gothgirlnatalie", platform="instagram",
+            display_name="Natalie Vox",
+            bio="21 • Florida",
+            follower_count=630000,
+            following_count=33,
+            post_count=213,
+            avatar_url="https://cdn.ig/pic_hd.jpg",
+            is_verified=False,
+        )
+        ws_id = uuid4()
+        dc._update_profile_from_context(fake_sb, ws_id, ctx)
+
+        # .table(...).update(...).eq(...).eq(...).eq(...).execute()
+        fake_sb.table.assert_called_with("profiles")
+        update_call = fake_sb.table.return_value.update
+        update_call.assert_called_once()
+        payload = update_call.call_args.args[0]
+        assert payload["bio"] == "21 • Florida"
+        assert payload["follower_count"] == 630000
+        assert payload["following_count"] == 33
+        assert payload["post_count"] == 213
+        assert payload["avatar_url"] == "https://cdn.ig/pic_hd.jpg"
+        assert payload["display_name"] == "Natalie Vox"
+        assert "last_scraped_at" in payload
+
+    def test_noop_when_ctx_has_no_fields(self):
+        fake_sb = MagicMock()
+        ctx = InputContext(handle="x", platform="instagram")  # all default/null
+        dc._update_profile_from_context(fake_sb, uuid4(), ctx)
+        fake_sb.table.assert_not_called()
+
+    def test_skips_null_fields(self):
+        fake_sb = MagicMock()
+        ctx = InputContext(
+            handle="x", platform="instagram",
+            bio="hi",  # only bio populated
+        )
+        dc._update_profile_from_context(fake_sb, uuid4(), ctx)
+        payload = fake_sb.table.return_value.update.call_args.args[0]
+        assert "bio" in payload
+        assert "follower_count" not in payload  # was None
+        assert "avatar_url" not in payload
+
+
 class TestGeminiPromptGrounding:
     def test_prompt_includes_bio_follower_and_external_urls(self):
         ctx = InputContext(

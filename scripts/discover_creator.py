@@ -134,8 +134,12 @@ Do not hallucinate follower counts, niches, or accounts that aren't evidenced in
 2. Infer primary_niche from bio and link-in-bio destination domains (e.g. onlyfans.com → adult creator; patreon.com → subscription creator).
 3. Infer monetization_model from link-in-bio destinations (onlyfans/fanvue → subscription; patreon → subscription; shop/store → ecommerce; otherwise unknown).
 4. List every account you can identify:
-   - The input handle itself as a `proposed_account` with `is_primary=true`.
-   - Each link_in_bio_destination as a separate proposed_account (platform inferred from the domain; account_type = monetization for onlyfans/patreon/fanvue/fanplace, link_in_bio for linktr.ee/beacons.ai, social otherwise).
+   - The input handle itself as a `proposed_account` with `is_primary=true`. Copy `display_name`, `bio`, and `follower_count` from the provided context into this primary account — do not leave them null when context has them.
+   - Each link_in_bio_destination as a separate proposed_account. Infer platform from the domain; choose account_type per this mapping:
+     - `monetization` for onlyfans.com, patreon.com, fanvue.com, fanplace.com, amazon.com/shop, *.tiktok.com/shop, any storefront / subscription-commerce URL
+     - `link_in_bio` for linktr.ee, beacons.ai, beacons.page
+     - `messaging` for t.me (Telegram) and Telegram cupidbot links
+     - `social` for any other social-network domain (twitter/x.com, facebook.com, youtube.com, etc.)
 5. Propose funnel edges from the input handle to each destination (edge_type=link_in_bio when routed via an aggregator; direct_link when listed directly in externalUrls).
 6. Confidence 0.9+ only when the account appears literally in the context. 0.5–0.8 for strong inference (e.g. matching-handle OF account from a bio hint). Below 0.5 → don't emit.
 """.strip()
@@ -189,6 +193,44 @@ def mark_discovery_failed_with_retry(sb, run_id: UUID, error: str) -> None:
         _write_dead_letter(run_id, error)
 
 
+def _update_profile_from_context(sb, workspace_id: UUID, ctx: InputContext) -> None:
+    """Write fresh Apify-sourced fields directly to the primary profile.
+
+    `commit_discovery_result` upserts profiles from Gemini's `proposed_accounts`, but
+    Gemini's output may omit bio / follower_count / avatar. We already fetched those
+    authoritatively into ctx via the Apify details actor — write them here so the
+    profile row reflects ground truth even when Gemini's proposed_account is sparse.
+
+    Skips keys whose ctx value is None/empty, so we never clobber populated fields
+    with nulls.
+    """
+    updates: dict = {}
+    if ctx.display_name:
+        updates["display_name"] = ctx.display_name
+    if ctx.bio:
+        updates["bio"] = ctx.bio
+    if ctx.follower_count is not None:
+        updates["follower_count"] = ctx.follower_count
+    if ctx.following_count is not None:
+        updates["following_count"] = ctx.following_count
+    if ctx.post_count is not None:
+        updates["post_count"] = ctx.post_count
+    if ctx.avatar_url:
+        updates["avatar_url"] = ctx.avatar_url
+
+    if not updates:
+        return
+
+    updates["last_scraped_at"] = "now()"
+
+    sb.table("profiles") \
+        .update(updates) \
+        .eq("workspace_id", str(workspace_id)) \
+        .eq("platform", ctx.platform) \
+        .eq("handle", ctx.handle) \
+        .execute()
+
+
 def commit(sb, run_id: UUID, result: DiscoveryResult):
     data = result.model_dump(mode="json")
     creator_data = {
@@ -217,6 +259,12 @@ def run(inp: DiscoveryInput) -> None:
 
         result = run_gemini_discovery(ctx)
         commit(sb, inp.run_id, result)
+
+        # Write the Apify-sourced profile fields (bio / follower counts / avatar)
+        # directly. Gemini's proposed_accounts may omit them; the upsert in
+        # commit_discovery_result preserves existing values on conflict, so this
+        # update fills in whatever's missing.
+        _update_profile_from_context(sb, inp.workspace_id, ctx)
 
         # Kick off a small IG posts scrape for the primary account
         ig_accounts = [a for a in result.proposed_accounts if a.platform == "instagram"]
