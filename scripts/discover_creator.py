@@ -87,6 +87,16 @@ def fetch_input_context(inp: DiscoveryInput) -> InputContext:
             f"Supported: instagram, tiktok."
         )
 
+    # Apify occasionally returns 1 item with all-null fields (private / restricted /
+    # shape-valid-but-empty). Treat it identically to a 0-item response so the run
+    # fails cleanly instead of being committed with a blank profile.
+    if ctx.is_empty():
+        raise EmptyDatasetError(
+            f"Apify returned a shape-valid but empty item for @{inp.input_handle} on "
+            f"{platform} (no bio, no follower count, no external URLs). Likely private, "
+            f"restricted, or the actor could not resolve the profile."
+        )
+
     # Resolve aggregator URLs (Linktree/Beacons) found in the bio
     destinations: list[str] = []
     for url in ctx.external_urls:

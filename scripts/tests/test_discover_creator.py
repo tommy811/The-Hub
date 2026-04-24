@@ -64,6 +64,20 @@ class TestFetchInputContext:
         mock_resolve.assert_called_once_with("https://linktr.ee/x")
         assert "https://onlyfans.com/x" in result_ctx.link_in_bio_destinations
 
+    def test_raises_empty_dataset_when_apify_returns_all_null_fields(self):
+        # Apify sometimes returns 1 item with null bio/followers/externalUrls
+        # (observed for ariaxswan during 2026-04-24 smoke test). Treat same as
+        # 0-item response: fail fast so the run is marked failed, not silently
+        # committed with a blank profile.
+        from apify_details import EmptyDatasetError
+        empty_ctx = InputContext(handle="x", platform="instagram")
+        assert empty_ctx.is_empty() is True  # sanity
+        with patch("discover_creator.fetch_instagram_details", return_value=empty_ctx), \
+             patch("discover_creator.get_apify_client"):
+            with pytest.raises(EmptyDatasetError) as exc:
+                dc.fetch_input_context(_make_input(handle="x"))
+        assert "x" in str(exc.value)
+
 
 class TestGeminiPromptGrounding:
     def test_prompt_includes_bio_follower_and_external_urls(self):
