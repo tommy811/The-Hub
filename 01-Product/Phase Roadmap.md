@@ -25,18 +25,20 @@ See [[PROJECT_STATE#16. Per-Phase Agent Requirements]] for full agent requiremen
 
 ---
 
-## Phase 2 — Platform Intelligence
+## Phase 2 — Platform Intelligence 🔄 IN PROGRESS
 
 ### Feature Work
-- Wire `/platforms/instagram/accounts` + `/platforms/tiktok/accounts` to live data ✅
-- Wire `/content` and `/trends` routes
-- Per-platform scraping: IG + TikTok via Apify (rebuild discover_creator.py on Apify — httpx is blocked)
-- Normalizer modules (`normalize_instagram.py`, `normalize_tiktok.py`)
-- Outlier detection (flag_outliers RPC — threshold ≥ 3.0×, 15-post floor, 48h age guard)
-- Platform accounts page — 4-tab layout (Accounts / Outliers / Classification / Analytics)
-- Daily snapshot cron job (`content_metrics_snapshots`, `profile_metrics_snapshots`)
-- Trends table + audio signature extraction from `platform_metrics`
-- Phase 2 migration: trends, creator_label_assignments, DROP archetype/vibe from content_analysis
+- ✅ Wire `/platforms/instagram/accounts` + `/platforms/tiktok/accounts` to live data
+- ✅ Phase 2 schema migration: `trends` + `creator_label_assignments` tables; `trend_type` / `llm_model` / `content_archetype` enums; `creator_niche` on `label_type`; `archetype`+`vibe` moved from `content_analysis` → `creators`; `scraped_content.trend_id` FK. (Migration `20260424170000_phase_2_schema_migration`, PR #3.)
+- 🔜 Discovery pipeline rebuild — replace `httpx.get()` with Apify `resultsType: "details"` in `scripts/discover_creator.py` (Phase 2 first task — see PROJECT_STATE §20)
+- 🔜 Wire `/content` and `/trends` routes
+- 🔜 Per-platform scraping: IG + TikTok via Apify (scheduled via GitHub Actions every 12h)
+- 🔜 Normalizer modules (`normalize_instagram.py`, `normalize_tiktok.py`)
+- 🔜 Outlier detection (flag_outliers RPC — threshold ≥ 3.0×, 15-post floor, 48h age guard)
+- 🔜 Platform accounts page — 4-tab layout (Accounts / Outliers / Classification / Analytics)
+- 🔜 Daily snapshot cron job (`content_metrics_snapshots`, `profile_metrics_snapshots`)
+- 🔜 Trend linking during content analysis — audio signature extraction from `platform_metrics` populates `scraped_content.trend_id`
+- 🔜 `quality_flag` + `quality_reason` columns on `scraped_content` (runtime watchdog per §15.2)
 
 ### Required Agents — Phase 2
 - **schema-drift-watchdog** — Weekly scan: live Supabase schema vs PROJECT_STATE.md §4 vs code queries. Surfaces drift before it breaks production.

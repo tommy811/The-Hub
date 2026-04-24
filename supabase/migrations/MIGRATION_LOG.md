@@ -1,5 +1,33 @@
 # Migration Log
 
+## 20260424170000_phase_2_schema_migration
+
+Applied 2026-04-24 via Supabase MCP `apply_migration`. Branch `phase-2-schema-migration`, PR #3.
+
+**New enums:**
+- `trend_type` (audio, dance, lipsync, transition, meme, challenge)
+- `llm_model` (gemini_pro, gemini_flash, claude_opus, claude_sonnet) — reserved for analysis pipelines
+- `content_archetype` (12 Jungian values — was documented in PROJECT_STATE §5 but missing from DB; audit gap closed)
+
+**Enum extension:** `label_type` += `creator_niche`
+
+**New tables (18 → 20):**
+- `trends` — id, workspace_id, name, trend_type, audio_signature, audio_artist, audio_title, description, usage_count, is_canonical, peak_detected_at, timestamps. UNIQUE (workspace_id, audio_signature) WHERE audio_signature IS NOT NULL. RLS via `is_workspace_member`. `set_updated_at` trigger.
+- `creator_label_assignments` — mirrors `content_label_assignments` pattern. Reuses table-agnostic `increment_label_usage` trigger.
+
+**Column changes:**
+- `creators` ADD `archetype content_archetype` (nullable — filled by Phase 3 brand analysis)
+- `creators` ADD `vibe content_vibe` (nullable — filled by Phase 3 brand analysis)
+- `scraped_content` ADD `trend_id uuid` FK→trends (nullable, ON DELETE SET NULL)
+- `content_analysis` DROP `archetype` (moved to creators)
+- `content_analysis` DROP `vibe` (moved to creators)
+
+Guard: migration aborts if `content_analysis` has any rows before DROP COLUMN (today: 0 rows). No data loss possible.
+
+Regenerated `src/types/database.types.ts` via `npm run db:types`. `npx tsc --noEmit` → exit 0.
+
+---
+
 ## 20260424000001_bulk_import_creator_rpc
 
 Applied 2026-04-24 via Supabase MCP `apply_migration` (registered as `bulk_import_creator_rpc`).
@@ -91,22 +119,6 @@ RLS on all tables. All indexes.
 
 ---
 
-## Pending — Phase 2 Entry
+## Pending
 
-Runs when Phase 2 ingestion starts. **Do NOT apply yet.**
-
-**File to create:** `20240201000000_phase2_trends.sql`
-
-**New enum:** `trend_type` (audio, dance, lipsync, transition, meme, challenge)
-
-**Enum addition:** `label_type` += `creator_niche`
-
-**New table: `trends`** — canonical trend registry with audio_signature dedup
-
-**New table: `creator_label_assignments`** — mirrors content_label_assignments for creator-level niche tagging
-
-**Column additions on `creators`:** `archetype content_archetype`, `vibe content_vibe`
-
-**Column addition on `scraped_content`:** `trend_id uuid REFERENCES trends(id)`
-
-**Column removals from `content_analysis`:** DROP `archetype`, DROP `vibe` (both move to creator level)
+No pending migrations at this time. Next migration slated is the Phase 2 scraping work (Apify ingestion + `quality_flag`/`quality_reason` on `scraped_content` per PROJECT_STATE §15.2).

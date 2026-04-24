@@ -1,5 +1,57 @@
 # Migration Log
 
+## 2026-04-24 — Phase 2 schema migration (trends + labels + archetype/vibe move)
+**File:** `supabase/migrations/20260424170000_phase_2_schema_migration.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-schema-migration` → PR #3
+
+### What Changed
+
+**New enums:**
+- `trend_type` (6 values): audio | dance | lipsync | transition | meme | challenge
+- `llm_model` (4 values): gemini_pro | gemini_flash | claude_opus | claude_sonnet — reserved for analysis pipelines
+- `content_archetype` (12 Jungian values) — was documented in PROJECT_STATE §5 but missing from DB; audit gap closed
+
+**Enum extensions:**
+- `label_type` += `creator_niche`
+
+**New tables (18 → 20):**
+- `trends` — id, workspace_id, name, trend_type, audio_signature, audio_artist, audio_title, description, usage_count, is_canonical, peak_detected_at, timestamps. UNIQUE (workspace_id, audio_signature) WHERE NOT NULL. RLS: `is_workspace_member`. `set_updated_at` trigger.
+- `creator_label_assignments` — mirrors `content_label_assignments` pattern. Reuses table-agnostic `increment_label_usage` trigger.
+
+**Column changes:**
+- `creators` ADD `archetype content_archetype` (nullable; filled by Phase 3 brand analysis)
+- `creators` ADD `vibe content_vibe` (nullable; filled by Phase 3 brand analysis)
+- `scraped_content` ADD `trend_id uuid` FK→trends (nullable, ON DELETE SET NULL)
+- `content_analysis` DROP `archetype`
+- `content_analysis` DROP `vibe`
+
+**Safety guard:** migration aborts with a raised exception if `content_analysis` has any rows before the DROP COLUMN (today: 0 rows). No data loss possible.
+
+**Rationale:** archetype and vibe describe a creator's overall brand identity, not individual posts. A single post carrying a "goth" vibe doesn't tell you much; across a creator's full body of work, it defines the brand. Content-level taxonomy stays with `category`, dynamic labels, and `visual_tags`.
+
+Regenerated `src/types/database.types.ts` via `npm run db:types`. `npx tsc --noEmit` → exit 0.
+
+---
+
+## 2026-04-24 — bulk_import_creator RPC
+**File:** `supabase/migrations/20260424000001_bulk_import_creator_rpc.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+
+### What Changed
+Adds atomic `bulk_import_creator(p_handle, p_platform_hint, p_tracking_type, p_tags, p_user_id, p_workspace_id) RETURNS uuid`. Inserts creator + primary profile + pending `discovery_runs` row and links `creators.last_discovery_run_id` to the new run — all in one transaction. SECURITY DEFINER. Replaces the per-handle JS-side `Promise.all` inserts in the old `src/app/actions.ts`.
+
+---
+
+## 2026-04-24 — Consolidate last_discovery_run_id on creators
+**File:** `supabase/migrations/20260424000000_consolidate_last_discovery_run_id.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+
+### What Changed
+Drift fix. Live `creators` had two columns pointing at the same logical concept (`last_discovery_run_id` no-FK + `last_discovery_run_id_fk` with FK). This migration backfills into the FK column, reports orphan-pointer count via `RAISE NOTICE`, drops the no-FK column, and renames the FK column + constraint to the canonical names (`creators_last_discovery_run_id_fkey`).
+
+---
+
 ## 2026-04-23 — Fix retry_creator_discovery + canonical_name guard
 **File:** No local SQL file — applied directly via Supabase MCP
 **Applied:** ✅ Supabase (Content OS) via MCP
@@ -26,27 +78,6 @@
 - Added `is_primary BOOLEAN NOT NULL DEFAULT FALSE` to `profiles`
 - Required by `commit_discovery_result` RPC which marks one profile per creator as primary for its platform
 - Discovered during first live discovery pipeline run (gothgirlnatalie, ariaxswan, esmaecursed)
-
----
-
-## Pending — Phase 2 Entry
-
-**File to create:** `supabase/migrations/20240201000000_phase2_trends.sql`
-**Status:** ⬜ Not yet applied — runs when Phase 2 ingestion starts
-
-**New enum:** `trend_type` (audio, dance, lipsync, transition, meme, challenge)
-
-**Enum addition:** `label_type` += `creator_niche`
-
-**New table: `trends`** — canonical trend registry, audio_signature dedup (UNIQUE per workspace)
-
-**New table: `creator_label_assignments`** — mirrors content_label_assignments for creator-level niche tagging
-
-**Column additions on `creators`:** `archetype content_archetype` (nullable), `vibe content_vibe` (nullable)
-
-**Column addition on `scraped_content`:** `trend_id uuid REFERENCES trends(id)` (nullable)
-
-**Column removals from `content_analysis`:** DROP `archetype`, DROP `vibe` (moved to creator level)
 
 ---
 

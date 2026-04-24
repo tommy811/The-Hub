@@ -10,19 +10,15 @@
 - [[06-Sessions/|📅 Sessions]] — daily work logs
 
 ## Current Status
-- Phase: **Phase 1 fully closed ✅ → Phase 2 starting**
-- Database: ✅ Supabase (Content OS project)
+- Phase: **Phase 2 in progress 🔄** (schema landed; pipeline rebuild next)
+- Database: ✅ Supabase (Content OS project) — 20 tables live
 - Repo: github.com/tommy811/The-Hub
-- Last session: [[06-Sessions/2026-04-23]]
+- Open PR: [#3 phase-2-schema-migration](https://github.com/tommy811/The-Hub/pull/3)
+- Last session: [[06-Sessions/2026-04-24]]
 
 ## Active Work
-- ✅ `/platforms/instagram/accounts` — live Supabase data
-- ✅ `/platforms/tiktok/accounts` — live Supabase data (mirrored from Instagram)
-- ✅ Re-run Discovery button — wired end-to-end
-- ✅ Manual Add Account dialog — functional with 18 platforms
-- ✅ Creator detail page — revamped (stats strip, bio, avatar fallback)
-- ✅ Apify field mapping fixed — follower counts backfilled
-- ✅ verify-and-fix skill built — Phase 1 fully closed
-- 🔜 Phase 2 first task: rebuild discover_creator.py on Apify (httpx blocked by Instagram)
+- ✅ Phase 2 schema migration — `trends` + `creator_label_assignments`, `trend_type` / `llm_model` / `content_archetype` enums, `creators.archetype`+`vibe`, `scraped_content.trend_id`
+- 🔜 **Phase 2 first task:** rebuild `scripts/discover_creator.py` on Apify `resultsType: "details"` — `httpx` is blocked by Instagram
 - 🔜 Wire `/content` and `/trends` routes
-- 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, flag_outliers live)
+- 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, `flag_outliers` live, Outliers page)
+- 🔜 Trend linking — audio signature extraction populates `scraped_content.trend_id`

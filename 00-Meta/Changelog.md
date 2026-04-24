@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-04-24 (sync 8 — Phase 2 schema migration)
+- Added: `trends` table + `trend_type` enum (audio / dance / lipsync / transition / meme / challenge)
+- Added: `creator_label_assignments` table (mirrors `content_label_assignments`, reuses `increment_label_usage` trigger)
+- Added: `llm_model` enum (gemini_pro / gemini_flash / claude_opus / claude_sonnet) — reserved for analysis pipelines
+- Added: `content_archetype` enum (12 Jungian values — was documented but missing from DB; audit gap closed)
+- Added: `creator_niche` value on `label_type` enum
+- Added: `creators.archetype` (content_archetype, nullable) and `creators.vibe` (content_vibe, nullable) — filled by Phase 3 brand analysis
+- Added: `scraped_content.trend_id` FK → `trends` (nullable, ON DELETE SET NULL)
+- Added: Migration `20260424000001_bulk_import_creator_rpc` — atomic RPC for creator + primary profile + pending discovery_run insert
+- Added: Migration `20260424000000_consolidate_last_discovery_run_id` — drift fix; single `last_discovery_run_id` column with FK
+- Removed: `archetype` and `vibe` columns on `content_analysis` (table was empty — moved to creator level)
+- Removed: stale `Schema drift — live vs PROJECT_STATE` memory entry (drift fully resolved; `docs/SCHEMA.md` footer is authoritative)
+- Changed: `.gitignore` — added `supabase/.temp/` (CLI runtime cache)
+- Changed: Total live tables 18 → 20
+- Changed: PROJECT_STATE §4.1/§4.2/§5/§14/Decisions Log — all updated
+- PR: [tommy811/The-Hub#3](https://github.com/tommy811/The-Hub/pull/3) — `phase-2-schema-migration`
+
 ## 2026-04-23 (sync 7 — Phase 1 close + vault merge)
 - Added: `verify-and-fix` skill (`.claude/skills/verify-and-fix/SKILL.md`) — post-change verification loop, up to 3 iterations, escalates to session note on exhaustion. Phase 1 agent requirement met.
 - Changed: Phase 1 status → fully closed (feature work + required agents both complete)
