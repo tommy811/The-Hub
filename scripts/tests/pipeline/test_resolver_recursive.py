@@ -123,3 +123,57 @@ def test_max_depth_defensive_cap_truncates_chain(
     depths = sorted({du.depth for du in result.discovered_urls})
     assert max(depths) <= 2, f"depths={depths} exceeded MAX_DEPTH=2"
     assert 2 in depths, f"never reached depth 2: depths={depths}"
+
+
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.fetch_tt.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_cycle_dedup_prevents_infinite_loop(
+    mock_fetch_seed, mock_classify, mock_gemini, mock_tt_fetch, mock_ig_fetch,
+):
+    """A's bio links to B; B's bio links back to A. Verify each canonical_url
+    appears exactly once and the resolver returns cleanly."""
+
+    seed_url = "https://tiktok.com/@kira"
+    ig_url = "https://instagram.com/kira"
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="kira", platform="tiktok",
+        external_urls=[ig_url],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="kira", platform="instagram",
+        external_urls=[seed_url],
+    )
+    mock_tt_fetch.return_value = _mk_ctx(
+        handle="kira", platform="tiktok",
+        external_urls=[ig_url],
+    )
+
+    mock_classify.side_effect = lambda url, **kw: (
+        Classification(platform="instagram", account_type="social",
+                       confidence=1.0, reason="rule:instagram_social")
+        if "instagram.com" in url else
+        Classification(platform="tiktok", account_type="social",
+                       confidence=1.0, reason="rule:tiktok_social")
+    )
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="Kira", known_usernames=["kira"],
+        display_name_variants=["Kira"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="kira", platform_hint="tiktok",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    canonicals = [du.canonical_url for du in result.discovered_urls]
+    assert len(canonicals) == len(set(canonicals)), \
+        f"duplicate URLs in {canonicals} — cycle dedup failed"
+    assert any("instagram.com" in c for c in canonicals)
+    assert not any("tiktok.com" in k for k in result.enriched_contexts.keys()), \
+        f"TT seed was re-fetched via cycle: {result.enriched_contexts}"

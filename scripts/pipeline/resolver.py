@@ -66,6 +66,33 @@ def _fetcher_for(platform: str):
     }.get(platform)
 
 
+_SEED_HOST_FOR_PLATFORM = {
+    "instagram": "instagram.com",
+    "tiktok": "tiktok.com",
+    "youtube": "youtube.com",
+    "twitter": "x.com",
+    "facebook": "facebook.com",
+    "patreon": "patreon.com",
+    "onlyfans": "onlyfans.com",
+    "fanvue": "fanvue.com",
+    "linkedin": "linkedin.com",
+}
+
+
+def _build_seed_url(platform: str, handle: str) -> str | None:
+    host = _SEED_HOST_FOR_PLATFORM.get(platform)
+    if host is None:
+        return None
+    h = (handle or "").lstrip("@")
+    if not h:
+        return None
+    if platform in ("tiktok", "youtube"):
+        return f"https://{host}/@{h}"
+    if platform == "linkedin":
+        return f"https://{host}/in/{h}"
+    return f"https://{host}/{h}"
+
+
 def _destination_class_for(account_type: str) -> str:
     return {
         "monetization": "monetization",
@@ -177,6 +204,11 @@ def resolve_seed(
     visited_canonical: set[str] = set()
     aggregator_expanded: set[str] = set()
     mapping_label_emitted = False
+
+    # Pre-seed visited set so a secondary that mentions us back doesn't re-fetch
+    seed_self_url = _build_seed_url(platform_hint, handle)
+    if seed_self_url:
+        visited_canonical.add(canonicalize_url(seed_self_url))
 
     def _classify_and_enrich(url: str, depth: int, is_aggregator_child: bool = False):
         """Classify URL, optionally enrich profile, record in discovered list.
