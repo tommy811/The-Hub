@@ -77,3 +77,49 @@ def test_secondary_external_urls_are_followed(
     assert any("onlyfans.com/kira" in u for u in urls), \
         f"depth-2 OF missing from {urls} — recursion didn't fire"
     assert any("instagram.com" in k for k in result.enriched_contexts.keys())
+
+
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_max_depth_defensive_cap_truncates_chain(
+    mock_fetch_seed, mock_classify, mock_gemini, mock_ig_fetch,
+    monkeypatch,
+):
+    """Force MAX_DEPTH=2; build a 5-deep IG chain. Confirm only depths 1-2 land."""
+    monkeypatch.setattr("pipeline.resolver.MAX_DEPTH", 2)
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/ig1"],
+    )
+
+    chain = iter([
+        _mk_ctx(handle="ig1", external_urls=["https://instagram.com/ig2"]),
+        _mk_ctx(handle="ig2", external_urls=["https://instagram.com/ig3"]),
+        _mk_ctx(handle="ig3", external_urls=["https://instagram.com/ig4"]),
+        _mk_ctx(handle="ig4", external_urls=["https://instagram.com/ig5"]),
+        _mk_ctx(handle="ig5", external_urls=[]),
+    ])
+    mock_ig_fetch.side_effect = lambda client, h: next(chain)
+
+    mock_classify.return_value = Classification(
+        platform="instagram", account_type="social",
+        confidence=1.0, reason="rule:instagram_social",
+    )
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=10000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    depths = sorted({du.depth for du in result.discovered_urls})
+    assert max(depths) <= 2, f"depths={depths} exceeded MAX_DEPTH=2"
+    assert 2 in depths, f"never reached depth 2: depths={depths}"
