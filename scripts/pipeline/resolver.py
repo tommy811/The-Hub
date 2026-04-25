@@ -149,6 +149,16 @@ def run_gemini_discovery_v2(ctx: InputContext) -> DiscoveryResultV2:
     return _impl(ctx)
 
 
+def run_gemini_bio_mentions(ctx: InputContext) -> list[TextMention]:
+    """Cheap Gemini Flash bio-mentions extraction.
+
+    Re-exported here so tests can patch at this import site, matching the
+    pattern used for run_gemini_discovery_v2.
+    """
+    from discover_creator import run_gemini_bio_mentions as _impl
+    return _impl(ctx)
+
+
 def _synthesize_url(mention: TextMention) -> str | None:
     host_for = {
         "instagram": "instagram.com",

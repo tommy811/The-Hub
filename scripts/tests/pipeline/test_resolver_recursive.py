@@ -318,3 +318,10 @@ def test_terminal_secondary_dead_ends_cleanly(
     assert len(canonicals) == 1
     assert "onlyfans.com/seed" in canonicals[0]
     assert any("onlyfans.com" in k for k in result.enriched_contexts.keys())
+
+
+def test_run_gemini_bio_mentions_returns_empty_for_empty_bio():
+    """The function under unit test, not via resolver."""
+    from discover_creator import run_gemini_bio_mentions
+    ctx = _mk_ctx(bio="")
+    assert run_gemini_bio_mentions(ctx) == []

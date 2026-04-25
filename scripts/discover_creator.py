@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from common import get_supabase, get_gemini_key, console
-from schemas import DiscoveryInput, InputContext, DiscoveryResultV2
+from schemas import DiscoveryInput, InputContext, DiscoveryResultV2, TextMention
 from apify_scraper import get_apify_client, scrape_instagram_profile
 from fetchers.base import EmptyDatasetError
 
@@ -108,6 +108,82 @@ def run_gemini_discovery_v2(ctx: InputContext) -> DiscoveryResultV2:
         ),
     )
     return DiscoveryResultV2.model_validate_json(resp.text)
+
+
+GEMINI_BIO_MENTIONS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "mentions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "platform": {"type": "string"},
+                    "handle": {"type": "string"},
+                },
+                "required": ["platform", "handle"],
+            },
+        },
+    },
+    "required": ["mentions"],
+}
+
+
+def _build_bio_mentions_prompt(ctx: InputContext) -> str:
+    bio = (ctx.bio or "").strip()
+    return f"""
+Extract every @platform/handle mention from this profile bio.
+Return JSON: {{"mentions": [{{"platform": "tiktok"|"instagram"|"twitter"|"youtube"|"facebook"|"patreon"|"onlyfans"|"fanvue"|"linkedin", "handle": "..."}}]}}.
+Only include mentions where both platform and handle are clearly stated or strongly implied.
+Skip URLs (those are handled separately). Skip generic words like "DM me" with no handle.
+If the bio is empty or contains no mentions, return {{"mentions": []}}.
+
+Bio:
+{bio}
+""".strip()
+
+
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=4),
+    retry=retry_if_not_exception_type(ValidationError),
+    reraise=True,
+)
+def run_gemini_bio_mentions(ctx: InputContext) -> list[TextMention]:
+    """Lightweight Gemini Flash call: extract handle mentions from a secondary's bio.
+
+    Returns [] on empty bio, validation error, or any failure. Never raises —
+    a failed bio-mentions extraction must not crash discovery.
+    """
+    if not (ctx.bio or "").strip():
+        return []
+
+    try:
+        genai.configure(api_key=get_gemini_key())
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        resp = model.generate_content(
+            _build_bio_mentions_prompt(ctx),
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=GEMINI_BIO_MENTIONS_SCHEMA,
+                max_output_tokens=256,
+            ),
+        )
+        data = json.loads(resp.text)
+        out: list[TextMention] = []
+        for m in data.get("mentions", []):
+            try:
+                out.append(TextMention(
+                    platform=m["platform"],
+                    handle=m["handle"],
+                    source="enriched_bio",
+                ))
+            except (ValidationError, KeyError):
+                continue
+        return out
+    except Exception as e:
+        console.log(f"[yellow]bio mentions extraction failed: {e}[/yellow]")
+        return []
 
 
 def _write_dead_letter(run_id: UUID, error: str) -> None:
