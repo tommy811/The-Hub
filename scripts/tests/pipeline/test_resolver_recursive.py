@@ -730,3 +730,47 @@ def test_highlights_failure_does_not_crash_resolver(
     assert any("onlyfans.com/sec" in u for u in urls)
     # bio_mentions branch landed
     assert any("tiktok.com/@sec_tt" in u for u in urls)
+
+
+@patch("pipeline.resolver.fetch_highlights")
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_highlights_disabled_skips_branch(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
+    mock_gemini_bio, mock_fetch_highlights, monkeypatch,
+):
+    """HIGHLIGHTS_ENABLED=False — fetch_highlights is never called even for IG depth 1."""
+    monkeypatch.setattr("pipeline.resolver.HIGHLIGHTS_ENABLED", False)
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec"],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="sec", platform="instagram", bio="", external_urls=[],
+    )
+    mock_gemini_bio.return_value = []
+    mock_classify.return_value = Classification(
+        platform="instagram", account_type="social",
+        confidence=1.0, reason="rule:instagram_social",
+    )
+    mock_gemini_seed.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+    assert not mock_fetch_highlights.called, \
+        "highlights branch fired despite HIGHLIGHTS_ENABLED=False"
+    # Budget should NOT have been debited for highlights (seed fetch 10c + IG
+    # enrich 10c = 20c; if highlights had fired we'd see ≥25c).
+    assert budget.spent_cents <= 20, \
+        f"budget debited for highlights: spent={budget.spent_cents}c"
