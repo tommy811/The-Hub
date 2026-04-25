@@ -161,6 +161,40 @@ def _classify_account_type_for(platform: str, discovered_urls: list, canonical_u
     return "other"
 
 
+_SEED_URL_HOSTS = {
+    "instagram": "instagram.com",
+    "tiktok": "tiktok.com",
+    "youtube": "youtube.com",
+    "twitter": "x.com",
+    "facebook": "facebook.com",
+    "patreon": "patreon.com",
+    "onlyfans": "onlyfans.com",
+    "fanvue": "fanvue.com",
+    "fanplace": "fanplace.com",
+    "linkedin": "linkedin.com",
+}
+
+
+def _seed_profile_url(platform: str, handle: str) -> str | None:
+    """Build the canonical profile URL for the seed/primary account.
+
+    Without this, _commit_v2 was sending url=None for the seed, the upsert
+    COALESCE preserved the null, and the UI rendered the row as plain text
+    (not clickable) for the first profile in every creator's network.
+    """
+    host = _SEED_URL_HOSTS.get(platform)
+    if host is None:
+        return None
+    h = (handle or "").lstrip("@")
+    if not h:
+        return None
+    if platform in ("tiktok", "youtube"):
+        return f"https://{host}/@{h}"
+    if platform == "linkedin":
+        return f"https://{host}/in/{h}"
+    return f"https://{host}/{h}"
+
+
 def _synthesize_handle_from_url(url: str) -> str:
     """Best-effort handle when no fetcher provided one.
 
@@ -184,7 +218,7 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
     accounts = [{
         "platform": seed.platform,
         "handle": seed.handle,
-        "url": None,
+        "url": _seed_profile_url(seed.platform, seed.handle),
         "display_name": seed.display_name,
         "bio": seed.bio,
         "follower_count": seed.follower_count,

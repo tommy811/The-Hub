@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 from uuid import UUID
 
-from discover_creator import _commit_v2, _synthesize_handle_from_url
+from discover_creator import _commit_v2, _synthesize_handle_from_url, _seed_profile_url
 from pipeline.resolver import ResolverResult
 from schemas import DiscoveredUrl, DiscoveryResultV2, InputContext
 
@@ -32,6 +32,38 @@ def _capture_rpc_payload(sb_mock):
     name, payload = rpc_call.args[0], rpc_call.args[1]
     assert name == "commit_discovery_result"
     return payload
+
+
+def test_seed_profile_url_per_platform():
+    assert _seed_profile_url("instagram", "alice") == "https://instagram.com/alice"
+    assert _seed_profile_url("instagram", "@alice") == "https://instagram.com/alice"
+    assert _seed_profile_url("tiktok", "kira") == "https://tiktok.com/@kira"
+    assert _seed_profile_url("tiktok", "@kira") == "https://tiktok.com/@kira"
+    assert _seed_profile_url("youtube", "Gothgirlnatalie") == "https://youtube.com/@Gothgirlnatalie"
+    assert _seed_profile_url("twitter", "alice") == "https://x.com/alice"
+    assert _seed_profile_url("linkedin", "alice") == "https://linkedin.com/in/alice"
+    assert _seed_profile_url("other", "anything") is None
+    assert _seed_profile_url("instagram", "") is None
+
+
+def test_commit_v2_writes_seed_url():
+    """The seed account must land in profiles with a populated url field."""
+    from unittest.mock import MagicMock
+    from uuid import UUID
+    from pipeline.resolver import ResolverResult
+
+    sb = MagicMock()
+    seed = _ctx("kira", "tiktok")
+    result = ResolverResult(
+        seed_context=seed, gemini_result=_gem(),
+        enriched_contexts={}, discovered_urls=[],
+    )
+    _commit_v2(sb, UUID(int=1), UUID(int=2), result, bulk_import_id=None)
+
+    payload = _capture_rpc_payload(sb)
+    seed_account = payload["p_accounts"][0]
+    assert seed_account["is_primary"] is True
+    assert seed_account["url"] == "https://tiktok.com/@kira"
 
 
 def test_synthesize_handle_extracts_last_path_segment():
