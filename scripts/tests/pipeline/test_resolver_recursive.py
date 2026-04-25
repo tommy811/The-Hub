@@ -179,18 +179,18 @@ def test_cycle_dedup_prevents_infinite_loop(
         f"TT seed was re-fetched via cycle: {result.enriched_contexts}"
 
 
-@patch("pipeline.resolver.aggregators_linktree.resolve")
-@patch("pipeline.resolver.aggregators_linktree.is_linktree")
+@patch("pipeline.resolver.harvest_urls")
 @patch("pipeline.resolver.fetch_ig.fetch")
 @patch("pipeline.resolver.run_gemini_discovery_v2")
 @patch("pipeline.resolver.classify")
 @patch("pipeline.resolver.fetch_seed")
 def test_aggregator_chain_blocked_at_depth_one(
     mock_fetch_seed, mock_classify, mock_gemini, mock_ig_fetch,
-    mock_is_linktree, mock_linktree_resolve,
+    mock_harvest,
 ):
     """Seed -> IG (depth 1) -> Linktree (depth 2) -> children include another Linktree.
     The second Linktree must NOT be re-expanded."""
+    from harvester.types import HarvestedUrl
 
     mock_fetch_seed.return_value = _mk_ctx(
         handle="seed", platform="instagram",
@@ -201,10 +201,21 @@ def test_aggregator_chain_blocked_at_depth_one(
         external_urls=["https://linktr.ee/main"],
     )
 
-    mock_is_linktree.side_effect = lambda u: "linktr.ee" in u
-    mock_linktree_resolve.return_value = [
-        "https://onlyfans.com/x",
-        "https://linktr.ee/another",
+    mock_harvest.return_value = [
+        HarvestedUrl(
+            canonical_url="https://onlyfans.com/x",
+            raw_url="https://onlyfans.com/x",
+            raw_text="OnlyFans",
+            destination_class="monetization",
+            harvest_method="httpx",
+        ),
+        HarvestedUrl(
+            canonical_url="https://linktr.ee/another",
+            raw_url="https://linktr.ee/another",
+            raw_text="another linktree",
+            destination_class="aggregator",
+            harvest_method="httpx",
+        ),
     ]
 
     classifications = iter([
@@ -230,8 +241,8 @@ def test_aggregator_chain_blocked_at_depth_one(
         budget=budget,
     )
 
-    assert mock_linktree_resolve.call_count == 1, \
-        f"second linktree was re-expanded: {mock_linktree_resolve.call_count} calls"
+    assert mock_harvest.call_count == 1, \
+        f"second linktree was re-expanded: {mock_harvest.call_count} calls"
     assert len(result.discovered_urls) == 4
 
 
@@ -471,8 +482,6 @@ def test_recursive_gemini_disabled_skips_bio_mentions(
     assert not any("sec_tt" in u for u in urls)
 
 
-@patch("pipeline.resolver.aggregators_linktree.resolve")
-@patch("pipeline.resolver.aggregators_linktree.is_linktree")
 @patch("pipeline.resolver.fetch_ig.fetch")
 @patch("pipeline.resolver.run_gemini_bio_mentions")
 @patch("pipeline.resolver.run_gemini_discovery_v2")
@@ -480,16 +489,18 @@ def test_recursive_gemini_disabled_skips_bio_mentions(
 @patch("pipeline.resolver.fetch_seed")
 def test_kira_shaped_full_funnel_resolution(
     mock_fetch_seed, mock_classify, mock_gemini_seed, mock_gemini_bio,
-    mock_ig_fetch, mock_is_linktree, mock_linktree_resolve,
+    mock_ig_fetch,
 ):
     """End-to-end synthetic of the failing Kira case from PROJECT_STATE.
 
     Seed: TT @kira (no externals, no bio links).
     Gemini text_mentions: @kirapregiato on instagram.
     IG profile: aggregator URL https://tapforallmylinks.com/kira.
-    Aggregator children: [OF, telegram_channel].
+    Harvester children: [OF, telegram_channel].
     Expected: all 4 destinations recorded; OF + telegram are terminal.
     """
+    from harvester.types import HarvestedUrl
+
     mock_fetch_seed.return_value = _mk_ctx(
         handle="kira", platform="tiktok", bio="more on @kirapregiato",
         external_urls=[],
@@ -498,12 +509,23 @@ def test_kira_shaped_full_funnel_resolution(
         handle="kirapregiato", platform="instagram",
         bio="", external_urls=["https://tapforallmylinks.com/kira"],
     )
-    mock_is_linktree.return_value = False  # not linktr.ee — falls through to custom_domain
 
-    with patch("pipeline.resolver.aggregators_custom.resolve") as mock_custom_resolve:
-        mock_custom_resolve.return_value = [
-            "https://onlyfans.com/kira",
-            "https://t.me/kirachannel",
+    with patch("pipeline.resolver.harvest_urls") as mock_harvest:
+        mock_harvest.return_value = [
+            HarvestedUrl(
+                canonical_url="https://onlyfans.com/kira",
+                raw_url="https://onlyfans.com/kira",
+                raw_text="OnlyFans",
+                destination_class="monetization",
+                harvest_method="httpx",
+            ),
+            HarvestedUrl(
+                canonical_url="https://t.me/kirachannel",
+                raw_url="https://t.me/kirachannel",
+                raw_text="Telegram",
+                destination_class="messaging",
+                harvest_method="httpx",
+            ),
         ]
 
         classifications = iter([

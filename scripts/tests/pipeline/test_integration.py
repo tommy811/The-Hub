@@ -16,26 +16,40 @@ def _ctx(handle, platform, external_urls=None):
     )
 
 
-@patch("pipeline.resolver.aggregators_linktree.resolve")
+@patch("pipeline.resolver.harvest_urls")
 @patch("pipeline.resolver.run_gemini_discovery_v2")
 @patch("pipeline.resolver.classify")
 @patch("pipeline.resolver.fetch_seed")
 def test_linktree_hub_with_monetization_destination(
-    mock_fetch, mock_classify, mock_gemini, mock_linktree,
+    mock_fetch, mock_classify, mock_gemini, mock_harvest,
 ):
     """Full IG → Linktree → (OnlyFans + IG_backup) path.
 
     Verifies:
     - Seed fetch on IG
-    - Linktree detected and expanded
+    - Linktree detected and expanded via harvester
     - All 3 URLs (linktree, onlyfans, ig_backup) classified and recorded
     - Classifications reflect the actual destination types
     """
+    from harvester.types import HarvestedUrl
+
     mock_fetch.return_value = _ctx("alice", "instagram",
                                     external_urls=["https://linktr.ee/alice"])
-    mock_linktree.return_value = [
-        "https://onlyfans.com/alice_of",
-        "https://instagram.com/alice_backup",
+    mock_harvest.return_value = [
+        HarvestedUrl(
+            canonical_url="https://onlyfans.com/alice_of",
+            raw_url="https://onlyfans.com/alice_of",
+            raw_text="OnlyFans",
+            destination_class="monetization",
+            harvest_method="httpx",
+        ),
+        HarvestedUrl(
+            canonical_url="https://instagram.com/alice_backup",
+            raw_url="https://instagram.com/alice_backup",
+            raw_text="backup IG",
+            destination_class="social",
+            harvest_method="httpx",
+        ),
     ]
     # Iterator of classifications: one per URL (linktree + 2 children)
     classifications = iter([

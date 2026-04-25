@@ -49,20 +49,36 @@ def test_stage_a_fetches_seed_then_stage_b_classifies_urls(
     assert result.discovered_urls[0].destination_class == "monetization"
 
 
-@patch("pipeline.resolver.aggregators_linktree.resolve")
+@patch("pipeline.resolver.harvest_urls")
 @patch("pipeline.resolver.run_gemini_discovery_v2")
 @patch("pipeline.resolver.classify")
 @patch("pipeline.resolver.fetch_seed")
 def test_aggregator_children_expanded_once_not_chained(
-    mock_fetch, mock_classify, mock_gemini, mock_linktree_resolve,
+    mock_fetch, mock_classify, mock_gemini, mock_harvest,
 ):
-    # Seed has a linktree URL; linktree resolves to 2 destinations
+    """Resolver delegates aggregator URL expansion to harvest_urls; child
+    aggregators are NOT recursively expanded (no chaining)."""
+    from harvester.types import HarvestedUrl
+
+    # Seed has a linktree URL; harvester returns 2 destinations
     mock_fetch.return_value = _mk_ctx(
         external_urls=["https://linktr.ee/alice"],
     )
-    mock_linktree_resolve.return_value = [
-        "https://onlyfans.com/alice",
-        "https://linktr.ee/other",  # another linktree — should NOT be expanded again
+    mock_harvest.return_value = [
+        HarvestedUrl(
+            canonical_url="https://onlyfans.com/alice",
+            raw_url="https://onlyfans.com/alice",
+            raw_text="OnlyFans",
+            destination_class="monetization",
+            harvest_method="httpx",
+        ),
+        HarvestedUrl(
+            canonical_url="https://linktr.ee/other",
+            raw_url="https://linktr.ee/other",
+            raw_text="another linktree",
+            destination_class="aggregator",
+            harvest_method="httpx",
+        ),
     ]
     classifications = iter([
         Classification(platform="linktree", account_type="link_in_bio",
@@ -88,8 +104,62 @@ def test_aggregator_children_expanded_once_not_chained(
     # Should have 3 URLs: the linktree itself + 2 destinations.
     # The second linktree (linktr.ee/other) is recorded but NOT re-expanded.
     assert len(result.discovered_urls) == 3
-    # Only the first linktree was resolved — mock_linktree_resolve called once.
-    assert mock_linktree_resolve.call_count == 1
+    # Only the first linktree was harvested — mock_harvest called once (the second
+    # linktree is_aggregator_child=True so it skips harvesting).
+    assert mock_harvest.call_count == 1
+
+
+@patch("pipeline.resolver.harvest_urls")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_resolver_calls_harvester_for_unknown_class(
+    mock_fetch, mock_classify, mock_gemini, mock_harvest,
+):
+    """When classifier returns 'unknown' destination (e.g. tapforallmylinks
+    custom_domain on first encounter), the resolver still delegates to
+    harvest_urls — covering the whole HARVEST_CLASSES contract, not just
+    link_in_bio."""
+    from harvester.types import HarvestedUrl
+
+    mock_fetch.return_value = _mk_ctx(
+        external_urls=["https://tapforallmylinks.com/x"],
+    )
+    mock_harvest.return_value = [
+        HarvestedUrl(
+            canonical_url="https://fanplace.com/x",
+            raw_url="https://fanplace.com/x?l_=abc",
+            raw_text="my content",
+            destination_class="monetization",
+            harvest_method="headless",
+        ),
+    ]
+    # Classifier returns custom_domain link_in_bio for the seed link, then fanplace
+    # monetization for the harvested child.
+    classifications = iter([
+        Classification(platform="custom_domain", account_type="link_in_bio",
+                       confidence=1.0, reason="rule:custom_domain_link_in_bio"),
+        Classification(platform="fanplace", account_type="monetization",
+                       confidence=1.0, reason="rule:fanplace_monetization"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="X", known_usernames=["x"],
+        display_name_variants=["X"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="x", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    # Harvester was called exactly once with the canonicalized seed URL
+    mock_harvest.assert_called_once()
+    # Both URLs in discovered: the seed aggregator + the harvested fanplace
+    canons = [d.canonical_url for d in result.discovered_urls]
+    assert "https://fanplace.com/x" in canons
 
 
 @patch("pipeline.resolver.run_gemini_discovery_v2")

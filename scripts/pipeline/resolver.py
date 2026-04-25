@@ -24,9 +24,8 @@ from fetchers import facebook as fetch_fb
 from fetchers import twitter as fetch_twitter
 from fetchers import generic as fetch_generic
 from fetchers.base import EmptyDatasetError
-from aggregators import linktree as aggregators_linktree
-from aggregators import beacons as aggregators_beacons
-from aggregators import custom_domain as aggregators_custom
+from harvester import harvest_urls
+from harvester.types import HARVEST_CLASSES
 
 
 # Apify cost table in cents per run. Hand-maintained, err on the high side.
@@ -280,20 +279,21 @@ def resolve_seed(
             depth=depth,
         ))
 
-        # If aggregator, expand one level (only if not already a child — no chaining)
-        if cls.account_type == "link_in_bio" and not is_aggregator_child:
+        # Harvester gate: any class in HARVEST_CLASSES is a routing surface that
+        # may contain further outbound links (aggregator, content, commerce,
+        # affiliate, professional, unknown). Terminal classes (social/monetization/
+        # messaging) are skipped — social profiles get enriched via fetcher below;
+        # monetization + messaging are leaf nodes.
+        dest_class_via_account = _destination_class_for(cls.account_type)
+        if dest_class_via_account in HARVEST_CLASSES and not is_aggregator_child:
             if canon in aggregator_expanded:
                 return
             aggregator_expanded.add(canon)
-            children: list[str] = []
-            if aggregators_linktree.is_linktree(canon):
-                children = aggregators_linktree.resolve(canon)
-            elif aggregators_beacons.is_beacons(canon):
-                children = aggregators_beacons.resolve(canon)
-            else:
-                children = aggregators_custom.resolve(canon)
-            for child in children:
-                _classify_and_enrich(child, depth=depth + 1, is_aggregator_child=True)
+            harvested = harvest_urls(canon, supabase=supabase)
+            for h in harvested:
+                # Pass canonical URL to _classify_and_enrich; it will re-canonicalize
+                # (idempotent) and re-classify. Cache layer absorbs any cost.
+                _classify_and_enrich(h.canonical_url, depth=depth + 1, is_aggregator_child=True)
             return
 
         # If profile, try to enrich (if budget allows + fetcher exists)
