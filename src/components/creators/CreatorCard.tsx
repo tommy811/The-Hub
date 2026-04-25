@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ interface CreatorCardProps {
   updatedAgo: string;
   hasMergeCandidate: boolean;
   errorMessage?: string;
+  lastDiscoveryRunId?: string | null;
 }
 
 const GRADIENTS = [
@@ -97,7 +99,8 @@ function CreatorCardAvatar({
 export function CreatorCard({
   id, canonicalName, slug, avatarUrl, primaryPlatform, status,
   trackingType, monetizationModel, tags, knownUsernames = [],
-  accountCounts, totalFollowers, updatedAgo, hasMergeCandidate, errorMessage
+  accountCounts, totalFollowers, updatedAgo, hasMergeCandidate, errorMessage,
+  lastDiscoveryRunId,
 }: CreatorCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -121,7 +124,7 @@ export function CreatorCard({
     <AnimatePresence mode="wait">
       {status === 'processing' && (
         <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <CreatorCardContainer className="opacity-60 pointer-events-none">
+          <CreatorCardContainer className="opacity-80 pointer-events-none">
             <div className="absolute top-4 right-4 text-indigo-400">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
@@ -133,9 +136,15 @@ export function CreatorCard({
               </div>
               <div className="text-xs text-indigo-400/80 font-medium">Discovering {canonicalName}…</div>
             </div>
-            <div className="p-4 border-t border-border/30 flex gap-2">
-              <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
-              <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
+            <div className="p-4 border-t border-border/30">
+              {lastDiscoveryRunId ? (
+                <DiscoveryProgress runId={lastDiscoveryRunId} />
+              ) : (
+                <div className="flex gap-2">
+                  <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
+                  <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
+                </div>
+              )}
             </div>
           </CreatorCardContainer>
         </motion.div>

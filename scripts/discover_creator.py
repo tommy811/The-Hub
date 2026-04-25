@@ -136,6 +136,23 @@ def mark_discovery_failed_with_retry(sb, run_id: UUID, error: str) -> None:
         _write_dead_letter(run_id, error)
 
 
+def _make_progress_writer(sb, run_id):
+    """Returns a callable that updates discovery_runs.progress_pct/label.
+
+    Failures are non-fatal — pipeline keeps running even if the progress
+    write fails. The point is communicative UX, not bookkeeping correctness.
+    """
+    def _emit(pct: int, label: str) -> None:
+        try:
+            sb.table("discovery_runs").update({
+                "progress_pct": pct,
+                "progress_label": label,
+            }).eq("id", str(run_id)).execute()
+        except Exception as e:
+            console.log(f"[yellow]progress update failed: {e}[/yellow]")
+    return _emit
+
+
 def _classify_account_type_for(platform: str, discovered_urls: list, canonical_url: str) -> str:
     """Map from discovered_urls list entry to account_type for the profile row."""
     for du in discovered_urls:
@@ -258,6 +275,7 @@ def run(inp: DiscoveryInput, bulk_import_id: str | None = None,
         cap_cents=cap_cents,
         on_warning=lambda msg: console.log(f"[yellow]{msg}[/yellow]"),
     )
+    progress = _make_progress_writer(sb, inp.run_id)
     try:
         console.log(f"[blue]Starting v2 discovery run {inp.run_id} "
                     f"(@{inp.input_handle}, {inp.input_platform_hint})[/blue]")
@@ -267,9 +285,12 @@ def run(inp: DiscoveryInput, bulk_import_id: str | None = None,
             supabase=sb,
             apify_client=get_apify_client(),
             budget=budget,
+            progress=progress,
         )
 
+        progress(90, "Saving")
         _commit_v2(sb, inp.run_id, inp.workspace_id, result, bulk_import_id)
+        progress(100, "Done")
 
         sb.table("discovery_runs").update({
             "apify_cost_cents": budget.spent_cents,

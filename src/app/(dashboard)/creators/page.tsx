@@ -87,6 +87,7 @@ export default async function CreatorsHubPage({
       updatedAgo: relativeTime(c.updated_at),
       hasMergeCandidate: creatorIdsWithMerge.has(c.id),
       errorMessage: c.last_discovery_error ?? undefined,
+      lastDiscoveryRunId: c.last_discovery_run_id ?? null,
     }
   })
 

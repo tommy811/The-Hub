@@ -155,6 +155,35 @@ export async function retryCreatorDiscovery(
   }
 }
 
+// ---------- getDiscoveryProgress ----------
+
+export type DiscoveryProgress = {
+  status: "pending" | "processing" | "completed" | "failed"
+  progressPct: number
+  progressLabel: string | null
+}
+
+export async function getDiscoveryProgress(
+  runId: string
+): Promise<Result<DiscoveryProgress>> {
+  try {
+    const supabase = createServiceClient()
+    const { data, error } = await supabase
+      .from("discovery_runs")
+      .select("status, progress_pct, progress_label")
+      .eq("id", runId)
+      .single()
+    if (error) return err(error.message)
+    return ok({
+      status: data.status as DiscoveryProgress["status"],
+      progressPct: data.progress_pct ?? 0,
+      progressLabel: data.progress_label ?? null,
+    })
+  } catch (e: any) {
+    return err(e?.message ?? "Failed to fetch progress")
+  }
+}
+
 // ---------- dismissMergeCandidate ----------
 
 export async function dismissMergeCandidate(

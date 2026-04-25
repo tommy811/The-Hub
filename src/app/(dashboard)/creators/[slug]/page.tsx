@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { MergeBannerActions } from "@/components/creators/MergeBannerActions";
 import { FailedRetryButton } from "@/components/creators/FailedRetryButton";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
@@ -229,9 +230,14 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
 
       {/* Status banners */}
       {creator.onboarding_status === 'processing' && (
-        <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl text-indigo-400 flex items-center gap-3">
-          <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
-          <span className="text-sm font-medium">Discovering network footprint… Accounts will appear below as they&apos;re mapped.</span>
+        <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl text-indigo-400 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+            <span className="text-sm font-medium">Discovering network footprint… Accounts will appear below as they&apos;re mapped.</span>
+          </div>
+          {creator.last_discovery_run_id && (
+            <DiscoveryProgress runId={creator.last_discovery_run_id} />
+          )}
         </div>
       )}
 

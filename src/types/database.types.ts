@@ -681,6 +681,8 @@ export type Database = {
           input_screenshot_path: string | null
           input_url: string | null
           merge_candidates_raised: number | null
+          progress_label: string | null
+          progress_pct: number
           raw_gemini_response: Json | null
           source: string
           started_at: string | null
@@ -704,6 +706,8 @@ export type Database = {
           input_screenshot_path?: string | null
           input_url?: string | null
           merge_candidates_raised?: number | null
+          progress_label?: string | null
+          progress_pct?: number
           raw_gemini_response?: Json | null
           source?: string
           started_at?: string | null
@@ -727,6 +731,8 @@ export type Database = {
           input_screenshot_path?: string | null
           input_url?: string | null
           merge_candidates_raised?: number | null
+          progress_label?: string | null
+          progress_pct?: number
           raw_gemini_response?: Json | null
           source?: string
           started_at?: string | null

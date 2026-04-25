@@ -136,6 +136,7 @@ def resolve_seed(
     handle: str, platform_hint: str,
     supabase, apify_client: ApifyClient,
     budget: BudgetTracker,
+    progress=None,
 ) -> ResolverResult:
     """Two-stage resolver for one seed.
 
@@ -143,13 +144,23 @@ def resolve_seed(
     Stage B: classify + enrich every discovered URL. Aggregators expanded once.
     Gemini pass: canonicalization + niche + text_mentions. Text mentions fed
     back into Stage B once per seed (no further recursion).
+
+    progress: optional callable(pct, label) — invoked at stage boundaries so
+    the UI can render a real progress bar. Decoupled from supabase to keep
+    the resolver mockable in tests.
     """
+    def _emit(pct: int, label: str) -> None:
+        if progress is not None:
+            progress(pct, label)
+
     # Stage A
+    _emit(10, "Fetching profile")
     budget.debit(f"apify/{platform_hint}-scraper", _apify_cost(platform_hint))
     seed_ctx = fetch_seed(handle, platform_hint, apify_client)
     console.log(f"[cyan]Stage A: @{handle} on {platform_hint} — "
                 f"bio={bool(seed_ctx.bio)} followers={seed_ctx.follower_count} "
                 f"external={len(seed_ctx.external_urls)}[/cyan]")
+    _emit(35, "Resolving links")
 
     discovered: list[DiscoveredUrl] = []
     enriched: dict[str, InputContext] = {}
@@ -222,6 +233,7 @@ def resolve_seed(
             break
 
     # Gemini pass
+    _emit(70, "Analyzing")
     gemini_result = run_gemini_discovery_v2(seed_ctx)
 
     # Stage B for text_mentions (one-shot expansion only, no further recursion)
