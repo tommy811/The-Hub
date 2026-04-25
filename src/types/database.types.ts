@@ -830,21 +830,30 @@ export type Database = {
           canonical_url: string
           created_at: string
           destination_class: string
+          harvest_method: string | null
+          harvested_at: string | null
           profile_id: string
+          raw_text: string | null
           workspace_id: string
         }
         Insert: {
           canonical_url: string
           created_at?: string
           destination_class: string
+          harvest_method?: string | null
+          harvested_at?: string | null
           profile_id: string
+          raw_text?: string | null
           workspace_id: string
         }
         Update: {
           canonical_url?: string
           created_at?: string
           destination_class?: string
+          harvest_method?: string | null
+          harvested_at?: string | null
           profile_id?: string
+          raw_text?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -1245,6 +1254,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      url_harvest_cache: {
+        Row: {
+          canonical_url: string
+          created_at: string
+          destinations: Json
+          expires_at: string
+          harvest_method: string
+          harvested_at: string
+        }
+        Insert: {
+          canonical_url: string
+          created_at?: string
+          destinations: Json
+          expires_at: string
+          harvest_method: string
+          harvested_at?: string
+        }
+        Update: {
+          canonical_url?: string
+          created_at?: string
+          destinations?: Json
+          expires_at?: string
+          harvest_method?: string
+          harvested_at?: string
+        }
+        Relationships: []
       }
       workspace_members: {
         Row: {
