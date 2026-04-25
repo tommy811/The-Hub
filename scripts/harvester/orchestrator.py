@@ -5,6 +5,8 @@ This is the single entry point used by pipeline/resolver.py. The recursion
 structure in `_classify_and_enrich` calls this with one URL at a time and
 recurses on the results based on `HARVEST_CLASSES`.
 """
+from urllib.parse import urlparse
+
 from harvester.cache import lookup_cache, write_cache
 from harvester.types import HarvestedUrl
 from harvester.tier1_static import fetch_static
@@ -12,7 +14,26 @@ from harvester.tier2_headless import fetch_headless
 from pipeline.canonicalize import canonicalize_url
 from pipeline.classifier import classify
 
-# `destination_class` derived from classifier's account_type.
+# Hosts that override the account_type → destination_class mapping. Affiliate
+# redirectors are stored as 'monetization' in the gazetteer (so dedup works
+# across creators) but here we promote to 'affiliate' for the UI.
+_AFFILIATE_HOSTS = {
+    "amzn.to", "geni.us", "lnk.to", "ltk.app", "rstyle.me", "shopstyle.it",
+    "shareasale.com", "skimresources.com",
+}
+
+# Content platforms — gazetteer returns 'other'; promoted to 'content'.
+_CONTENT_HOSTS = {
+    "substack.com", "medium.com", "ghost.io",
+    "open.spotify.com", "spotify.com", "podcasts.apple.com",
+}
+
+# Commerce platforms — gazetteer returns 'monetization'; promoted to 'commerce'.
+_COMMERCE_HOSTS = {
+    "shopify.com", "depop.com", "etsy.com",
+}
+
+# Base mapping when no host-aware override applies.
 _DEST_CLASS_FROM_ACCOUNT_TYPE = {
     "monetization": "monetization",
     "link_in_bio": "aggregator",
@@ -21,7 +42,26 @@ _DEST_CLASS_FROM_ACCOUNT_TYPE = {
 }
 
 
-def _destination_class_for(account_type: str) -> str:
+def _destination_class_for(account_type: str, canonical_url: str = "") -> str:
+    """Map (account_type, canonical_url) → destination_class.
+
+    Host-aware overrides (substack subdomain, amzn.to redirector, etc.) take
+    precedence over the simple account_type map. Falls through to 'unknown'.
+    """
+    if canonical_url:
+        host = (urlparse(canonical_url).hostname or "").lower().removeprefix("www.")
+        # Subdomain-aware match for substack (e.g. example.substack.com)
+        if host.endswith(".substack.com") or host == "substack.com":
+            return "content"
+        # Subdomain-aware match for shopify (e.g. example.shopify.com)
+        if host.endswith(".shopify.com") or host == "shopify.com":
+            return "commerce"
+        if host in _AFFILIATE_HOSTS:
+            return "affiliate"
+        if host in _CONTENT_HOSTS:
+            return "content"
+        if host in _COMMERCE_HOSTS:
+            return "commerce"
     return _DEST_CLASS_FROM_ACCOUNT_TYPE.get(account_type, "unknown")
 
 
@@ -70,7 +110,7 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
             canonical_url=canon,
             raw_url=raw_url,
             raw_text=raw_text,
-            destination_class=_destination_class_for(cls.account_type),
+            destination_class=_destination_class_for(cls.account_type, canon),
             harvest_method=harvest_method,
         ))
 

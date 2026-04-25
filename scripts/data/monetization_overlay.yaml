@@ -86,3 +86,99 @@ entries:
   - host: telegram.me
     platform: telegram_channel
     account_type: messaging
+
+  # === Universal Harvester v1 additions (2026-04-26) ===
+
+  # Tip jars / micro-monetization
+  - host: buymeacoffee.com
+    platform: other
+    account_type: monetization
+  - host: ko-fi.com
+    platform: other
+    account_type: monetization
+  - host: throne.com
+    platform: other
+    account_type: monetization
+
+  # Newsletter / blog content platforms (account_type stays 'other'; host-aware
+  # mapping in orchestrator promotes destination_class to 'content')
+  - host: substack.com
+    platform: other
+    account_type: other
+  - host: medium.com
+    platform: other
+    account_type: other
+  - host: ghost.io
+    platform: other
+    account_type: other
+
+  # Audio / podcast content
+  - host: open.spotify.com
+    platform: other
+    account_type: other
+  - host: spotify.com
+    platform: other
+    account_type: other
+  - host: podcasts.apple.com
+    platform: other
+    account_type: other
+
+  # Messaging additions
+  - host: wa.me
+    platform: other
+    account_type: messaging
+  - host: discord.gg
+    platform: other
+    account_type: messaging
+  - host: discord.com
+    platform: other
+    account_type: messaging
+    url_pattern: '^/invite/'
+
+  # Affiliate redirectors (host-aware mapping promotes to 'affiliate')
+  - host: amzn.to
+    platform: other
+    account_type: monetization
+  - host: geni.us
+    platform: other
+    account_type: monetization
+  - host: lnk.to
+    platform: other
+    account_type: monetization
+  - host: ltk.app
+    platform: other
+    account_type: monetization
+  - host: rstyle.me
+    platform: other
+    account_type: monetization
+  - host: shopstyle.it
+    platform: other
+    account_type: monetization
+
+  # Commerce — extend (host-aware mapping promotes to 'commerce')
+  - host: shopify.com
+    platform: other
+    account_type: monetization
+  - host: depop.com
+    platform: other
+    account_type: monetization
+  - host: etsy.com
+    platform: other
+    account_type: monetization
+
+  # Aggregator overlay — confirm tapforallmylinks + launchyoursocials variants
+  - host: tapforallmylinks.com
+    platform: custom_domain
+    account_type: link_in_bio
+  - host: launchyoursocials.com
+    platform: custom_domain
+    account_type: link_in_bio
+  - host: allmylinks.com
+    platform: custom_domain
+    account_type: link_in_bio
+  - host: snipfeed.co
+    platform: custom_domain
+    account_type: link_in_bio
+  - host: lnk.bio
+    platform: custom_domain
+    account_type: link_in_bio
