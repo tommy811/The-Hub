@@ -96,7 +96,12 @@ class DiscoveryResult(BaseModel):
 
 # --- v2 additions ---
 
-DestinationClass = Literal["monetization", "aggregator", "social", "other"]
+DestinationClass = Literal[
+    "monetization", "aggregator", "social",
+    "commerce", "messaging", "content",
+    "affiliate", "professional",
+    "other", "unknown",
+]
 DiscoverySource = Literal["seed", "manual_add", "retry", "auto_expand"]
 
 
