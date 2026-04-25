@@ -176,6 +176,7 @@ def resolve_seed(
     enriched: dict[str, InputContext] = {}
     visited_canonical: set[str] = set()
     aggregator_expanded: set[str] = set()
+    mapping_label_emitted = False
 
     def _classify_and_enrich(url: str, depth: int, is_aggregator_child: bool = False):
         """Classify URL, optionally enrich profile, record in discovered list.
@@ -183,6 +184,7 @@ def resolve_seed(
         depth = the depth the URL itself sits at. Seed.external_urls items are
         depth=1. Aggregator children inherit depth from the aggregator + 1.
         """
+        nonlocal mapping_label_emitted
         if depth > MAX_DEPTH:
             return  # defensive cap
 
@@ -244,8 +246,14 @@ def resolve_seed(
                 console.log(f"[yellow]enrichment failed for {canon}: {e}[/yellow]")
                 return
 
-            # Recurse into the enriched ctx (Task 4 will populate this body)
-            # Placeholder for now — leaves behavior unchanged
+            # NEW: recurse into the freshly-enriched ctx
+            if not mapping_label_emitted:
+                _emit(50, "Mapping secondary funnels")
+                mapping_label_emitted = True
+            try:
+                _expand(ctx, depth=depth)
+            except BudgetExhaustedError:
+                return
 
     def _expand(ctx: InputContext, depth: int) -> None:
         """Expand ctx's outbound links one hop further.
