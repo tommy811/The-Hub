@@ -143,17 +143,13 @@ Bio:
 """.strip()
 
 
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=1, max=4),
-    retry=retry_if_not_exception_type(ValidationError),
-    reraise=True,
-)
 def run_gemini_bio_mentions(ctx: InputContext) -> list[TextMention]:
     """Lightweight Gemini Flash call: extract handle mentions from a secondary's bio.
 
     Returns [] on empty bio, validation error, or any failure. Never raises —
-    a failed bio-mentions extraction must not crash discovery.
+    a failed bio-mentions extraction must not crash discovery. The outer
+    try/except absorbs every error path, so a tenacity decorator would never
+    see a re-raise; transient API errors quietly return [] and we move on.
     """
     if not (ctx.bio or "").strip():
         return []
@@ -178,7 +174,7 @@ def run_gemini_bio_mentions(ctx: InputContext) -> list[TextMention]:
                     handle=m["handle"],
                     source="enriched_bio",
                 ))
-            except (ValidationError, KeyError):
+            except (ValidationError, KeyError, TypeError, AttributeError):
                 continue
         return out
     except Exception as e:
