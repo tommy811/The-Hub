@@ -109,6 +109,17 @@ def _apify_cost(platform: str) -> int:
     }.get(platform, 0)
 
 
+def _confidence_at_depth(depth: int) -> float:
+    """Discovery confidence by hop distance from the seed.
+
+    depth 0 = seed (1.0), depth 1 = direct (0.9 — preserves existing behaviour),
+    drops 0.05 per hop, floors at 0.5.
+    """
+    if depth <= 0:
+        return 1.0
+    return max(0.5, 0.9 - 0.05 * (depth - 1))
+
+
 def _handle_from_url(url: str, platform: str) -> str | None:
     """Extract a handle from a URL. Returns None if the URL shape is unrecognized."""
     parts = urlparse(url).path.strip("/").split("/")

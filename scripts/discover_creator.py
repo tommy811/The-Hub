@@ -15,7 +15,7 @@ from schemas import DiscoveryInput, InputContext, DiscoveryResultV2, TextMention
 from apify_scraper import get_apify_client, scrape_instagram_profile
 from fetchers.base import EmptyDatasetError
 
-from pipeline.resolver import resolve_seed, ResolverResult
+from pipeline.resolver import resolve_seed, ResolverResult, _confidence_at_depth
 from pipeline.budget import BudgetTracker, BudgetExhaustedError
 
 
@@ -304,7 +304,11 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
         "reasoning": "seed",
     }]
 
+    # Build a depth lookup once.
+    depth_for_canon = {du.canonical_url: du.depth for du in result.discovered_urls}
+
     for canon, ctx in result.enriched_contexts.items():
+        d = depth_for_canon.get(canon, 1)
         accounts.append({
             "platform": ctx.platform,
             "handle": ctx.handle,
@@ -314,7 +318,7 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
             "follower_count": ctx.follower_count,
             "account_type": _classify_account_type_for(ctx.platform, result.discovered_urls, canon),
             "is_primary": False,
-            "discovery_confidence": 0.9,
+            "discovery_confidence": _confidence_at_depth(d),
             "reasoning": ctx.source_note,
         })
 
@@ -333,7 +337,7 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
             "follower_count": None,
             "account_type": du.account_type,
             "is_primary": False,
-            "discovery_confidence": 0.6,
+            "discovery_confidence": _confidence_at_depth(du.depth),
             "reasoning": f"discovered_only_no_fetcher: {du.reason}",
         })
 

@@ -85,18 +85,21 @@ def test_commit_v2_persists_novel_platform_urls_as_profiles():
             canonical_url="https://onlyfans.com/alice_of",
             platform="onlyfans", account_type="monetization",
             destination_class="monetization", reason="rule:onlyfans_monetization",
+            depth=1,
         ),
         # Novel platform — no fetcher exists for "other"
         DiscoveredUrl(
             canonical_url="https://wattpad.com/user/alice_writes",
             platform="other", account_type="other",
             destination_class="other", reason="llm:high_confidence",
+            depth=1,
         ),
         # Aggregator that resolver expanded but never enriched
         DiscoveredUrl(
             canonical_url="https://linktr.ee/alice",
             platform="linktree", account_type="link_in_bio",
             destination_class="aggregator", reason="rule:linktree_link_in_bio",
+            depth=1,
         ),
     ]
     result = ResolverResult(
@@ -123,7 +126,7 @@ def test_commit_v2_persists_novel_platform_urls_as_profiles():
     assert wattpad["account_type"] == "other"
     assert wattpad["follower_count"] is None
     assert wattpad["bio"] is None
-    assert wattpad["discovery_confidence"] == 0.6
+    assert wattpad["discovery_confidence"] == 0.9  # depth=1 → 0.9
     assert wattpad["reasoning"].startswith("discovered_only_no_fetcher:")
 
     linktree = next(a for a in accounts if a["url"] == "https://linktr.ee/alice")
@@ -140,7 +143,7 @@ def test_commit_v2_does_not_duplicate_enriched_destinations():
         DiscoveredUrl(
             canonical_url=canon, platform="onlyfans",
             account_type="monetization", destination_class="monetization",
-            reason="rule:onlyfans_monetization",
+            reason="rule:onlyfans_monetization", depth=1,
         ),
     ]
     result = ResolverResult(
@@ -158,5 +161,5 @@ def test_commit_v2_does_not_duplicate_enriched_destinations():
     of_entries = [a for a in accounts if a["url"] == canon]
     assert len(of_entries) == 1
     assert of_entries[0]["follower_count"] is None or of_entries[0]["bio"] is None or True
-    # The kept entry is the enriched one (discovery_confidence=0.9), not the stub (0.6)
+    # depth=1 → confidence=0.9 (depth-aware formula)
     assert of_entries[0]["discovery_confidence"] == 0.9

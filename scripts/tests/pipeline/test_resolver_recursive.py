@@ -327,6 +327,57 @@ def test_run_gemini_bio_mentions_returns_empty_for_empty_bio():
     assert run_gemini_bio_mentions(ctx) == []
 
 
+def test_confidence_at_depth_formula():
+    from pipeline.resolver import _confidence_at_depth
+    assert _confidence_at_depth(0) == 1.0   # seed
+    assert _confidence_at_depth(1) == 0.9   # matches existing hardcoded value
+    assert abs(_confidence_at_depth(2) - 0.85) < 1e-9
+    assert abs(_confidence_at_depth(5) - 0.7) < 1e-9
+    assert _confidence_at_depth(20) == 0.5  # floor
+
+
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_depth_propagates_into_discovered_urls(
+    mock_fetch_seed, mock_classify, mock_gemini, mock_ig,
+):
+    """End-to-end: a depth-2 URL must have depth=2 on its DiscoveredUrl row."""
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec"],
+    )
+    mock_ig.return_value = _mk_ctx(
+        handle="sec", platform="instagram",
+        external_urls=["https://onlyfans.com/sec"],
+    )
+    classifications = iter([
+        Classification(platform="instagram", account_type="social",
+                       confidence=1.0, reason="rule:instagram_social"),
+        Classification(platform="onlyfans", account_type="monetization",
+                       confidence=1.0, reason="rule:onlyfans_monetization"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    by_url = {du.canonical_url: du for du in result.discovered_urls}
+    ig = next(du for url, du in by_url.items() if "instagram.com/sec" in url)
+    of = next(du for url, du in by_url.items() if "onlyfans.com" in url)
+    assert ig.depth == 1, f"IG should be depth 1, got {ig.depth}"
+    assert of.depth == 2, f"OF should be depth 2, got {of.depth}"
+
+
 @patch("pipeline.resolver.run_gemini_bio_mentions")
 @patch("pipeline.resolver.fetch_ig.fetch")
 @patch("pipeline.resolver.run_gemini_discovery_v2")
