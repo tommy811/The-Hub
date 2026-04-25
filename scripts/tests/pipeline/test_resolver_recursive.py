@@ -277,3 +277,44 @@ def test_budget_exhaustion_during_recursion_returns_partial(
     assert any("sec1" in u for u in urls)
     assert not any("sec3" in u for u in urls), \
         f"sec3 should not have been fetched: {urls}"
+
+
+@patch("pipeline.resolver.fetch_of.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_terminal_secondary_dead_ends_cleanly(
+    mock_fetch_seed, mock_classify, mock_gemini, mock_of_fetch,
+):
+    """An OnlyFans secondary returns a ctx with no externals + no bio.
+    Resolver must end the chain there with no error."""
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://onlyfans.com/seed"],
+    )
+    mock_of_fetch.return_value = _mk_ctx(
+        handle="seed", platform="onlyfans",
+        bio="", external_urls=[],
+    )
+    mock_classify.return_value = Classification(
+        platform="onlyfans", account_type="monetization",
+        confidence=1.0, reason="rule:onlyfans_monetization",
+    )
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    assert isinstance(result, ResolverResult)
+    canonicals = [du.canonical_url for du in result.discovered_urls]
+    assert len(canonicals) == 1
+    assert "onlyfans.com/seed" in canonicals[0]
+    assert any("onlyfans.com" in k for k in result.enriched_contexts.keys())
