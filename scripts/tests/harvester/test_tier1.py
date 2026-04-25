@@ -32,12 +32,25 @@ def test_parse_clean_linktree_no_signals_tripped():
     assert result.needs_tier2() is False
 
 
-def test_parse_tapforallmylinks_trips_interstitial_signal():
+def test_parse_tapforallmylinks_trips_signals_for_tier2_escalation():
+    """Live tapforallmylinks page must escalate to Tier 2 via SOME signal.
+
+    The page is Astro/SPA-rendered: 'Sensitive Content' / 'Open link' interstitial
+    text appears only after JS hydration, NOT in static HTML. So the `interstitial`
+    keyword signal won't trip on this fixture, but the page still must be flagged
+    for Tier 2 — via either `button_with_platform_icon` (the Fanplace gate) or
+    `spa_hydration` (the astro-island markers).
+    """
     html = _read("tapforallmylinks_esmae.html")
     result = parse_html(html)
-    # Page contains "Sensitive Content" + "Open link" — at least one should trip
-    assert "interstitial" in result.signals_tripped
     assert result.needs_tier2() is True
+    # At least one of these specific signals should trip — interstitial keywords
+    # may or may not appear in the static HTML depending on the page's framework.
+    expected_signals = {"button_with_platform_icon", "spa_hydration"}
+    assert expected_signals & result.signals_tripped, (
+        f"Expected at least one of {expected_signals} to trip; "
+        f"got {result.signals_tripped}"
+    )
 
 
 def test_parse_tapforallmylinks_trips_button_with_platform_icon_signal():
@@ -45,6 +58,19 @@ def test_parse_tapforallmylinks_trips_button_with_platform_icon_signal():
     result = parse_html(html)
     # Page has <button> elements with platform-logo SVGs (Fanplace gate)
     assert "button_with_platform_icon" in result.signals_tripped
+
+
+def test_parse_synthetic_interstitial_keywords_trip_signal():
+    """Direct test of the interstitial-keyword path. The keyword detector is the
+    primary signal for non-SPA aggregators that put the gate copy in static HTML."""
+    html = """<html><body>
+        <h2>Sensitive Content</h2>
+        <p>This link may contain content that is not appropriate for all audiences.</p>
+        <button>Open link</button>
+    </body></html>"""
+    result = parse_html(html)
+    assert "interstitial" in result.signals_tripped
+    assert result.needs_tier2() is True
 
 
 def test_parse_spa_hydration_trips_spa_signal():

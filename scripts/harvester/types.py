@@ -29,6 +29,7 @@ SPA_MARKERS: frozenset[str] = frozenset({
     "__next_data__",
     "data-vue-meta",
     "data-svelte",
+    "astro-island",  # Astro 4+ uses <astro-island> custom elements for hydration
 })
 
 # Floor below which an aggregator-shaped page looks suspicious.
