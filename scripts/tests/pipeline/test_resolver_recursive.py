@@ -554,3 +554,16 @@ def test_resolver_module_exposes_fetch_highlights_wrapper():
     from pipeline import resolver
     assert hasattr(resolver, "fetch_highlights"), \
         "pipeline.resolver must export fetch_highlights for test patching"
+
+
+def test_resolver_module_exposes_highlights_enabled_constant():
+    from pipeline import resolver
+    assert hasattr(resolver, "HIGHLIGHTS_ENABLED")
+    assert isinstance(resolver.HIGHLIGHTS_ENABLED, bool)
+
+
+def test_resolver_module_exposes_highlights_cost_cents_constant():
+    from pipeline import resolver
+    assert hasattr(resolver, "HIGHLIGHTS_COST_CENTS")
+    assert isinstance(resolver.HIGHLIGHTS_COST_CENTS, int)
+    assert resolver.HIGHLIGHTS_COST_CENTS > 0

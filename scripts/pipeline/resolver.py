@@ -44,6 +44,15 @@ MAX_DEPTH = int(os.getenv("DISCOVERY_MAX_DEPTH", "6"))
 # in addition to their explicit external_urls. Default ON — call is ~$0.001.
 RECURSIVE_GEMINI = os.getenv("DISCOVERY_RECURSIVE_GEMINI", "1") == "1"
 
+# When True, enriched IG profiles at depth >= 1 get a highlights scrape via
+# apify/instagram-scraper resultsType=stories. Default ON — closes the gap where
+# CTAs live in highlights instead of bio. Kill switch for emergency rollback.
+HIGHLIGHTS_ENABLED = os.getenv("DISCOVERY_HIGHLIGHTS_ENABLED", "1") == "1"
+
+# Cost gate for the highlights scrape. Hand-maintained, err on the high side per
+# existing _APIFY_COSTS convention. ~50 story items per profile × $1/1000 = $0.05.
+HIGHLIGHTS_COST_CENTS = int(os.getenv("DISCOVERY_HIGHLIGHTS_COST_CENTS", "5"))
+
 
 @dataclass
 class ResolverResult:
