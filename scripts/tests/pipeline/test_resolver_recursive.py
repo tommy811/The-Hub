@@ -177,3 +177,59 @@ def test_cycle_dedup_prevents_infinite_loop(
     assert any("instagram.com" in c for c in canonicals)
     assert not any("tiktok.com" in k for k in result.enriched_contexts.keys()), \
         f"TT seed was re-fetched via cycle: {result.enriched_contexts}"
+
+
+@patch("pipeline.resolver.aggregators_linktree.resolve")
+@patch("pipeline.resolver.aggregators_linktree.is_linktree")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_aggregator_chain_blocked_at_depth_one(
+    mock_fetch_seed, mock_classify, mock_gemini, mock_ig_fetch,
+    mock_is_linktree, mock_linktree_resolve,
+):
+    """Seed -> IG (depth 1) -> Linktree (depth 2) -> children include another Linktree.
+    The second Linktree must NOT be re-expanded."""
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/secondary"],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="secondary", platform="instagram",
+        external_urls=["https://linktr.ee/main"],
+    )
+
+    mock_is_linktree.side_effect = lambda u: "linktr.ee" in u
+    mock_linktree_resolve.return_value = [
+        "https://onlyfans.com/x",
+        "https://linktr.ee/another",
+    ]
+
+    classifications = iter([
+        Classification(platform="instagram", account_type="social",
+                       confidence=1.0, reason="rule:instagram_social"),
+        Classification(platform="linktree", account_type="link_in_bio",
+                       confidence=1.0, reason="rule:linktree_link_in_bio"),
+        Classification(platform="onlyfans", account_type="monetization",
+                       confidence=1.0, reason="rule:onlyfans_monetization"),
+        Classification(platform="linktree", account_type="link_in_bio",
+                       confidence=1.0, reason="rule:linktree_link_in_bio"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    assert mock_linktree_resolve.call_count == 1, \
+        f"second linktree was re-expanded: {mock_linktree_resolve.call_count} calls"
+    assert len(result.discovered_urls) == 4
