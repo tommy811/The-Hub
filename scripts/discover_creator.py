@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID
 
 import google.generativeai as genai
@@ -143,6 +144,20 @@ def _classify_account_type_for(platform: str, discovered_urls: list, canonical_u
     return "other"
 
 
+def _synthesize_handle_from_url(url: str) -> str:
+    """Best-effort handle when no fetcher provided one.
+
+    Used for novel platforms (Wattpad, Substack, etc.) where no platform
+    fetcher exists. Persisting the row keeps the destination on the creator
+    HQ page instead of leaving it stranded in profile_destination_links.
+    """
+    parsed = urlparse(url)
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if parts:
+        return parts[-1].lstrip("@").split("?")[0]
+    return parsed.netloc or url
+
+
 def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
                 bulk_import_id: str | None) -> None:
     """Build the v2 commit_discovery_result payload from the resolver output."""
@@ -174,6 +189,25 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
             "is_primary": False,
             "discovery_confidence": 0.9,
             "reasoning": ctx.source_note,
+        })
+
+    # Persist discovered URLs that no fetcher enriched (novel platforms,
+    # link-in-bio aggregators, budget-skipped profiles). Without this they'd
+    # only land in profile_destination_links and never render on the HQ page.
+    for du in result.discovered_urls:
+        if du.canonical_url in result.enriched_contexts:
+            continue
+        accounts.append({
+            "platform": du.platform,
+            "handle": _synthesize_handle_from_url(du.canonical_url),
+            "url": du.canonical_url,
+            "display_name": None,
+            "bio": None,
+            "follower_count": None,
+            "account_type": du.account_type,
+            "is_primary": False,
+            "discovery_confidence": 0.6,
+            "reasoning": f"discovered_only_no_fetcher: {du.reason}",
         })
 
     funnel_edges = []
