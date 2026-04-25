@@ -117,6 +117,26 @@ class TextMention(BaseModel):
     source: Literal["seed_bio", "enriched_bio"] = "seed_bio"
 
 
+HighlightSource = Literal["highlight_link_sticker", "highlight_caption_mention"]
+
+
+class HighlightLink(BaseModel):
+    """A URL or handle surfaced from an IG highlight item.
+
+    Two flavors:
+    - `highlight_link_sticker`: an absolute URL clicked through the link sticker.
+      `url` is populated; `platform`/`handle` may be None.
+    - `highlight_caption_mention`: a @handle mention in the caption/text overlay,
+      extracted by Gemini. `platform` + `handle` are populated; `url` is "" (the
+      resolver synthesizes it via _synthesize_url).
+    """
+    url: str = ""
+    source: HighlightSource
+    platform: Optional[Platform] = None
+    handle: Optional[str] = None
+    source_text: Optional[str] = None  # raw caption / sticker title for debugging
+
+
 class DiscoveryResultV2(BaseModel):
     """Narrower Gemini output shape — no URL classification, no account proposals.
 

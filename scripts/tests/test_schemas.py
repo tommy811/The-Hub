@@ -158,3 +158,36 @@ class TestDiscoveryResultV2:
         )
         assert not hasattr(r, "proposed_accounts")
         assert not hasattr(r, "proposed_funnel_edges")
+
+
+class TestHighlightLink:
+    def test_link_sticker_minimal(self):
+        from schemas import HighlightLink
+        link = HighlightLink(
+            url="https://onlyfans.com/kira",
+            source="highlight_link_sticker",
+        )
+        assert link.url == "https://onlyfans.com/kira"
+        assert link.source == "highlight_link_sticker"
+        assert link.platform is None  # only relevant for caption mentions
+        assert link.handle is None
+        assert link.source_text is None  # optional context
+
+    def test_caption_mention_with_platform_handle(self):
+        from schemas import HighlightLink
+        link = HighlightLink(
+            url="",  # synthesized later
+            source="highlight_caption_mention",
+            platform="tiktok",
+            handle="kira_tt",
+            source_text="follow my tt @kira_tt",
+        )
+        assert link.platform == "tiktok"
+        assert link.handle == "kira_tt"
+
+    def test_rejects_unknown_source(self):
+        from schemas import HighlightLink
+        from pydantic import ValidationError
+        import pytest as _pt
+        with _pt.raises(ValidationError):
+            HighlightLink(url="https://x", source="not_a_real_source")
