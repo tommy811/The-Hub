@@ -4,16 +4,25 @@ import httpx
 
 # Query params stripped unconditionally
 _TRACKING_PARAMS = {
+    # Legacy (existing)
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "fbclid", "gclid", "igshid", "ref", "ref_src", "ref_url", "si",
     "mc_cid", "mc_eid", "_ga", "yclid", "msclkid",
+    # NEW — observed in 2026-04-25 sensitive-content harvesting
+    "igsh",       # Instagram cross-app share token (different from igshid)
+    "l_",         # tapforallmylinks / launchyoursocials click-tracking token
+    "s",          # twitter/x share param (?s=21, ?s=20)
+    "t",          # twitter/x share token (?t=timestamp)
+    "_t",         # tiktok share token
+    "aff",        # generic affiliate marker
+    "ref_id",     # generic affiliate variant
 }
 
 # Hosts that use known short-URL redirect patterns
 _SHORT_URL_HOSTS = {
     "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly",
     "geni.us", "smart.link", "lnk.to", "lnk.bio",
-    "rebrand.ly", "buff.ly", "fb.me",
+    "rebrand.ly", "buff.ly", "fb.me", "amzn.to",
 }
 
 # Path suffixes stripped on known platforms (social profile landing variants)
@@ -53,6 +62,9 @@ def canonicalize_url(url: str) -> str:
     scheme = "https"
     host = parsed.hostname.lower().removeprefix("www.")
     path = _strip_known_suffixes(host, parsed.path)
+    # Lowercase path for short-URL hosts (Amazon, bit.ly, etc.) for dedup
+    if host in _SHORT_URL_HOSTS:
+        path = path.lower()
     if path.endswith("/") and path != "/":
         path = path.rstrip("/")
 
