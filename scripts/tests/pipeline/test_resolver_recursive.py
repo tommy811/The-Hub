@@ -233,3 +233,47 @@ def test_aggregator_chain_blocked_at_depth_one(
     assert mock_linktree_resolve.call_count == 1, \
         f"second linktree was re-expanded: {mock_linktree_resolve.call_count} calls"
     assert len(result.discovered_urls) == 4
+
+
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_budget_exhaustion_during_recursion_returns_partial(
+    mock_fetch_seed, mock_classify, mock_gemini, mock_ig_fetch,
+):
+    """Budget is tight: seed fetch (10c) + 1 IG enrich (10c) = 20c.
+    Cap = 25c — third IG fetch must be budget-skipped, not crash."""
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec1"],
+    )
+    chain = iter([
+        _mk_ctx(handle="sec1", platform="instagram",
+                external_urls=["https://instagram.com/sec2"]),
+        _mk_ctx(handle="sec2", platform="instagram",
+                external_urls=["https://instagram.com/sec3"]),
+    ])
+    mock_ig_fetch.side_effect = lambda client, h: next(chain)
+    mock_classify.return_value = Classification(
+        platform="instagram", account_type="social",
+        confidence=1.0, reason="rule:instagram_social",
+    )
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=25)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    assert isinstance(result, ResolverResult)
+    urls = [du.canonical_url for du in result.discovered_urls]
+    assert any("sec1" in u for u in urls)
+    assert not any("sec3" in u for u in urls), \
+        f"sec3 should not have been fetched: {urls}"
