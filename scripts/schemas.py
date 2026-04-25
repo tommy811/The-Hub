@@ -113,6 +113,8 @@ class DiscoveredUrl(BaseModel):
     destination_class: DestinationClass
     reason: str  # 'rule:X' | 'llm:high_confidence' | 'llm:cache_hit' | 'llm:low_confidence' | 'llm:timeout' | 'manual_add'
     depth: int = 0  # 0 = seed, 1 = surfaced from seed bio, 2 = surfaced from depth-1's bio, ...
+    harvest_method: Optional[Literal["cache", "httpx", "headless"]] = None
+    raw_text: Optional[str] = None
 
 
 class TextMention(BaseModel):

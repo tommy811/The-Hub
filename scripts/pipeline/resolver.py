@@ -247,6 +247,11 @@ def resolve_seed(
     aggregator_expanded: set[str] = set()
     mapping_label_emitted = False
 
+    # Side-channel for harvester audit fields. Keyed by canonical_url, captured
+    # when the harvester surfaces a URL; consumed by _classify_and_enrich when
+    # building the DiscoveredUrl for that URL.
+    harvest_audit: dict[str, dict] = {}
+
     # Pre-seed visited set so a secondary that mentions us back doesn't re-fetch
     seed_self_url = _build_seed_url(platform_hint, handle)
     if seed_self_url:
@@ -270,6 +275,7 @@ def resolve_seed(
         visited_canonical.add(canon)
 
         cls: Classification = classify(canon, supabase=supabase)
+        audit = harvest_audit.get(canon, {})
         discovered.append(DiscoveredUrl(
             canonical_url=canon,
             platform=cls.platform,
@@ -277,6 +283,8 @@ def resolve_seed(
             destination_class=_destination_class_for(cls.account_type),
             reason=cls.reason,
             depth=depth,
+            harvest_method=audit.get("harvest_method"),
+            raw_text=audit.get("raw_text"),
         ))
 
         # Harvester gate: any class in HARVEST_CLASSES is a routing surface that
@@ -291,6 +299,12 @@ def resolve_seed(
             aggregator_expanded.add(canon)
             harvested = harvest_urls(canon, supabase=supabase)
             for h in harvested:
+                # Stash audit fields so the recursive _classify_and_enrich can pick
+                # them up when building the DiscoveredUrl row for this canonical URL.
+                harvest_audit[h.canonical_url] = {
+                    "harvest_method": h.harvest_method,
+                    "raw_text": h.raw_text,
+                }
                 # Pass canonical URL to _classify_and_enrich; it will re-canonicalize
                 # (idempotent) and re-classify. Cache layer absorbs any cost.
                 _classify_and_enrich(h.canonical_url, depth=depth + 1, is_aggregator_child=True)

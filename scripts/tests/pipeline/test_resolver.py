@@ -220,3 +220,55 @@ def test_discovered_url_has_depth_field_default_zero():
         reason="rule:test",
     )
     assert du.depth == 0
+
+
+@patch("pipeline.resolver.harvest_urls")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_resolver_propagates_harvester_audit_fields_to_discovered_urls(
+    mock_fetch, mock_classify, mock_gemini, mock_harvest,
+):
+    """Audit fields (harvest_method, raw_text) on HarvestedUrl must land on the
+    matching DiscoveredUrl row so they get persisted to profile_destination_links."""
+    from harvester.types import HarvestedUrl
+
+    mock_fetch.return_value = _mk_ctx(
+        external_urls=["https://tapforallmylinks.com/x"],
+    )
+    mock_harvest.return_value = [
+        HarvestedUrl(
+            canonical_url="https://fanplace.com/x",
+            raw_url="https://fanplace.com/x?l_=abc",
+            raw_text="my content",
+            destination_class="monetization",
+            harvest_method="headless",
+        ),
+    ]
+    classifications = iter([
+        Classification(platform="custom_domain", account_type="link_in_bio",
+                       confidence=1.0, reason="rule:custom_domain_link_in_bio"),
+        Classification(platform="fanplace", account_type="monetization",
+                       confidence=1.0, reason="rule:fanplace_monetization"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini.return_value = DiscoveryResultV2(
+        canonical_name="X", known_usernames=["x"],
+        display_name_variants=["X"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="x", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    fanplace = next(d for d in result.discovered_urls if d.canonical_url == "https://fanplace.com/x")
+    assert fanplace.harvest_method == "headless"
+    assert fanplace.raw_text == "my content"
+
+    # Seed-level URL has no audit (came from external_urls, not harvester)
+    seed = next(d for d in result.discovered_urls if d.canonical_url == "https://tapforallmylinks.com/x")
+    assert seed.harvest_method is None
+    assert seed.raw_text is None
