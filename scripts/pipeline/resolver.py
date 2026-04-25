@@ -1,4 +1,5 @@
 # scripts/pipeline/resolver.py — Two-stage resolver: fetch seed, then classify+enrich destinations
+import os
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
@@ -34,6 +35,14 @@ _APIFY_COSTS = {
     "clockworks/tiktok-scraper": 8,
     # YouTube (yt-dlp) + Patreon + OF + Fanvue + generic + aggregators: 0 (not Apify)
 }
+
+# Defensive max depth so a pathological cycle can't loop. Real-world creator
+# networks rarely exceed depth 3.
+MAX_DEPTH = int(os.getenv("DISCOVERY_MAX_DEPTH", "6"))
+
+# When True, secondary profiles get a cheap Gemini Flash bio-mentions extraction
+# in addition to their explicit external_urls. Default ON — call is ~$0.001.
+RECURSIVE_GEMINI = os.getenv("DISCOVERY_RECURSIVE_GEMINI", "1") == "1"
 
 
 @dataclass
