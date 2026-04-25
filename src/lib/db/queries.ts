@@ -160,6 +160,43 @@ export async function getProfilesForCreator(
   return (data ?? []) as ProfileForCreator[]
 }
 
+// ---------- harvested destinations for one creator ----------
+
+export type CreatorDestination = {
+  canonical_url: string
+  destination_class: string
+  raw_text: string | null
+  harvest_method: string | null
+  harvested_at: string | null
+}
+
+export async function getDestinationsForCreator(
+  creatorId: string
+): Promise<CreatorDestination[]> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('profile_destination_links')
+    .select(`
+      canonical_url,
+      destination_class,
+      raw_text,
+      harvest_method,
+      harvested_at,
+      profiles!inner(creator_id)
+    `)
+    .eq('profiles.creator_id', creatorId)
+    .order('destination_class', { ascending: true })
+  if (error) throw new Error(`getDestinationsForCreator: ${error.message}`)
+  // The join surfaces nested profiles[] in the row; we don't need it after the filter.
+  return (data ?? []).map((d: any) => ({
+    canonical_url: d.canonical_url,
+    destination_class: d.destination_class || 'unknown',
+    raw_text: d.raw_text,
+    harvest_method: d.harvest_method,
+    harvested_at: d.harvested_at,
+  }))
+}
+
 // ---------- platform-account list (Instagram/TikTok pages) ----------
 
 export type PlatformAccountRow = {

@@ -14,12 +14,14 @@ import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
 import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { MergeBannerActions } from "@/components/creators/MergeBannerActions";
 import { FailedRetryButton } from "@/components/creators/FailedRetryButton";
+import { CreatorDestinations } from "@/components/creators/CreatorDestinations";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
 import {
   getCreatorBySlugForWorkspace,
   getProfilesForCreator,
   getMergeCandidatesForCreator,
   getCreatorNameById,
+  getDestinationsForCreator,
 } from "@/lib/db/queries";
 import { ComingSoon } from "@/components/shared/ComingSoon";
 import { sortAccounts } from "@/lib/sortAccounts";
@@ -73,9 +75,10 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
   const creator = await getCreatorBySlugForWorkspace(wsId, slug);
   if (!creator) return notFound();
 
-  const [profiles, mergeCandidates] = await Promise.all([
+  const [profiles, mergeCandidates, destinations] = await Promise.all([
     getProfilesForCreator(creator.id),
     getMergeCandidatesForCreator(creator.id),
+    getDestinationsForCreator(creator.id),
   ]);
 
   let mergeWith: string | null = null;
@@ -227,6 +230,9 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
       </div>
+
+      {/* All harvested destinations — grouped by destination_class */}
+      <CreatorDestinations destinations={destinations} />
 
       {/* Status banners */}
       {creator.onboarding_status === 'processing' && (
