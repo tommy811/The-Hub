@@ -2,7 +2,6 @@
 export const dynamic = 'force-dynamic';
 
 import { notFound } from "next/navigation";
-import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
@@ -157,16 +156,13 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-            <span className="font-mono text-xs opacity-70">@{primaryProfile?.handle || creator.slug}</span>
-            <span className="text-border">·</span>
-            <PlatformIcon platform={creator.primary_platform || 'other'} showLabel />
-            {creator.tracking_type && (
+          {creator.tracking_type && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
               <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground">
                 {creator.tracking_type.replace(/_/g, ' ')}
               </Badge>
-            )}
-          </div>
+            </div>
+          )}
 
           {(creator.tags?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-1 mt-0.5">

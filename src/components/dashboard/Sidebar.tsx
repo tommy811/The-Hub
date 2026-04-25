@@ -51,10 +51,6 @@ export function Sidebar() {
           <div className="flex flex-col gap-1 mb-4">
             <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Creators</h4>
             <NavItem href="/creators" icon={Users} label="All Creators" currentPath={currentPath} />
-            <NavItem href="/creators?tracking=managed" icon={Users} label="Managed" currentPath={currentPath} />
-            <NavItem href="/creators?tracking=candidate" icon={Users} label="Candidates" currentPath={currentPath} />
-            <NavItem href="/creators?tracking=competitor" icon={Users} label="Competitors" currentPath={currentPath} />
-            <NavItem href="/creators?tracking=inspiration" icon={Users} label="Inspiration" currentPath={currentPath} />
           </div>
 
           {/* PLATFORMS */}
