@@ -628,3 +628,47 @@ def test_highlight_link_sticker_lands_in_discovered_urls(
     assert mock_fetch_highlights.called
     # And NOT called for the seed (depth 0)
     assert mock_fetch_highlights.call_count == 1
+
+
+@patch("pipeline.resolver.fetch_highlights")
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_highlights_not_called_for_seed_or_non_ig(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
+    mock_gemini_bio, mock_fetch_highlights,
+):
+    """Seed (depth 0) never triggers highlights. A TT secondary (depth 1) doesn't either."""
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://tiktok.com/@sec_tt"],  # depth-1 TT
+    )
+    # Mock the TT fetcher so the secondary enriches successfully
+    with patch("pipeline.resolver.fetch_tt.fetch") as mock_tt_fetch:
+        mock_tt_fetch.return_value = _mk_ctx(
+            handle="sec_tt", platform="tiktok",
+            bio="", external_urls=[],
+        )
+        mock_gemini_bio.return_value = []
+        mock_classify.return_value = Classification(
+            platform="tiktok", account_type="social",
+            confidence=1.0, reason="rule:tiktok_social",
+        )
+        mock_gemini_seed.return_value = DiscoveryResultV2(
+            canonical_name="Seed", known_usernames=["seed"],
+            display_name_variants=["Seed"], raw_reasoning="",
+        )
+        budget = BudgetTracker(cap_cents=1000)
+        resolve_seed(
+            handle="seed", platform_hint="instagram",
+            supabase=MagicMock(), apify_client=MagicMock(),
+            budget=budget,
+        )
+
+    # Highlights branch must never have fired:
+    # - seed is depth 0 (skipped by `depth >= 1` gate)
+    # - the only secondary is TT (skipped by `ctx.platform == "instagram"` gate)
+    assert not mock_fetch_highlights.called, \
+        "fetch_highlights was called despite no IG depth-1 profile"
