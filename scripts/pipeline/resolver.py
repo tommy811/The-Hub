@@ -150,9 +150,10 @@ def resolve_seed(
     """Two-stage resolver for one seed.
 
     Stage A: fetch seed, debit budget.
-    Stage B: classify + enrich every discovered URL. Aggregators expanded once.
-    Gemini pass: canonicalization + niche + text_mentions. Text mentions fed
-    back into Stage B once per seed (no further recursion).
+    Stage B: classify + enrich every discovered URL via _expand recursion.
+    Aggregators expanded once. Gemini canonicalization runs on seed only.
+    Recursion terminates naturally when no new URLs/mentions surface; bounded
+    defensively by MAX_DEPTH.
 
     progress: optional callable(pct, label) — invoked at stage boundaries so
     the UI can render a real progress bar. Decoupled from supabase to keep
@@ -176,8 +177,15 @@ def resolve_seed(
     visited_canonical: set[str] = set()
     aggregator_expanded: set[str] = set()
 
-    def _classify_and_enrich(url: str, is_aggregator_child: bool = False):
-        """Classify URL, optionally enrich profile, record in discovered list."""
+    def _classify_and_enrich(url: str, depth: int, is_aggregator_child: bool = False):
+        """Classify URL, optionally enrich profile, record in discovered list.
+
+        depth = the depth the URL itself sits at. Seed.external_urls items are
+        depth=1. Aggregator children inherit depth from the aggregator + 1.
+        """
+        if depth > MAX_DEPTH:
+            return  # defensive cap
+
         # Resolve short URLs, then canonicalize
         expanded = resolve_short_url(url)
         canon = canonicalize_url(expanded)
@@ -192,6 +200,7 @@ def resolve_seed(
             account_type=cls.account_type,
             destination_class=_destination_class_for(cls.account_type),
             reason=cls.reason,
+            depth=depth,
         ))
 
         # If aggregator, expand one level (only if not already a child — no chaining)
@@ -207,7 +216,7 @@ def resolve_seed(
             else:
                 children = aggregators_custom.resolve(canon)
             for child in children:
-                _classify_and_enrich(child, is_aggregator_child=True)
+                _classify_and_enrich(child, depth=depth + 1, is_aggregator_child=True)
             return
 
         # If profile, try to enrich (if budget allows + fetcher exists)
@@ -230,27 +239,43 @@ def resolve_seed(
                     ctx = fetcher(h)
                 enriched[canon] = ctx
             except (EmptyDatasetError, BudgetExhaustedError):
-                pass
+                return
             except Exception as e:
                 console.log(f"[yellow]enrichment failed for {canon}: {e}[/yellow]")
+                return
 
-    # Stage B for seed's externalUrls
-    for url in seed_ctx.external_urls:
-        try:
-            _classify_and_enrich(url)
-        except BudgetExhaustedError:
-            break
+            # Recurse into the enriched ctx (Task 4 will populate this body)
+            # Placeholder for now — leaves behavior unchanged
 
-    # Gemini pass
+    def _expand(ctx: InputContext, depth: int) -> None:
+        """Expand ctx's outbound links one hop further.
+
+        ctx is at `depth`; its external_urls are processed at depth+1.
+        """
+        if depth >= MAX_DEPTH:
+            return
+        for url in ctx.external_urls:
+            try:
+                _classify_and_enrich(url, depth=depth + 1)
+            except BudgetExhaustedError:
+                return
+
+    # Stage B for seed (depth 0 → expand to depth 1)
+    try:
+        _expand(seed_ctx, depth=0)
+    except BudgetExhaustedError:
+        pass
+
+    # Gemini full pass (canonicalization + niche + text_mentions)
     _emit(70, "Analyzing")
     gemini_result = run_gemini_discovery_v2(seed_ctx)
 
-    # Stage B for text_mentions (one-shot expansion only, no further recursion)
+    # Stage B for seed text_mentions (depth 1, since they're 1 hop from seed)
     for mention in gemini_result.text_mentions:
         synth = _synthesize_url(mention)
         if synth:
             try:
-                _classify_and_enrich(synth)
+                _classify_and_enrich(synth, depth=1)
             except BudgetExhaustedError:
                 break
 
