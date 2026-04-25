@@ -328,12 +328,11 @@ def resolve_seed(
                 return
 
     def _expand(ctx: InputContext, depth: int) -> None:
-        """Expand ctx's outbound links + bio mentions one hop further.
+        """Expand ctx's outbound links + bio mentions + IG highlights one hop further.
 
-        ctx is at `depth`; its external_urls are processed at depth+1. Bio
-        mentions (cheap Gemini extraction) are also processed at depth+1
-        when RECURSIVE_GEMINI is on. The seed (depth 0) skips bio extraction
-        because the full Gemini canonicalization call covers it.
+        ctx is at `depth`; surfaced URLs are processed at depth+1. Highlights only
+        fire for IG profiles at depth >= 1 (the seed gets full Gemini canonicalization;
+        seed highlights land in v2 where there's a UI to display them).
         """
         if depth >= MAX_DEPTH:
             return
@@ -351,6 +350,38 @@ def resolve_seed(
                         _classify_and_enrich(synth, depth=depth + 1)
                     except BudgetExhaustedError:
                         return
+        if (
+            depth >= 1
+            and ctx.platform == "instagram"
+            and HIGHLIGHTS_ENABLED
+            and budget.can_afford(HIGHLIGHTS_COST_CENTS)
+        ):
+            try:
+                budget.debit("apify/instagram-scraper-stories", HIGHLIGHTS_COST_CENTS)
+                links = fetch_highlights(apify_client, ctx.handle)
+            except BudgetExhaustedError:
+                return
+            except Exception as e:
+                console.log(f"[yellow]highlights branch failed for @{ctx.handle}: {e}[/yellow]")
+                return
+            for link in links:
+                if link.source == "highlight_link_sticker" and link.url:
+                    try:
+                        _classify_and_enrich(link.url, depth=depth + 1)
+                    except BudgetExhaustedError:
+                        return
+                elif link.source == "highlight_caption_mention" and link.platform and link.handle:
+                    # Reuse _synthesize_url with a TextMention shim — the helper
+                    # only inspects platform + handle.
+                    from schemas import TextMention
+                    synth = _synthesize_url(TextMention(
+                        platform=link.platform, handle=link.handle, source="enriched_bio",
+                    ))
+                    if synth:
+                        try:
+                            _classify_and_enrich(synth, depth=depth + 1)
+                        except BudgetExhaustedError:
+                            return
 
     # Stage B for seed (depth 0 → expand to depth 1)
     try:

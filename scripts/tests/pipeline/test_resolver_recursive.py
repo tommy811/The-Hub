@@ -567,3 +567,64 @@ def test_resolver_module_exposes_highlights_cost_cents_constant():
     assert hasattr(resolver, "HIGHLIGHTS_COST_CENTS")
     assert isinstance(resolver.HIGHLIGHTS_COST_CENTS, int)
     assert resolver.HIGHLIGHTS_COST_CENTS > 0
+
+
+@patch("pipeline.resolver.fetch_highlights")
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_highlight_link_sticker_lands_in_discovered_urls(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
+    mock_gemini_bio, mock_fetch_highlights,
+):
+    """Depth-1 IG profile has a highlight with an OF link sticker.
+    The OF URL must land in discovered_urls at depth 2."""
+    from schemas import HighlightLink
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec"],
+    )
+    # Depth-1 IG profile: empty bio, no externals — only highlights are the source
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="sec", platform="instagram",
+        bio="", external_urls=[],
+    )
+    mock_gemini_bio.return_value = []  # no bio mentions
+    mock_fetch_highlights.return_value = [
+        HighlightLink(
+            url="https://onlyfans.com/sec",
+            source="highlight_link_sticker",
+        ),
+    ]
+
+    classifications = iter([
+        Classification(platform="instagram", account_type="social",
+                       confidence=1.0, reason="rule:instagram_social"),
+        Classification(platform="onlyfans", account_type="monetization",
+                       confidence=1.0, reason="rule:onlyfans_monetization"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini_seed.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    by_url = {du.canonical_url: du for du in result.discovered_urls}
+    of = next((du for url, du in by_url.items() if "onlyfans.com/sec" in url), None)
+    assert of is not None, \
+        f"highlight-surfaced OF URL missing from {list(by_url.keys())}"
+    assert of.depth == 2, f"OF should be depth 2, got {of.depth}"
+    # And fetch_highlights was actually called (for the depth-1 IG)
+    assert mock_fetch_highlights.called
+    # And NOT called for the seed (depth 0)
+    assert mock_fetch_highlights.call_count == 1
