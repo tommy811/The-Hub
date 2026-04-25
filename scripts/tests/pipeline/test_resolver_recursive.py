@@ -325,3 +325,52 @@ def test_run_gemini_bio_mentions_returns_empty_for_empty_bio():
     from discover_creator import run_gemini_bio_mentions
     ctx = _mk_ctx(bio="")
     assert run_gemini_bio_mentions(ctx) == []
+
+
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_secondary_bio_mentions_followed_when_flag_on(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
+    mock_gemini_bio,
+):
+    """Secondary IG ctx has bio prose with a @tiktok mention but NO clickable
+    external_url. With RECURSIVE_GEMINI=True (default), the mention is followed."""
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec"],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="sec", platform="instagram",
+        bio="also follow my tiktok @sec_tt",
+        external_urls=[],
+    )
+    mock_gemini_bio.return_value = [
+        TextMention(platform="tiktok", handle="sec_tt", source="enriched_bio"),
+    ]
+    classifications = iter([
+        Classification(platform="instagram", account_type="social",
+                       confidence=1.0, reason="rule:instagram_social"),
+        Classification(platform="tiktok", account_type="social",
+                       confidence=1.0, reason="rule:tiktok_social"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini_seed.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    urls = [du.canonical_url for du in result.discovered_urls]
+    assert any("tiktok.com/@sec_tt" in u for u in urls), \
+        f"bio-mention TT not followed: {urls}"
+    assert mock_gemini_bio.called

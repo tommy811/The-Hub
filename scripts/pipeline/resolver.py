@@ -298,9 +298,12 @@ def resolve_seed(
                 return
 
     def _expand(ctx: InputContext, depth: int) -> None:
-        """Expand ctx's outbound links one hop further.
+        """Expand ctx's outbound links + bio mentions one hop further.
 
-        ctx is at `depth`; its external_urls are processed at depth+1.
+        ctx is at `depth`; its external_urls are processed at depth+1. Bio
+        mentions (cheap Gemini extraction) are also processed at depth+1
+        when RECURSIVE_GEMINI is on. The seed (depth 0) skips bio extraction
+        because the full Gemini canonicalization call covers it.
         """
         if depth >= MAX_DEPTH:
             return
@@ -309,6 +312,15 @@ def resolve_seed(
                 _classify_and_enrich(url, depth=depth + 1)
             except BudgetExhaustedError:
                 return
+        if depth >= 1 and RECURSIVE_GEMINI:
+            mentions = run_gemini_bio_mentions(ctx)
+            for m in mentions:
+                synth = _synthesize_url(m)
+                if synth:
+                    try:
+                        _classify_and_enrich(synth, depth=depth + 1)
+                    except BudgetExhaustedError:
+                        return
 
     # Stage B for seed (depth 0 → expand to depth 1)
     try:
