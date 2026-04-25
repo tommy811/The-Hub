@@ -469,3 +469,81 @@ def test_recursive_gemini_disabled_skips_bio_mentions(
     urls = [du.canonical_url for du in result.discovered_urls]
     assert any("instagram.com/sec" in u for u in urls)
     assert not any("sec_tt" in u for u in urls)
+
+
+@patch("pipeline.resolver.aggregators_linktree.resolve")
+@patch("pipeline.resolver.aggregators_linktree.is_linktree")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_kira_shaped_full_funnel_resolution(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_gemini_bio,
+    mock_ig_fetch, mock_is_linktree, mock_linktree_resolve,
+):
+    """End-to-end synthetic of the failing Kira case from PROJECT_STATE.
+
+    Seed: TT @kira (no externals, no bio links).
+    Gemini text_mentions: @kirapregiato on instagram.
+    IG profile: aggregator URL https://tapforallmylinks.com/kira.
+    Aggregator children: [OF, telegram_channel].
+    Expected: all 4 destinations recorded; OF + telegram are terminal.
+    """
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="kira", platform="tiktok", bio="more on @kirapregiato",
+        external_urls=[],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="kirapregiato", platform="instagram",
+        bio="", external_urls=["https://tapforallmylinks.com/kira"],
+    )
+    mock_is_linktree.return_value = False  # not linktr.ee — falls through to custom_domain
+
+    with patch("pipeline.resolver.aggregators_custom.resolve") as mock_custom_resolve:
+        mock_custom_resolve.return_value = [
+            "https://onlyfans.com/kira",
+            "https://t.me/kirachannel",
+        ]
+
+        classifications = iter([
+            Classification(platform="instagram", account_type="social",
+                           confidence=1.0, reason="rule:instagram_social"),
+            Classification(platform="custom_domain", account_type="link_in_bio",
+                           confidence=1.0, reason="rule:custom_domain_aggregator"),
+            Classification(platform="onlyfans", account_type="monetization",
+                           confidence=1.0, reason="rule:onlyfans_monetization"),
+            Classification(platform="telegram_channel", account_type="messaging",
+                           confidence=1.0, reason="rule:telegram_messaging"),
+        ])
+        mock_classify.side_effect = lambda *a, **kw: next(classifications)
+        mock_gemini_seed.return_value = DiscoveryResultV2(
+            canonical_name="Kira", known_usernames=["kira", "kirapregiato"],
+            display_name_variants=["Kira"],
+            text_mentions=[TextMention(platform="instagram", handle="kirapregiato")],
+            raw_reasoning="",
+        )
+        mock_gemini_bio.return_value = []  # IG bio empty, no mentions
+
+        budget = BudgetTracker(cap_cents=1000)
+        result = resolve_seed(
+            handle="kira", platform_hint="tiktok",
+            supabase=MagicMock(), apify_client=MagicMock(),
+            budget=budget,
+        )
+
+    by_platform = {du.platform: du for du in result.discovered_urls}
+    assert "instagram" in by_platform
+    assert "custom_domain" in by_platform
+    assert "onlyfans" in by_platform
+    assert "telegram_channel" in by_platform
+
+    # Depth: IG depth=1 (text_mention from seed), aggregator depth=2, children depth=3.
+    assert by_platform["instagram"].depth == 1
+    assert by_platform["custom_domain"].depth == 2
+    assert by_platform["onlyfans"].depth == 3
+    assert by_platform["telegram_channel"].depth == 3
+
+    # IG was enriched (we mocked fetch_ig.fetch); aggregator + terminals were not.
+    assert any("instagram.com/kirapregiato" in k
+               for k in result.enriched_contexts.keys())
