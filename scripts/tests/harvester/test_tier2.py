@@ -16,6 +16,21 @@ def test_actor_input_includes_page_function():
     assert "evaluateOnNewDocument" in inp["pageFunction"]
 
 
+def test_actor_input_includes_all_interstitial_keywords():
+    """Regression guard: every keyword the page function auto-clicks must
+    appear in the loaded JS string. If a future edit drops one, this fails."""
+    inp = _build_actor_input("https://example.com")
+    pf = inp["pageFunction"]
+    for keyword in ("open link", "continue", "i am over 18", "i agree",
+                    "i confirm", "18+", "enter"):
+        assert keyword in pf, f"interstitial keyword {keyword!r} missing from pageFunction"
+
+    # Also assert the lowercase translate mask is full A-Z (catches the
+    # incomplete-mask bug that silently breaks age-gate detection)
+    assert "ABCDEFGHIJKLMNOPQRSTUVWXYZ" in pf
+    assert "abcdefghijklmnopqrstuvwxyz" in pf
+
+
 def test_actor_input_caps_at_one_request():
     inp = _build_actor_input("https://example.com")
     assert inp["maxRequestsPerCrawl"] == 1

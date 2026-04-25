@@ -4,6 +4,7 @@ sensitive-content interstitials. Triggered only when Tier 1 trips a signal.
 
 Cost: ~2¢ per page (1 page run on apify/puppeteer-scraper, ~5s @ ~0.5 CU).
 """
+import logging
 from pathlib import Path
 
 from apify_client import ApifyClient
@@ -11,6 +12,8 @@ from apify_client import ApifyClient
 from common import get_apify_token
 from harvester.types import HarvestedUrl
 from pipeline.canonicalize import canonicalize_url
+
+logger = logging.getLogger(__name__)
 
 ACTOR_ID = "apify/puppeteer-scraper"
 COST_CENTS = 2  # documented; actual cost varies ~1-3¢
@@ -47,7 +50,8 @@ def fetch_headless(url: str, apify_token: str | None = None) -> list[HarvestedUr
             run_input=_build_actor_input(url),
             timeout_secs=120,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning("tier2 actor failed for url=%s: %s: %s", url, type(e).__name__, e)
         return []
 
     if not run or not run.get("defaultDatasetId"):

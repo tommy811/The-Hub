@@ -80,18 +80,21 @@ async function pageFunction(context) {
         try {
             label = await btn.evaluate((el) => (el.innerText || "").trim().slice(0, 200));
             await btn.click({ delay: 50 }).catch(() => null);
-            await page.waitForTimeout(400);
+            await new Promise((r) => setTimeout(r, 400));
 
             // Look for an interstitial action button that appeared after the click.
             const continueBtn = await page.$x(
-                "//button[contains(translate(., 'OPENLINKCONTIUEAGS18 ', 'openlinkcontiueags18 '),'open link') or " +
-                "contains(translate(., 'OPENLINKCONTIUEAGS18 ', 'openlinkcontiueags18 '),'continue') or " +
-                "contains(translate(., 'OPENLINKCONTIUEAGS18 ', 'openlinkcontiueags18 '),'i am over 18') or " +
-                "contains(translate(., 'OPENLINKCONTIUEAGS18 ', 'openlinkcontiueags18 '),'i agree')]"
+                "//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'open link') or " +
+                "contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'continue') or " +
+                "contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'i am over 18') or " +
+                "contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'i agree') or " +
+                "contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'i confirm') or " +
+                "contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'18+') or " +
+                "contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'),'enter')]"
             );
             if (continueBtn.length > 0) {
                 await continueBtn[0].click({ delay: 50 }).catch(() => null);
-                await page.waitForTimeout(400);
+                await new Promise((r) => setTimeout(r, 400));
             }
         } catch (e) { /* skip this button */ }
 
