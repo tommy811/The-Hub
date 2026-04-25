@@ -86,6 +86,11 @@ case "${1:-help}" in
     launchctl stop "$LABEL"
     echo "Stopped ${LABEL} (KeepAlive will restart it; use 'unload' to disable auto-restart)"
     ;;
+  restart)
+    # Picks up code changes to scripts/worker.py + pipeline. KeepAlive auto-respawns.
+    launchctl stop "$LABEL"
+    echo "Restart triggered (launchd will respawn within ThrottleInterval=10s with fresh code)"
+    ;;
   unload)
     launchctl unload "$PLIST_DEST" 2>/dev/null || true
     echo "Unloaded ${LABEL} (no auto-restart until next install/load)"
@@ -115,7 +120,7 @@ case "${1:-help}" in
     echo "Removed $PLIST_DEST"
     ;;
   *)
-    echo "Usage: $0 {install|start|stop|unload|status|log|err|uninstall}"
+    echo "Usage: $0 {install|start|stop|restart|unload|status|log|err|uninstall}"
     exit 1
     ;;
 esac
