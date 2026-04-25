@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { retryCreatorDiscovery } from "@/app/(dashboard)/creators/actions";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
 import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +21,6 @@ interface CreatorCardProps {
   canonicalName: string;
   slug: string;
   avatarUrl?: string;
-  primaryPlatform: string;
   status: 'processing' | 'ready' | 'failed' | 'archived';
   trackingType: string;
   monetizationModel?: string;
@@ -97,8 +95,8 @@ function CreatorCardAvatar({
 }
 
 export function CreatorCard({
-  id, canonicalName, slug, avatarUrl, primaryPlatform, status,
-  trackingType, monetizationModel, tags, knownUsernames = [],
+  id, canonicalName, slug, avatarUrl, status,
+  trackingType, monetizationModel, tags,
   accountCounts, totalFollowers, updatedAgo, hasMergeCandidate, errorMessage,
   lastDiscoveryRunId,
 }: CreatorCardProps) {
@@ -118,7 +116,14 @@ export function CreatorCard({
     });
   };
   const totalAccounts = Object.values(accountCounts).reduce((s, n) => s + n, 0);
-  const primaryHandle = knownUsernames[0] || canonicalName.toLowerCase().replace(/\s+/g, '');
+
+  const monogram = canonicalName
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <AnimatePresence mode="wait">
@@ -157,8 +162,8 @@ export function CreatorCard({
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="flex flex-col items-center p-6 pt-10 gap-4 flex-1">
-              <div className="w-20 h-20 rounded-2xl bg-red-900/20 flex items-center justify-center border border-red-900/50">
-                <PlatformIcon platform={primaryPlatform} size={24} className="text-red-500 opacity-50" />
+              <div className="w-20 h-20 rounded-2xl bg-red-900/20 flex items-center justify-center border border-red-900/50 text-red-500/60 text-2xl font-bold tracking-tight">
+                {monogram}
               </div>
               <div className="text-center">
                 <div className="font-semibold text-lg">{canonicalName}</div>
@@ -221,10 +226,6 @@ export function CreatorCard({
                 gradient={gradient}
               />
               <div className="mt-3 font-bold text-lg text-center leading-snug">{canonicalName}</div>
-              <div className="flex items-center gap-1 mt-1 text-muted-foreground">
-                <PlatformIcon platform={primaryPlatform} size={12} />
-                <span className="text-[11px]">@{primaryHandle}</span>
-              </div>
             </div>
 
             {/* Badges + tags */}

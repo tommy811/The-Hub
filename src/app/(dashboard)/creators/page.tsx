@@ -76,7 +76,6 @@ export default async function CreatorsHubPage({
       canonicalName: c.canonical_name,
       slug: c.slug,
       avatarUrl: primaryProfile?.avatar_url ?? undefined,
-      primaryPlatform: c.primary_platform || "other",
       status: c.onboarding_status as "processing" | "ready" | "failed" | "archived",
       trackingType: c.tracking_type ?? "unreviewed",
       monetizationModel: c.monetization_model ?? undefined,
