@@ -672,3 +672,61 @@ def test_highlights_not_called_for_seed_or_non_ig(
     # - the only secondary is TT (skipped by `ctx.platform == "instagram"` gate)
     assert not mock_fetch_highlights.called, \
         "fetch_highlights was called despite no IG depth-1 profile"
+
+
+@patch("pipeline.resolver.fetch_highlights")
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_highlights_failure_does_not_crash_resolver(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
+    mock_gemini_bio, mock_fetch_highlights,
+):
+    """When fetch_highlights raises, resolver completes cleanly. Other branches (
+    external_urls, bio_mentions) still surface their URLs."""
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec"],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="sec", platform="instagram",
+        bio="follow @sec_tt on tiktok",
+        external_urls=["https://onlyfans.com/sec"],
+    )
+    # bio_mentions returns something — must still surface
+    mock_gemini_bio.return_value = [
+        TextMention(platform="tiktok", handle="sec_tt", source="enriched_bio"),
+    ]
+    # Highlights fetcher blows up
+    mock_fetch_highlights.side_effect = RuntimeError("apify timeout")
+
+    classifications = iter([
+        Classification(platform="instagram", account_type="social",
+                       confidence=1.0, reason="rule:instagram_social"),
+        Classification(platform="onlyfans", account_type="monetization",
+                       confidence=1.0, reason="rule:onlyfans_monetization"),
+        Classification(platform="tiktok", account_type="social",
+                       confidence=1.0, reason="rule:tiktok_social"),
+    ])
+    mock_classify.side_effect = lambda *a, **kw: next(classifications)
+    mock_gemini_seed.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    # No exception leaked — resolver returned cleanly.
+    assert isinstance(result, ResolverResult)
+    urls = [du.canonical_url for du in result.discovered_urls]
+    # external_urls branch landed
+    assert any("onlyfans.com/sec" in u for u in urls)
+    # bio_mentions branch landed
+    assert any("tiktok.com/@sec_tt" in u for u in urls)
