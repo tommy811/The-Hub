@@ -374,3 +374,47 @@ def test_secondary_bio_mentions_followed_when_flag_on(
     assert any("tiktok.com/@sec_tt" in u for u in urls), \
         f"bio-mention TT not followed: {urls}"
     assert mock_gemini_bio.called
+
+
+@patch("pipeline.resolver.run_gemini_bio_mentions")
+@patch("pipeline.resolver.fetch_ig.fetch")
+@patch("pipeline.resolver.run_gemini_discovery_v2")
+@patch("pipeline.resolver.classify")
+@patch("pipeline.resolver.fetch_seed")
+def test_recursive_gemini_disabled_skips_bio_mentions(
+    mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
+    mock_gemini_bio, monkeypatch,
+):
+    """With RECURSIVE_GEMINI=False, secondary external_urls still expand
+    but bio-mentions extraction is skipped."""
+    monkeypatch.setattr("pipeline.resolver.RECURSIVE_GEMINI", False)
+
+    mock_fetch_seed.return_value = _mk_ctx(
+        handle="seed", platform="instagram",
+        external_urls=["https://instagram.com/sec"],
+    )
+    mock_ig_fetch.return_value = _mk_ctx(
+        handle="sec", platform="instagram",
+        bio="also @sec_tt on tiktok",
+        external_urls=[],
+    )
+    mock_classify.return_value = Classification(
+        platform="instagram", account_type="social",
+        confidence=1.0, reason="rule:instagram_social",
+    )
+    mock_gemini_seed.return_value = DiscoveryResultV2(
+        canonical_name="Seed", known_usernames=["seed"],
+        display_name_variants=["Seed"], raw_reasoning="",
+    )
+
+    budget = BudgetTracker(cap_cents=1000)
+    result = resolve_seed(
+        handle="seed", platform_hint="instagram",
+        supabase=MagicMock(), apify_client=MagicMock(),
+        budget=budget,
+    )
+
+    assert not mock_gemini_bio.called, "bio extractor called despite flag=off"
+    urls = [du.canonical_url for du in result.discovered_urls]
+    assert any("instagram.com/sec" in u for u in urls)
+    assert not any("sec_tt" in u for u in urls)
