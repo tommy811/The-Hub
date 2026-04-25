@@ -138,3 +138,15 @@ def test_empty_seed_context_raises(mock_fetch, mock_classify, mock_gemini):
             supabase=MagicMock(), apify_client=MagicMock(),
             budget=budget,
         )
+
+
+def test_discovered_url_has_depth_field_default_zero():
+    from schemas import DiscoveredUrl
+    du = DiscoveredUrl(
+        canonical_url="https://example.com",
+        platform="other",
+        account_type="other",
+        destination_class="other",
+        reason="rule:test",
+    )
+    assert du.depth == 0
