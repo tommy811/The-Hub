@@ -45,9 +45,12 @@ MAX_DEPTH = int(os.getenv("DISCOVERY_MAX_DEPTH", "6"))
 RECURSIVE_GEMINI = os.getenv("DISCOVERY_RECURSIVE_GEMINI", "1") == "1"
 
 # When True, enriched IG profiles at depth >= 1 get a highlights scrape via
-# apify/instagram-scraper resultsType=stories. Default ON — closes the gap where
-# CTAs live in highlights instead of bio. Kill switch for emergency rollback.
-HIGHLIGHTS_ENABLED = os.getenv("DISCOVERY_HIGHLIGHTS_ENABLED", "1") == "1"
+# apify/instagram-scraper resultsType=stories. Default OFF — the actor returns
+# `no_items` (or silently scrapes the public feed grid) without IG sessionCookies,
+# so firing it currently spends ~10c per IG secondary on guaranteed-empty results.
+# Flip back to "1" once IG session-cookie auth is wired (see 06-Sessions/2026-04-25.md
+# sync 14 — diagnostic findings).
+HIGHLIGHTS_ENABLED = os.getenv("DISCOVERY_HIGHLIGHTS_ENABLED", "0") == "1"
 
 # Cost gate for the highlights scrape. Hand-maintained, err on the high side per
 # existing _APIFY_COSTS convention. ~50 story items per profile × $1/1000 = $0.05.

@@ -577,10 +577,11 @@ def test_resolver_module_exposes_highlights_cost_cents_constant():
 @patch("pipeline.resolver.fetch_seed")
 def test_highlight_link_sticker_lands_in_discovered_urls(
     mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
-    mock_gemini_bio, mock_fetch_highlights,
+    mock_gemini_bio, mock_fetch_highlights, monkeypatch,
 ):
     """Depth-1 IG profile has a highlight with an OF link sticker.
     The OF URL must land in discovered_urls at depth 2."""
+    monkeypatch.setattr("pipeline.resolver.HIGHLIGHTS_ENABLED", True)
     from schemas import HighlightLink
 
     mock_fetch_seed.return_value = _mk_ctx(
@@ -638,9 +639,10 @@ def test_highlight_link_sticker_lands_in_discovered_urls(
 @patch("pipeline.resolver.fetch_seed")
 def test_highlights_not_called_for_seed_or_non_ig(
     mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
-    mock_gemini_bio, mock_fetch_highlights,
+    mock_gemini_bio, mock_fetch_highlights, monkeypatch,
 ):
     """Seed (depth 0) never triggers highlights. A TT secondary (depth 1) doesn't either."""
+    monkeypatch.setattr("pipeline.resolver.HIGHLIGHTS_ENABLED", True)
     mock_fetch_seed.return_value = _mk_ctx(
         handle="seed", platform="instagram",
         external_urls=["https://tiktok.com/@sec_tt"],  # depth-1 TT
@@ -682,10 +684,11 @@ def test_highlights_not_called_for_seed_or_non_ig(
 @patch("pipeline.resolver.fetch_seed")
 def test_highlights_failure_does_not_crash_resolver(
     mock_fetch_seed, mock_classify, mock_gemini_seed, mock_ig_fetch,
-    mock_gemini_bio, mock_fetch_highlights,
+    mock_gemini_bio, mock_fetch_highlights, monkeypatch,
 ):
     """When fetch_highlights raises, resolver completes cleanly. Other branches (
     external_urls, bio_mentions) still surface their URLs."""
+    monkeypatch.setattr("pipeline.resolver.HIGHLIGHTS_ENABLED", True)
     mock_fetch_seed.return_value = _mk_ctx(
         handle="seed", platform="instagram",
         external_urls=["https://instagram.com/sec"],
