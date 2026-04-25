@@ -1,5 +1,42 @@
 # Migration Log
 
+## 2026-04-25 — bulk_import_creator missing ::platform cast on discovery_runs INSERT
+**File:** `supabase/migrations/20260425030000_bulk_import_platform_cast.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+Same root cause as `20260425000300` (the retry RPC fix earlier the same day). `bulk_import_creator` declared `p_platform_hint TEXT` and cast it correctly in the `creators` and `profiles` INSERTs, but passed the raw text into the third INSERT into `discovery_runs`. Postgres errored with `22P02 column "input_platform_hint" is of type platform but expression is of type text`. Visible symptom: every Bulk Paste / Single Handle import via the UI failed with this error in the toast. Fix: explicit `::platform` cast at the discovery_runs INSERT site. Behavior identical otherwise.
+
+---
+
+## 2026-04-25 — retry_creator_discovery now updates last_discovery_run_id
+**File:** `supabase/migrations/20260425020000_retry_updates_last_run_id.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+`retry_creator_discovery` created the new run + flipped `creators.onboarding_status='processing'` but never updated `creators.last_discovery_run_id`. The new `<DiscoveryProgress>` UI polls the run pointed to by `last_discovery_run_id`, so after every retry it was polling the *previous* failed run, immediately saw its terminal status, and the new run's spinner stuck at "Queued 0%" forever — worker actually ran the new attempt within seconds, the UI just never observed it. Fix: add `last_discovery_run_id = v_run_id` to the `UPDATE creators` clause. `bulk_import_creator` already wires this correctly (verified via `pg_get_functiondef`).
+
+---
+
+## 2026-04-25 — discovery_runs progress columns
+**File:** `supabase/migrations/20260425010000_discovery_runs_progress.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2` → PR #4
+
+### What Changed
+Adds two columns to `discovery_runs` so the UI can render a real progress bar while the pipeline is in flight:
+
+- `progress_pct smallint NOT NULL DEFAULT 0` — 0-100, set by the Python pipeline at each stage
+- `progress_label text` — short 2-3 word label for the current stage
+
+Pipeline emits 5 stages — `Fetching profile` (10%) → `Resolving links` (35%) → `Analyzing` (70%) → `Saving` (90%) → `Done` (100%). Idempotent (`ADD COLUMN IF NOT EXISTS`). No backfill needed.
+
+UI side: new `<DiscoveryProgress runId={...}>` client component polls `getDiscoveryProgress` server action every 3s while a card is in `processing` state, calls `router.refresh()` when `status` flips. Drops into both the CreatorCard processing branch and the creator HQ "Discovering…" banner.
+
+---
+
 ## 2026-04-25 — fix retry_creator_discovery casts input_platform_hint::platform
 **File:** `supabase/migrations/20260425000300_fix_retry_creator_discovery_platform_cast.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP

@@ -23,6 +23,9 @@
 - ✅ Verification stack — `npm test` covers typecheck, lint, pytest, and Playwright browser smoke tests; Next.js 16 migration synced into docs and routes.
 - ✅ **Creator HQ revamp** — bio out of header, tabs horizontal, real brand icons (`react-icons/si`), deterministic platform sort, header Add Account button, AccountRow Remove action (soft-delete via `is_active=false`), Brand Summary placeholder for Phase 3, retry RPC platform-cast fix, 3 Next 16 sync-API regressions caught + fixed inline. (PR #4 polish pass)
 - ✅ **`autonomous-fix-list` skill** added — when "full autonomy / use subagents / minimal input" phrase fires, runs the full plan → dispatch → verify → push playbook end-to-end with zero check-ins.
+- ✅ **Always-on discovery worker** — `scripts/worker.py` runs as a macOS launchd user agent (`com.thehub.worker`). RunAtLoad + KeepAlive + ThrottleInterval=10s. New `scripts/worker_ctl.sh` for install/restart/log management. Logs at `~/Library/Logs/the-hub-worker.{log,err.log}`.
+- ✅ **Live progress bar UI** — `discovery_runs.progress_pct/label` columns + `<DiscoveryProgress>` polling client component. 5 stages: Fetching profile → Resolving links → Analyzing → Saving → Done.
+- ✅ **Discovery surface bugfix sweep** — retry RPC updates last_discovery_run_id, bulk_import platform cast, seed URL written on commit, novel-platform persistence (Wattpad/Substack stub rows), fetcher retry on transient Apify failures. pytest 102 → 107.
 - 🔜 SP1.1 — provision FB + X Apify actors (fetchers are stubbed)
 - 🔜 Wire `/content` and `/trends` routes to live data
 - 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, `flag_outliers` live, Outliers page)

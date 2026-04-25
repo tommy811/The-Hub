@@ -37,6 +37,8 @@ All callable via: `supabase.rpc('function_name', { args })`
 
 > **Shape change (v2):** returns JSONB instead of raw UUID. Callers extract `res.data.creator_id` for anything that previously expected a single uuid. Old 6-arg overload was dropped (so the TypeScript type generator sees one signature; `p_bulk_import_id` has a DEFAULT so pre-v2 callers passing 6 args still work).
 
+> **Fixed 2026-04-25 (migration `20260425030000`):** the `discovery_runs` INSERT was passing `p_platform_hint` raw (text) instead of `p_platform_hint::platform`. The `creators` and `profiles` INSERTs already cast — only the third INSERT was missed. Postgres `22P02 column "input_platform_hint" is of type platform but expression is of type text`. Every Bulk Paste / Single Handle import errored in the toast. Same shape as `retry_creator_discovery`'s earlier-day fix — missed in that sweep.
+
 ---
 
 ## run_cross_workspace_merge_pass (new, 2026-04-25)
@@ -58,11 +60,21 @@ All callable via: `supabase.rpc('function_name', { args })`
 **Called by:** UI Retry button on failed creator card, and Re-run Discovery button on creator detail page
 **Args:** `p_creator_id` UUID, `p_user_id` UUID
 **Returns:** new `run_id` UUID
-**Does:** Creates new discovery_runs row (increments attempt_number), **copies `input_handle` and `input_platform_hint` from most recent prior run** (so the worker knows what handle to discover), resets creator to onboarding_status = processing
+**Does:** Creates new discovery_runs row (increments attempt_number), **copies `input_handle` and `input_platform_hint` from most recent prior run** (so the worker knows what handle to discover), resets creator to onboarding_status = processing, and **points `creators.last_discovery_run_id` at the new run**.
 
 > **Fixed 2026-04-23:** Previous version did not copy `input_handle` into the new row. Retry runs had NULL handle and immediately failed at the worker's fetch step.
 
 > **Fixed 2026-04-25 (migration `20260425000300`):** Local var `v_platform_hint TEXT` was carrying the value through plpgsql as text, so the INSERT into `discovery_runs(input_platform_hint)` (column type: `platform` enum) failed with `42703 column ... is of type platform but expression is of type text`. UI Re-run / Retry Discovery buttons errored. Fix: explicit `::platform` cast at the INSERT site.
+
+> **Fixed 2026-04-25 (migration `20260425020000`):** RPC was creating the new run but never updating `creators.last_discovery_run_id`. The `<DiscoveryProgress>` UI polls the run pointed to by `last_discovery_run_id` — so after every retry it polled the *previous* failed run, saw its terminal status, and the new run's spinner stuck at "Queued 0%" forever. Fix: add `last_discovery_run_id = v_run_id` to the `UPDATE creators` clause.
+
+---
+
+## getDiscoveryProgress (server action — not an RPC)
+**Called by:** `<DiscoveryProgress>` client component, every 3s while a card is in processing state.
+**Args:** `runId` string
+**Returns:** `Result<{ status, progressPct, progressLabel }>`
+**Does:** Reads the row from `discovery_runs` via service-role client (RLS bypassed; runId is the lookup key). Surfaces three fields the UI needs to render the bar + label and decide whether to fire `router.refresh()`. Lives in `src/app/(dashboard)/creators/actions.ts` next to the other discovery actions; imported via `import { getDiscoveryProgress } from "@/app/(dashboard)/creators/actions"`.
 
 ---
 

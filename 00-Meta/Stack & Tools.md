@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-25 (sync 12 — creator HQ revamp + autonomous-fix-list skill)
+**Last synced:** 2026-04-25 (sync 13 — always-on worker + live progress UI + RPC + token fix sweep)
 
 ---
 
@@ -40,6 +40,7 @@
 | **GitHub** | Source control, handoff point between tools | `tommy811/The-Hub` |
 | **Obsidian** | Project knowledge base | Vault path: `/Users/simon/OS/Living VAULT/Content OS/The Hub` (same folder as repo) |
 | **Apify** | Social media scraping platform | Actors: `apify/instagram-scraper`, `clockworks/tiktok-scraper` |
+| **macOS launchd** | Always-on discovery worker (local dev) | User agent `com.thehub.worker` at `~/Library/LaunchAgents/com.thehub.worker.plist`. Runs `scripts/worker.py` with RunAtLoad + KeepAlive + ThrottleInterval=10s. Logs at `~/Library/Logs/the-hub-worker.{log,err.log}`. Managed via `scripts/worker_ctl.sh {install|start|stop|restart|unload|status|log|err|uninstall}`. After any pipeline code change, run `scripts/worker_ctl.sh restart` so the process respawns with fresh bytecode. |
 
 ---
 

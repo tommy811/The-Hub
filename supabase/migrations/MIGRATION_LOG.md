@@ -1,5 +1,38 @@
 # Migration Log
 
+## 20260425030000_bulk_import_platform_cast
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+Same root cause as `20260425000300` (which fixed the retry RPC's identical bug). `bulk_import_creator` declared `p_platform_hint TEXT` and cast it correctly in the `creators` and `profiles` INSERTs, but passed the raw text into the `discovery_runs` INSERT — Postgres errored with `22P02 column "input_platform_hint" is of type platform but expression is of type text`. Every Bulk Paste / Single Handle import via the UI failed with this error in the toast. Fix: explicit `::platform` cast at the third INSERT site. Behavior identical otherwise.
+
+---
+
+## 20260425020000_retry_updates_last_run_id
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+`retry_creator_discovery` created the new run + flipped `creators.onboarding_status='processing'` but never updated `creators.last_discovery_run_id`. The new `<DiscoveryProgress>` UI polls the run pointed to by `last_discovery_run_id`, so after every retry it polled the previous failed run, immediately saw its terminal status, and the new run's spinner was stuck at "Queued 0%" forever (worker actually ran the new attempt within seconds; UI never observed it). Fix: add `last_discovery_run_id = v_run_id` to the `UPDATE creators` clause. `bulk_import_creator` already wires this correctly (verified via `pg_get_functiondef`).
+
+---
+
+## 20260425010000_discovery_runs_progress
+
+Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
+
+Adds two columns to `discovery_runs` so the UI can render a real progress bar while the pipeline is in flight:
+
+- `progress_pct smallint NOT NULL DEFAULT 0` — 0-100, set by the Python pipeline at each stage
+- `progress_label text` — short 2-3 word label for the current stage (`Fetching profile` / `Resolving links` / `Analyzing` / `Saving` / `Done`)
+
+Idempotent (`ADD COLUMN IF NOT EXISTS`). No backfill needed — existing rows keep `progress_pct=0, progress_label=null` until next discovery (terminal rows never re-run).
+
+Pipeline emits at `_emit(10, "Fetching profile")` (start of `resolver.resolve_seed`), `_emit(35, "Resolving links")` (after Stage A succeeds), `_emit(70, "Analyzing")` (just before Gemini call), `_emit(90, "Saving")` and `_emit(100, "Done")` (in `discover_creator.run()` around `_commit_v2`).
+
+UI side: `<DiscoveryProgress runId={...}>` client component polls `getDiscoveryProgress` server action every 3s while a card is in `processing` state, calls `router.refresh()` when `status` flips out of `pending|processing`. Drops into the CreatorCard processing branch + creator HQ "Discovering…" banner.
+
+---
+
 ## 20260425000300_fix_retry_creator_discovery_platform_cast
 
 Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
