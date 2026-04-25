@@ -170,6 +170,16 @@ def run_gemini_bio_mentions(ctx: InputContext) -> list[TextMention]:
     return _impl(ctx)
 
 
+def fetch_highlights(client: ApifyClient, handle: str) -> list:
+    """Re-exported from fetchers.instagram_highlights so tests can patch at this site.
+
+    Imported lazily inside the function to avoid eager Apify client init at
+    module load time — same pattern as run_gemini_bio_mentions.
+    """
+    from fetchers.instagram_highlights import fetch_highlights as _impl
+    return _impl(client, handle)
+
+
 def _synthesize_url(mention: TextMention) -> str | None:
     host_for = {
         "instagram": "instagram.com",

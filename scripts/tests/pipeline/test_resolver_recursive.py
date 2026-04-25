@@ -547,3 +547,10 @@ def test_kira_shaped_full_funnel_resolution(
     # IG was enriched (we mocked fetch_ig.fetch); aggregator + terminals were not.
     assert any("instagram.com/kirapregiato" in k
                for k in result.enriched_contexts.keys())
+
+
+def test_resolver_module_exposes_fetch_highlights_wrapper():
+    """The resolver re-exports fetch_highlights so tests can patch at this site."""
+    from pipeline import resolver
+    assert hasattr(resolver, "fetch_highlights"), \
+        "pipeline.resolver must export fetch_highlights for test patching"
