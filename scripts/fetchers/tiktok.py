@@ -49,8 +49,16 @@ def fetch(client: ApifyClient, handle: str) -> InputContext:
         )
 
     meta = item.get("authorMeta") or {}
-    bio_link = meta.get("bioLink") or {}
-    link_url = bio_link.get("link") if isinstance(bio_link, dict) else None
+    # clockworks/tiktok-scraper's bioLink shape changed from {"link": "<url>"}
+    # to a plain string. Handle both — newer string shape first, dict for
+    # legacy/rollback safety. Either empty form yields no link.
+    bio_link_raw = meta.get("bioLink")
+    if isinstance(bio_link_raw, str):
+        link_url = bio_link_raw or None
+    elif isinstance(bio_link_raw, dict):
+        link_url = bio_link_raw.get("link") or None
+    else:
+        link_url = None
 
     external_urls: list[str] = []
     if link_url:
