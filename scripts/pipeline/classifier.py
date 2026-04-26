@@ -2,6 +2,7 @@
 import json
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlparse, parse_qs
 import google.generativeai as genai
 
 from common import get_gemini_key
@@ -9,6 +10,42 @@ from data.gazetteer_loader import lookup as gazetteer_lookup
 
 _LLM_MODEL = "gemini-2.5-flash"
 _CONFIDENCE_THRESHOLD = 0.7
+
+# link.me redirector → destination platform via sensitiveLinkLabel param.
+# Hand-maintained map; extend as new labels appear.
+_LINKME_LABEL_TO_PLATFORM = {
+    "of": ("onlyfans", "monetization"),
+    "onlyfans": ("onlyfans", "monetization"),
+    "fanvue": ("fanvue", "monetization"),
+    "fanfix": ("fanfix", "monetization"),
+    "fanplace": ("fanplace", "monetization"),
+    "patreon": ("patreon", "monetization"),
+}
+
+
+def _classify_linkme_redirector(canonical_url: str) -> tuple[str, str, str] | None:
+    """Classify visit.link.me redirector URLs by their sensitiveLinkLabel param.
+
+    link.me's 'sensitive content' wrapper exposes the destination platform
+    in the query string (e.g. ?sensitiveLinkLabel=OF). Treat this as authoritative
+    — it's link.me's own metadata, not inference.
+    """
+    try:
+        parsed = urlparse(canonical_url)
+    except ValueError:
+        return None
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    if host != "visit.link.me":
+        return None
+    params = parse_qs(parsed.query)
+    label_raw = (params.get("sensitiveLinkLabel") or [""])[0].lower().strip()
+    if not label_raw:
+        return None
+    mapping = _LINKME_LABEL_TO_PLATFORM.get(label_raw)
+    if not mapping:
+        return None
+    platform, account_type = mapping
+    return (platform, account_type, f"rule:linkme_redirector_{label_raw}")
 
 _PROMPT_TEMPLATE = """You are classifying a URL into a creator-platform taxonomy.
 
@@ -89,6 +126,17 @@ def classify(canonical_url: str, supabase) -> Classification:
     `supabase` may be None (unit-test / offline context). In that case rule
     matches work but LLM fallback returns ('other','other','llm:no_cache_context').
     """
+    # Special: link.me redirector with explicit destination metadata
+    # e.g. https://visit.link.me/kirapregiato?sensitiveLinkLabel=OF
+    # The query param tells us the actual destination platform.
+    redirector_hit = _classify_linkme_redirector(canonical_url)
+    if redirector_hit is not None:
+        platform, account_type, reason = redirector_hit
+        return Classification(
+            platform=platform, account_type=account_type,
+            confidence=1.0, reason=reason,
+        )
+
     # 1. Rule match
     rule_hit = gazetteer_lookup(canonical_url)
     if rule_hit is not None:

@@ -113,3 +113,36 @@ class TestClassifyNoSupabase:
         assert result.platform == "other"
         assert result.account_type == "other"
         assert result.reason == "llm:no_cache_context"
+
+
+def test_classify_linkme_of_redirector():
+    from pipeline.classifier import classify
+    result = classify(
+        "https://visit.link.me/kirapregiato?webLinkId=1577546&sensitiveLinkLabel=OF",
+        supabase=None,
+    )
+    assert result.platform == "onlyfans"
+    assert result.account_type == "monetization"
+    assert "linkme_redirector" in result.reason
+
+
+def test_classify_linkme_fanvue_redirector():
+    from pipeline.classifier import classify
+    result = classify(
+        "https://visit.link.me/foo?sensitiveLinkLabel=Fanvue",
+        supabase=None,
+    )
+    assert result.platform == "fanvue"
+    assert result.account_type == "monetization"
+
+
+def test_classify_linkme_no_label_falls_through():
+    # Without sensitiveLinkLabel, behaves like a normal URL — falls through to
+    # gazetteer (which has link.me as link_in_bio for the bare path)
+    from pipeline.classifier import classify
+    result = classify(
+        "https://visit.link.me/foo",  # no label param
+        supabase=None,
+    )
+    # Should NOT be onlyfans — should fall through
+    assert result.platform != "onlyfans"

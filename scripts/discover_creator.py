@@ -225,6 +225,38 @@ def _make_progress_writer(sb, run_id):
     return _emit
 
 
+# Platforms where usernames are case-insensitive on the platform itself.
+# For these, normalize handles to lowercase before upsert so different-case
+# instances of the same account collapse via ON CONFLICT.
+_CASE_INSENSITIVE_PLATFORMS = frozenset({
+    "instagram", "tiktok", "twitter", "facebook", "youtube", "linkedin",
+    "reddit", "snapchat", "threads", "bluesky",
+    "tapforallmylinks", "link_me", "linktree", "beacons", "allmylinks",
+    "lnk_bio", "snipfeed", "launchyoursocials", "custom_domain",
+    "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+    "onlyfans", "fanvue", "fanplace", "patreon",
+    "telegram_channel", "discord", "whatsapp",
+    "spotify", "substack",
+    "amazon_storefront", "tiktok_shop",
+})
+
+
+def _normalize_handle(handle: str | None, platform: str | None) -> str:
+    """Canonicalize a handle for stable uniqueness across discovery code paths.
+
+    - strips leading '@' (TT/YT/etc fetchers preserve it; bulk import strips it — collapse both)
+    - lowercases for case-insensitive platforms (most social/monetization/aggregator)
+    - strips leading whitespace
+    Idempotent.
+    """
+    if not handle:
+        return ""
+    h = handle.strip().lstrip("@")
+    if platform and platform.lower() in _CASE_INSENSITIVE_PLATFORMS:
+        h = h.lower()
+    return h
+
+
 def _classify_account_type_for(platform: str, discovered_urls: list, canonical_url: str) -> str:
     """Map from discovered_urls list entry to account_type for the profile row."""
     for du in discovered_urls:
@@ -289,7 +321,7 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
 
     accounts = [{
         "platform": seed.platform,
-        "handle": seed.handle,
+        "handle": _normalize_handle(seed.handle, seed.platform),
         "url": _seed_profile_url(seed.platform, seed.handle),
         "display_name": seed.display_name,
         "bio": seed.bio,
@@ -307,7 +339,7 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
         d = depth_for_canon.get(canon, 1)
         accounts.append({
             "platform": ctx.platform,
-            "handle": ctx.handle,
+            "handle": _normalize_handle(ctx.handle, ctx.platform),
             "url": canon,
             "display_name": ctx.display_name,
             "bio": ctx.bio,
@@ -326,7 +358,7 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
             continue
         accounts.append({
             "platform": du.platform,
-            "handle": _synthesize_handle_from_url(du.canonical_url),
+            "handle": _normalize_handle(_synthesize_handle_from_url(du.canonical_url), du.platform),
             "url": du.canonical_url,
             "display_name": None,
             "bio": None,
@@ -341,9 +373,9 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
     for canon, ctx in result.enriched_contexts.items():
         funnel_edges.append({
             "from_platform": seed.platform,
-            "from_handle": seed.handle,
+            "from_handle": _normalize_handle(seed.handle, seed.platform),
             "to_platform": ctx.platform,
-            "to_handle": ctx.handle,
+            "to_handle": _normalize_handle(ctx.handle, ctx.platform),
             "edge_type": "link_in_bio",
             "confidence": 0.9,
         })

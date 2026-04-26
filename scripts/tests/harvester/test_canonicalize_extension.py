@@ -56,3 +56,11 @@ def test_strips_instagram_profilecard_suffix():
 def test_preserves_substack_path_case():
     # Substack is case-sensitive — handle case must NOT be lowered
     assert canonicalize_url("https://Foo.substack.com/p/Bar-Title") == "https://foo.substack.com/p/Bar-Title"
+
+
+def test_strips_tiktok_r_param():
+    assert canonicalize_url("https://tiktok.com/@kira?_r=1") == "https://tiktok.com/@kira"
+
+
+def test_strips_lang_param():
+    assert canonicalize_url("https://tiktok.com/@kirapregiato_backup?lang=en") == "https://tiktok.com/@kirapregiato_backup"

@@ -14,6 +14,8 @@ _TRACKING_PARAMS = {
     "s",          # twitter/x share param (?s=21, ?s=20)
     "t",          # twitter/x share token (?t=timestamp)
     "_t",         # tiktok share token
+    "_r",         # tiktok client refresh
+    "lang",       # generic locale param (tiktok ?lang=en, etc.)
     "aff",        # generic affiliate marker
     "ref_id",     # generic affiliate variant
 }
