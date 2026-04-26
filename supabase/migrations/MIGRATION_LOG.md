@@ -1,5 +1,44 @@
 # Migration Log
 
+## 20260426080000_watchdog_view_with_llm_suggestions
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T20 (sync 17).
+
+`CREATE OR REPLACE VIEW new_platform_watchdog` — REPLACES the T19 version (from migration `20260426060000`). Joins to `classifier_llm_guesses` via CTEs (`grouped` for the `platform='other'` rows aggregated by URL host + `guess_per_host` via `DISTINCT ON (host)` for the latest matching guess per host). Surfaces Gemini's enriched suggestion (`suggested_label`, `suggested_slug`, `description`, `icon_category`) per host alongside the active-row aggregate (creator_count, last_seen, sample_url). 11 columns total.
+
+**Operator workflow:** `SELECT * FROM new_platform_watchdog ORDER BY creator_count DESC LIMIT 50;` returns each novel host once with Gemini's recommendation pre-populated. VA ratifies in one click; the standard 3-step add (gazetteer rule + `src/lib/platforms.ts` PLATFORMS dict entry + `HOST_PLATFORM_MAP` entry) takes ~5 minutes per platform. Returns 0 rows currently — gazetteer + T17 backfill comprehensive for the 5-creator dataset.
+
+**Caveat:** the original T20 spec used 4 correlated subqueries to fetch the LLM-guess columns. Postgres rejected that with `42803` (column must appear in the GROUP BY clause or be used in an aggregate function). Refactored to CTE-based LEFT JOIN with the same semantics — `DISTINCT ON (host)` over `classifier_llm_guesses` ordered by `classified_at DESC` to get the latest guess per host, then LEFT JOIN to the grouped active rows.
+
+---
+
+## 20260426070000_classifier_llm_guesses_enriched_metadata
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T20 (sync 17).
+
+Adds 4 nullable TEXT columns to `classifier_llm_guesses`:
+
+- `suggested_label TEXT` — human-readable platform label (e.g. `"Cash App"`, `"Substack"`).
+- `suggested_slug TEXT` — snake_case slug suitable for the `platform` enum if ratified (e.g. `"cashapp"`, `"substack"`).
+- `description TEXT` — short Gemini-generated description of what the host is.
+- `icon_category TEXT` — Gemini's hint at icon family (e.g. `"monetization"`, `"social"`, `"messaging"`) so the operator can pick the right react-icon Si* / lucide fallback quickly.
+
+All 4 columns nullable; empty-string LLM responses are coerced to NULL by the Python writer (`_cache_insert` in `scripts/pipeline/classifier.py`). The companion code change in `_classify_via_llm` returns a 5-tuple `(platform, account_type, confidence, model_version, enriched_metadata: dict)`; `_cache_insert(supabase, canonical_url, platform, account_type, confidence, model_version, enriched=...)` persists the dict. Idempotent (`ADD COLUMN IF NOT EXISTS`).
+
+---
+
+## 20260426060000_new_platform_watchdog_view
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T19 (sync 17).
+
+`CREATE OR REPLACE VIEW new_platform_watchdog AS ...` — surfaces every `is_active=true` profile row with `platform='other'` grouped by URL host. Returns: host (extracted via regex), creator_count, profile_count, last_seen, sample_url, sample creator name. VA-friendly query for triaging novel platforms.
+
+This is the v1 watchdog view; superseded the same day by `20260426080000_watchdog_view_with_llm_suggestions` which adds Gemini enrichment per host. v1 returns the aggregate columns only; v2 adds 4 LLM-suggestion columns via CTE join to `classifier_llm_guesses`.
+
+Returns 0 rows currently — gazetteer + T17 backfill comprehensive for the 5-creator dataset.
+
+---
+
 ## 20260426050000_creator_cover_and_banner
 
 Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T17 (sync 16).

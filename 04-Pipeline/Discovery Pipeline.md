@@ -82,7 +82,10 @@ The launchd-spawned process has a **clean environment** (only `PATH` + `HOME` fr
 6. For each URL in `seed_ctx.external_urls`:
    - Resolve short URLs, canonicalize, dedupe via `visited_canonical` set.
    - **Noise filter at entry (sync 16, 2026-04-26)** — `_classify_and_enrich` calls `is_noise_url(canon)` immediately after `visited_canonical.add(canon)`. If the URL matches any noise pattern (CDN hosts `*.cloudfront.net`, API redirector hosts `*.api.linkme.global`, Firebase Dynamic Links `*.page.link`, empty-path homepages, legal/footer paths like `/terms`/`/privacy`/`/about`), drop it before it ever becomes a `DiscoveredUrl` row. Same predicate also retroactively soft-deleted 30 stale rows from before the filter shipped — see PROJECT_STATE Decisions Log sync 16.
-   - `classify(canon, supabase)` — deterministic rule-cascade (`monetization_overlay.yaml`, with 13 specific host→platform rules added in T17 sync 16 so `tapforallmylinks.com → tapforallmylinks` etc. instead of bucketing as `custom_domain`) + cached LLM fallback (`classifier_llm_guesses` table).
+   - `classify(canon, supabase)` — dispatch order:
+     1. **`_classify_linkme_redirector` (sync 17, T18)** runs FIRST. Parses `?sensitiveLinkLabel=OF/Fanvue/Fanfix/Fanplace/Patreon` from `visit.link.me/...` URLs via a hand-maintained `_LINKME_LABEL_TO_PLATFORM` map and returns `(<platform>, monetization)` at confidence 1.0 with reason `rule:linkme_redirector_<label>`. Without this, the gazetteer's link.me catch-all classified these monetization-bearing URLs as `(linktree, link_in_bio)`.
+     2. Deterministic rule-cascade (`monetization_overlay.yaml`, with 13 specific host→platform rules added in T17 sync 16 so `tapforallmylinks.com → tapforallmylinks` etc. instead of bucketing as `custom_domain`).
+     3. Cached LLM fallback (`classifier_llm_guesses` table). LLM prompt was rewritten in T20 (sync 17) to ALSO return 4 enriched suggestion fields (`suggested_label`, `suggested_slug`, `description`, `icon_category`); `_classify_via_llm` now returns a 5-tuple `(platform, account_type, confidence, model_version, enriched_metadata)`; `_cache_insert` accepts an optional `enriched: dict` parameter and writes those 4 columns alongside the platform/account_type guess. Empty-string responses persist as NULL.
    - Append a `DiscoveredUrl(canonical_url, platform, account_type, destination_class, reason, harvest_method, raw_text)` to `discovered`.
    - **Universal URL Harvester (2026-04-26)** — if the URL needs page-level destination extraction (aggregators, link-in-bio, gated landing pages), call `harvester.harvest_urls(canon, supabase)` to pull all outbound destinations in one shot. Replaces the previous per-aggregator dispatch (`aggregators/{linktree,beacons,custom_domain}.py`, deleted). Cascade described below in **Universal URL Harvester** section.
    - If `account_type ∈ {'social', 'monetization'}` and budget allows → enrich via the platform fetcher. Successful enrichments land in `enriched_contexts[canon] = ctx`.
@@ -187,3 +190,26 @@ Single entry point: `harvester.harvest_urls(url, supabase)`. Replaces the per-ag
 ## LLM Routing
 
 Pipeline-level Gemini 2.5 Flash for canonicalization + niche + text-mention extraction. Per-URL classification inside the resolver also uses Gemini Flash (cached in `classifier_llm_guesses`). Full routing table: [[PROJECT_STATE#8. LLM Routing]].
+
+---
+
+## Operator Workflow — `new_platform_watchdog` view (sync 17)
+
+When the resolver hits a host its gazetteer doesn't recognize, the row lands in `profiles` with `platform='other'`. Those rows surface in the `new_platform_watchdog` SQL view (migration `20260426060000` v1, replaced by `20260426080000` v2 with Gemini enrichment).
+
+**v2 columns (11):** host, creator_count, profile_count, last_seen, sample_url, sample_creator_name, **suggested_label**, **suggested_slug**, **description**, **icon_category**, classified_at — with the 4 LLM-suggestion columns joined via CTE (`grouped` + `guess_per_host` via `DISTINCT ON (host)`) from `classifier_llm_guesses`.
+
+**Triage query:**
+```sql
+SELECT * FROM new_platform_watchdog ORDER BY creator_count DESC LIMIT 50;
+```
+
+**Workflow:** VA opens the view, ratifies Gemini's recommendation per row (one click — no manual research because the LLM already provided a label, slug, description, icon-category guess), then runs the standard 3-step add per ratified host:
+
+1. Add a gazetteer rule in `data/monetization_overlay.yaml` mapping the host to the suggested platform value (or a new enum value if Gemini's `suggested_slug` is novel and ratifiable).
+2. Add a PLATFORMS dict entry in `src/lib/platforms.ts` with the right react-icons Si* / lucide fallback (driven by `icon_category`).
+3. Add a `HOST_PLATFORM_MAP` entry so URL-host inference works for legacy `platform='other'` rows.
+
+Total ~5 minutes per platform. Each ratified host drops the watchdog count by 1.
+
+The view returns 0 rows for the current 5-creator dataset — the gazetteer + T17 backfill is comprehensive. The watchdog is forward-cover for novel platforms surfacing during future bulk imports.

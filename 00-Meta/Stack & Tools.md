@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-26 (sync 16 — profile noise filter retroactive, specific platform identification, AccountRow + banner foundation)
+**Last synced:** 2026-04-26 (sync 17 — handle normalization + regression-test ring + Gemini-enriched watchdog)
 
 ---
 

@@ -1,5 +1,47 @@
 # Migration Log
 
+## 2026-04-26 — new_platform_watchdog view with Gemini LLM suggestions (T20)
+**File:** `supabase/migrations/20260426080000_watchdog_view_with_llm_suggestions.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+`CREATE OR REPLACE VIEW new_platform_watchdog AS ...` — REPLACES the T19 v1 view. Joins to `classifier_llm_guesses` via CTEs (`grouped` + `guess_per_host` via `DISTINCT ON (host)`). Surfaces Gemini's enriched suggestion per host: `suggested_label`, `suggested_slug`, `description`, `icon_category`. View now has 11 columns total.
+
+**Operator workflow:** `SELECT * FROM new_platform_watchdog ORDER BY creator_count DESC LIMIT 50;` returns each novel host once with Gemini's recommendation pre-populated. VA ratifies in one click; the standard 3-step add (gazetteer rule + PLATFORMS dict entry + HOST_PLATFORM_MAP entry) follows.
+
+**Caveat:** original spec used 4 correlated subqueries; Postgres rejected with `42803` (ungrouped column). Refactored to CTE-based LEFT JOIN with identical semantics.
+
+---
+
+## 2026-04-26 — classifier_llm_guesses enriched metadata (T20)
+**File:** `supabase/migrations/20260426070000_classifier_llm_guesses_enriched_metadata.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Adds 4 nullable TEXT columns to `classifier_llm_guesses`: `suggested_label`, `suggested_slug`, `description`, `icon_category`. Backs the Gemini-enriched watchdog (T20 / sync 17).
+
+The companion Python change rewrites the LLM prompt to return all 4 enriched fields alongside the existing platform/account_type/confidence; `_classify_via_llm` returns a 5-tuple `(platform, account_type, confidence, model_version, enriched_metadata)`; `_cache_insert` accepts an optional `enriched: dict` parameter and writes the 4 columns. Empty-string responses persist as NULL. Idempotent (`ADD COLUMN IF NOT EXISTS`).
+
+---
+
+## 2026-04-26 — new_platform_watchdog SQL view v1 (T19)
+**File:** `supabase/migrations/20260426060000_new_platform_watchdog_view.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+`CREATE OR REPLACE VIEW new_platform_watchdog AS ...` — surfaces every `is_active=true` profile row with `platform='other'` grouped by URL host. Joined to creator names + last_seen + sample_url. VA-friendly triage query: `SELECT * FROM new_platform_watchdog ORDER BY creator_count DESC LIMIT 50;`. Each row is a candidate for adding (a) a gazetteer rule, (b) a PLATFORMS dict entry, (c) a HOST_PLATFORM_MAP entry — ~5 minutes per platform.
+
+Superseded the same day by `20260426080000` which adds Gemini-suggestion columns via CTE join. v1 returns the aggregate columns only.
+
+Returns 0 rows currently — gazetteer + T17 backfill comprehensive for the 5-creator dataset.
+
+**Note:** T18 (handle normalization + visit.link.me OF redirector detection) had no schema migration — application code + data UPDATEs only. The 5 duplicate profile rows were soft-deleted via direct UPDATE; 7 active rows were normalized via direct UPDATE; 5 soft-deleted rows were tombstoned with a `__deleted_<uuid>` suffix to free unique-key slots before normalizing surviving rows. One-time migration artifact — application-layer ON CONFLICT updates re-activate the same row going forward.
+
+---
+
 ## 2026-04-26 — Creator cover_image_url + banner_url + override_avatar_url
 **File:** `supabase/migrations/20260426050000_creator_cover_and_banner.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP
