@@ -1,12 +1,19 @@
 # Enum Reference
 
-## platform
+## platform (~37 values post-2026-04-26)
 **V1 scraped:** instagram, tiktok
 **Future scraped:** youtube, facebook, twitter, linkedin, patreon
-**Monetization (tracked, not scraped):** onlyfans, fanvue, fanplace, amazon_storefront, tiktok_shop
-**Link-in-bio:** linktree, beacons, custom_domain
-**Messaging:** telegram_channel, telegram_cupidbot
+**Other social (T17, 2026-04-26):** snapchat, reddit, threads, bluesky
+**Monetization (tracked, not scraped):** onlyfans, fanvue, fanplace, amazon_storefront, tiktok_shop, fanfix, cashapp, venmo, kofi, buymeacoffee
+**Link-in-bio (generic):** linktree, beacons, custom_domain
+**Link-in-bio (specific aggregators, T17 2026-04-26):** link_me, tapforallmylinks, allmylinks, lnk_bio, snipfeed, launchyoursocials
+**Content platforms (T17, 2026-04-26):** spotify, substack
+**Messaging:** telegram_channel, telegram_cupidbot, discord, whatsapp
 **Catch-all:** other
+
+The 19 values added on 2026-04-26 (migration `20260426040000_add_platform_values_specific_aggregators_and_monetization`) collapse what used to live as `custom_domain` / `other` into specific identifications. Each has a corresponding entry in `src/lib/platforms.ts` PLATFORMS dict (with Si* / lucide icon) and a host→platform rule in `data/monetization_overlay.yaml` so the resolver classifies them precisely instead of bucketing.
+
+> **Pydantic mirror:** `scripts/schemas.py` declares `Platform = Literal[...]` matching this enum exactly. Future enum extensions must update both — see PROJECT_STATE §20 for the CI-diff future-work note.
 
 ---
 

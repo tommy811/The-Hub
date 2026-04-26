@@ -1,5 +1,43 @@
 # Migration Log
 
+## 2026-04-26 — Creator cover_image_url + banner_url + override_avatar_url
+**File:** `supabase/migrations/20260426050000_creator_cover_and_banner.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Adds 3 nullable text columns to `creators` to back the new banner / cover / override-avatar UI surface (T17 in sync 16):
+
+- `cover_image_url TEXT` — scraper-set; null pending Phase 3 scraper work (IG / FB / Twitter / Reddit cover photos).
+- `banner_url TEXT` — agency-managed override; operators can set it directly to override whatever the scraper would otherwise pick.
+- `override_avatar_url TEXT` — agency-managed headshot. When set, both creator HQ and the grid card prefer it over the scraper-fetched `profiles.avatar_url` (solves the IG-CDN avatar expiry problem for any creator the agency wants pinned to a stable image).
+
+UI: new `<BannerWithFallback>` client component renders on creator HQ below the merge-candidate banner / above the header. Uses `banner_url` if set, else `cover_image_url`, else gradient placeholder. Idempotent (`ADD COLUMN IF NOT EXISTS`). No backfill — all 3 columns default null.
+
+---
+
+## 2026-04-26 — Extend platform enum with 19 specific-aggregator + monetization values
+**File:** `supabase/migrations/20260426040000_add_platform_values_specific_aggregators_and_monetization.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Extends the Postgres `platform` enum with 19 new values (T17 in sync 16):
+
+`link_me`, `tapforallmylinks`, `allmylinks`, `lnk_bio`, `snipfeed`, `launchyoursocials`, `fanfix`, `cashapp`, `venmo`, `snapchat`, `reddit`, `spotify`, `threads`, `bluesky`, `kofi`, `buymeacoffee`, `substack`, `discord`, `whatsapp`.
+
+Total enum count post-migration: ~37 values.
+
+**Why this matters:** the previous `custom_domain` / `other` buckets were causing `(creator_id, platform, profile_url)` unique-constraint collisions when distinct destinations resolved to the same generic platform. With distinct enum values, rows coexist cleanly (e.g. Valentina's `link.me`, `cash.app`, `venmo.com`, and `app.fanfix.io` all become separate, non-colliding rows).
+
+**Companion changes (alongside but not part of this SQL migration):**
+- Pydantic `Platform = Literal[...]` in `scripts/schemas.py` extended to match (caught in-flight at pre-commit when the first discovery run failed with `pydantic.ValidationError` and fixed before push).
+- Gazetteer (`data/monetization_overlay.yaml`) rewritten with 13 new specific host→platform rules; 6 older generic ones removed so new specifics win.
+- `src/lib/platforms.ts` PLATFORMS dict gained 13+ entries with Si* icons (react-icons 5.6.0) + lucide fallbacks (Cash App / Venmo / Fanfix).
+- 11 existing profile rows backfilled via direct UPDATE from `other` / `custom_domain` to specific platforms (tapforallmylinks=3, link_me=1, fanfix=1, cashapp=1, venmo=1, snapchat=2, reddit=1, spotify=1).
+
+---
+
 ## 2026-04-26 — commit_discovery_result v4 (ON CONFLICT updates destination_class)
 **File:** `supabase/migrations/20260426030000_commit_discovery_result_v4_update_destination_class.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP

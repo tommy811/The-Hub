@@ -10,11 +10,11 @@
 - [[06-Sessions/|📅 Sessions]] — daily work logs
 
 ## Current Status
-- Phase: **Phase 2 in progress 🔄** — Discovery v2 live + Universal URL Harvester ships (sync 15); scraping + trends + content/trends routes next
-- Database: ✅ Supabase (Content OS project) — 24 tables live
+- Phase: **Phase 2 in progress 🔄** — Discovery v2 live + Universal URL Harvester (sync 15) + profile noise cleanup + specific platform identification + AccountRow + banner foundation (sync 16); scraping + trends + content/trends routes next
+- Database: ✅ Supabase (Content OS project) — 24 tables live; `platform` enum extended +19 values to ~37 total (sync 16)
 - Repo: github.com/tommy811/The-Hub
-- Open PR: [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4) — Discovery v2 + UI polish + recursive funnel + Universal URL Harvester
-- Last session: [[06-Sessions/2026-04-26]]
+- Open PR: [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4) — Discovery v2 + UI polish + recursive funnel + Universal URL Harvester + specific platform identification + banner foundation
+- Last session: [[06-Sessions/2026-04-26]] (sync 16 appended)
 
 ## Active Work
 - ✅ Discovery pipeline rebuilt — Apify-grounded context, Linktree/Beacons resolver, grounded Gemini prompt, dead-letter retry, 45 pytest tests (PR #2)
@@ -28,6 +28,8 @@
 - ✅ **Discovery surface bugfix sweep** — retry RPC updates last_discovery_run_id, bulk_import platform cast, seed URL written on commit, novel-platform persistence (Wattpad/Substack stub rows), fetcher retry on transient Apify failures. pytest 102 → 107.
 - ✅ **Recursive funnel resolver** (sync 14) — bounded follow-until-terminus expansion. Live smoke on Kira: 3 → 8 profiles. pytest 138.
 - ✅ **Universal URL Harvester** (sync 15) — single entry `harvest_urls()`, 3-tier cascade (cache → httpx Tier 1 → Apify Puppeteer Tier 2 with window.open hooks + auto-click interstitials). New `url_harvest_cache` table (24 tables total). 10-value `DestinationClass`. Creator HQ "All Destinations" section. Live smoke captured Fanplace link behind 2-step Sensitive Content gate. 192 pytest. tsc 0.
+- ✅ **Profile noise filter retroactive cleanup + UI polish** (sync 16, T16) — soft-deleted 30 stale noise rows; `is_noise_url(canon)` now drops noise URLs at the resolver gate before they become rows; `_commit_v2` URL-keyed dedup pass before RPC; PLATFORMS dict gains reddit/threads/bluesky/snapchat; unified `lucide Link` clip icon for all aggregators; All Destinations panel moved below tabs in collapsed `<details>`.
+- ✅ **Specific platform identification + AccountRow restructure + banner foundation** (sync 16, T17) — Postgres `platform` enum +19 values to ~37 total; Pydantic Literal mirrored; gazetteer rewritten with 13 specific host→platform rules; AccountRow restructured (Column 1 = `[icon] [Platform Name]`, Column 2 = handle + display_name); 3 new `creators` columns (`cover_image_url` / `banner_url` / `override_avatar_url`) + `<BannerWithFallback>` component. All 5 creators re-discovered cleanly. Valentina's link.me + Fanfix + Cash App + Venmo coexist as 4 distinct rows — unique-key collision bug fixed. 227 pytest. tsc 0.
 - 🔜 SP1.1 — provision FB + X Apify actors (fetchers are stubbed)
 - 🔜 Wire `/content` and `/trends` routes to live data
 - 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, `flag_outliers` live, Outliers page)

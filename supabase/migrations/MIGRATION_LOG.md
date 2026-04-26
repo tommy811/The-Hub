@@ -1,5 +1,41 @@
 # Migration Log
 
+## 20260426050000_creator_cover_and_banner
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T17 (sync 16).
+
+Adds 3 nullable text columns to `creators` to back the new banner / cover / override-avatar UI surface:
+
+- `cover_image_url TEXT` — scraper-set, null pending Phase 3 scraper work. Intended to hold IG / FB / Twitter / Reddit cover photos when those scrapers are wired.
+- `banner_url TEXT` — agency-managed override. Operators can set this directly to override whatever the scraper would otherwise pick.
+- `override_avatar_url TEXT` — agency-managed headshot. When set, both creator HQ and the grid card prefer this over the scraper-fetched `profiles.avatar_url`. Solves the IG-CDN avatar URL expiry problem for any creator the agency wants pinned to a stable image.
+
+UI side: new `<BannerWithFallback>` client component renders on creator HQ below the merge-candidate banner / above the header — uses `banner_url` if set, else `cover_image_url`, else degrades to a gradient placeholder. Both columns nullable; UI has a clean fallback for either.
+
+Idempotent (`ADD COLUMN IF NOT EXISTS`). No backfill — all 3 columns default null. The pre-existing `profiles.avatar_url` is still scraper-managed and untouched.
+
+---
+
+## 20260426040000_add_platform_values_specific_aggregators_and_monetization
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T17 (sync 16).
+
+Extends the Postgres `platform` enum with 19 new values to support specific-aggregator + specific-monetization identification (instead of bucketing everything under `custom_domain` / `other`):
+
+`link_me`, `tapforallmylinks`, `allmylinks`, `lnk_bio`, `snipfeed`, `launchyoursocials`, `fanfix`, `cashapp`, `venmo`, `snapchat`, `reddit`, `spotify`, `threads`, `bluesky`, `kofi`, `buymeacoffee`, `substack`, `discord`, `whatsapp`.
+
+**Total `platform` enum count: ~37 values** (post-migration).
+
+**Why this matters:** the previous `custom_domain` bucket was hiding genuine duplicate-row collisions. e.g. Valentina had `link.me/valentina` AND `cash.app/valentina` both classified as `custom_domain`, both with the same `profile_url` shape — the `(creator_id, platform, profile_url)` unique constraint blocked the second INSERT and the resolver had to soft-fail. With distinct enum values, the rows coexist cleanly. Architectural alternative considered: synthetic-handle uniqueness (`handle = "tapforallmylinks.com_esmaecursed"`) — uglier; changing the unique-constraint shape — riskier; adding enum values — cleanest.
+
+**Companion changes (NOT in this migration but applied alongside):**
+- Pydantic `Platform = Literal[...]` in `scripts/schemas.py` extended to match. Caught at pre-commit when the first discovery run after migration failed with `pydantic.ValidationError` — fixed before push. Future enum extensions could silently break discovery without a CI diff test (flagged as future work in PROJECT_STATE §20).
+- Gazetteer (`data/monetization_overlay.yaml`) rewritten with 13 new specific host→platform rules; 6 older generic rules removed so new specifics win.
+- `src/lib/platforms.ts` PLATFORMS dict gained 13+ new entries with Si* icons (react-icons 5.6.0) + lucide fallbacks for Cash App / Venmo / Fanfix.
+- 11 existing profile rows backfilled via direct `UPDATE` from `other` / `custom_domain` to specific platforms (tapforallmylinks=3, link_me=1, fanfix=1, cashapp=1, venmo=1, snapchat=2, reddit=1, spotify=1).
+
+---
+
 ## 20260426030000_commit_discovery_result_v4_update_destination_class
 
 Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`.

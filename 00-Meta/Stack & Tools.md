@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-26 (sync 15 — Universal URL Harvester ships, Apify Puppeteer Scraper added)
+**Last synced:** 2026-04-26 (sync 16 — profile noise filter retroactive, specific platform identification, AccountRow + banner foundation)
 
 ---
 
@@ -95,8 +95,8 @@ npx skills add git@github.com:kepano/obsidian-skills.git
 - shadcn/ui
 - Playwright browser smoke tests
 - Recharts (viz)
-- lucide-react (generic icons + brand-icon fallbacks)
-- react-icons (Simple Icons + FontAwesome — real platform brand glyphs: `SiInstagram`, `SiTiktok`, `SiYoutube`, `SiX`, `SiFacebook`, `SiPatreon`, `SiOnlyfans`, `SiTelegram`, `SiLinktree`, `FaLinkedin`, `FaAmazon`)
+- lucide-react (generic icons + brand-icon fallbacks; also covers Cash App / Venmo / Fanfix as `DollarSign`/`Heart` fallbacks where react-icons has no Simple Icon match, plus the unified aggregator clip icon `Link` used for linktree/beacons/custom_domain)
+- react-icons 5.6.0 (Simple Icons + FontAwesome — real platform brand glyphs: `SiInstagram`, `SiTiktok`, `SiYoutube`, `SiX`, `SiFacebook`, `SiPatreon`, `SiOnlyfans`, `SiTelegram`, `SiLinktree`, `FaLinkedin`, `FaAmazon`. Sync 16 (2026-04-26) added: `SiReddit`, `SiSnapchat`, `SiThreads`, `SiBluesky`, `SiSpotify`, `SiSubstack`, `SiDiscord`, `SiWhatsapp`, `SiKofi`, `SiBuymeacoffee` to the PLATFORMS dict in `src/lib/platforms.ts`. No new dependencies — all glyphs verified present in react-icons 5.6.0.)
 - framer-motion (animations)
 - @xyflow/react (React Flow — funnel editor, stubbed for Phase 1)
 
