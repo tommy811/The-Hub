@@ -10,8 +10,13 @@
 // 4. Iterate every <button>, [role=button], [onclick] — click each.
 // 5. After each click, scan for "Open link" / "Continue" / "I am over 18" /
 //    "Sensitive Content" interstitial buttons; auto-click them.
-// 6. Dump __NEXT_DATA__ + <script type="application/json"> URL strings.
-// 7. Return deduped URL list with raw_text labels.
+// 6. Return deduped URL list with raw_text labels.
+//
+// NOTE: We deliberately do NOT scrape <script type="application/json"> blobs
+// for URLs. Those config payloads contain internal API endpoints, CDN hosts,
+// auth services, and Firebase Dynamic Links that masquerade as creator
+// destinations. Real destinations always surface via anchor tags or
+// window.open intercepts above.
 
 async function pageFunction(context) {
     const { page, request, log } = context;
@@ -109,18 +114,6 @@ async function pageFunction(context) {
             if (label && !labels.has(u)) labels.set(u, label);
         }
     }
-
-    // STEP 5: scrape embedded JSON for URLs
-    const jsonUrls = await page.evaluate(() => {
-        const out = [];
-        const re = /https?:\/\/[^\s"']{8,}/g;
-        document.querySelectorAll("script[type='application/json']").forEach((s) => {
-            const matches = (s.textContent || "").match(re);
-            if (matches) out.push(...matches);
-        });
-        return out;
-    });
-    for (const u of jsonUrls) captured.add(u);
 
     return {
         urls: [...captured].map((url) => ({

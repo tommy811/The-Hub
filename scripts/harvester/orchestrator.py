@@ -8,6 +8,7 @@ recurses on the results based on `HARVEST_CLASSES`.
 from urllib.parse import urlparse
 
 from harvester.cache import lookup_cache, write_cache
+from harvester.filters import is_noise_url, same_base_domain
 from harvester.types import HarvestedUrl
 from harvester.tier1_static import fetch_static
 from harvester.tier2_headless import fetch_headless
@@ -77,8 +78,6 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
 
     `supabase=None` is supported (unit tests, offline). Cache layer skipped.
     """
-    source_host = (urlparse(url).hostname or "").lower().removeprefix("www.")
-
     # 1. Cache layer
     cached = lookup_cache(supabase, url)
     if cached is not None:
@@ -104,10 +103,12 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
     classified: list[HarvestedUrl] = []
     for raw_url, raw_text in raw_entries:
         canon = canonicalize_url(raw_url)
-        # Same-host filter: an aggregator's homepage / footer links to itself
-        # shouldn't be surfaced as destinations OF itself.
-        canon_host = (urlparse(canon).hostname or "").lower().removeprefix("www.")
-        if canon_host == source_host:
+        # eTLD+1 filter: an aggregator's own subdomains, internal APIs, and
+        # legal/footer paths aren't creator destinations.
+        if same_base_domain(canon, url):
+            continue
+        # Noise filter: API endpoints, CDN, legal pages, empty paths
+        if is_noise_url(canon):
             continue
         if canon in seen_canon:
             continue

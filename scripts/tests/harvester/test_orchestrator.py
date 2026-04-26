@@ -153,24 +153,29 @@ def test_canonicalizes_anchors_before_classify(mock_cache, mock_static, mock_cla
 @patch("harvester.orchestrator.classify")
 @patch("harvester.orchestrator.fetch_static")
 @patch("harvester.orchestrator.lookup_cache")
-def test_filters_same_host_urls(
+def test_filters_same_base_domain_and_noise(
     mock_cache, mock_static, mock_classify, mock_write
 ):
-    """An aggregator's footer links pointing to its own homepage shouldn't be
-    surfaced as destinations of itself."""
+    """Same-eTLD+1 URLs and known-noise hosts are filtered before classify."""
     from pipeline.classifier import Classification
     mock_cache.return_value = None
     mock_static.return_value = Tier1Result(
         html="",
         anchors=[
-            "https://onlyfans.com/x",  # different host — keep
-            "https://tapforallmylinks.com/",  # same host as source — filter
-            "https://www.tapforallmylinks.com/about",  # same host (www stripped) — filter
+            "https://onlyfans.com/x",                # different domain — keep
+            "https://link.me/",                      # same eTLD+1 — drop
+            "https://api.link.me/foo",               # same eTLD+1 + noise — drop
+            "https://about.link.me/privacypolicy",   # same eTLD+1 + legal — drop
+            "https://api.linkme.global",             # different domain BUT noise host — drop
+            "https://d1abc.cloudfront.net",          # CDN noise — drop
         ],
         anchor_texts={
             "https://onlyfans.com/x": "OF",
-            "https://tapforallmylinks.com/": "Home",
-            "https://www.tapforallmylinks.com/about": "About",
+            "https://link.me/": "Home",
+            "https://api.link.me/foo": "API",
+            "https://about.link.me/privacypolicy": "Privacy",
+            "https://api.linkme.global": "API global",
+            "https://d1abc.cloudfront.net": "CDN",
         },
         signals_tripped=set(),
     )
@@ -179,6 +184,6 @@ def test_filters_same_host_urls(
         reason="rule:onlyfans_monetization",
     )
     sb = MagicMock()
-    result = harvest_urls("https://tapforallmylinks.com/esmae", supabase=sb)
+    result = harvest_urls("https://link.me/kirapregiato", supabase=sb)
     assert len(result) == 1
     assert result[0].canonical_url == "https://onlyfans.com/x"

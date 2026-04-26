@@ -25,12 +25,23 @@ _SHORT_URL_HOSTS = {
     "rebrand.ly", "buff.ly", "fb.me", "amzn.to",
 }
 
+# Hosts where the FIRST path segment is a case-insensitive handle
+# (IG/TT/X/etc fold case; Notion/Substack do not — only fold known platforms).
+_SOCIAL_HANDLE_HOSTS = {
+    "instagram.com", "tiktok.com", "x.com", "facebook.com",
+    "twitter.com",  # already redirected to x.com but defensive
+    "youtube.com", "linkedin.com",
+}
+
 # Path suffixes stripped on known platforms (social profile landing variants)
 _STRIP_SUFFIXES = {
     "youtube.com": ["/about", "/home", "/featured"],
     "www.youtube.com": ["/about", "/home", "/featured"],
     "facebook.com": ["/home", "/about"],
     "www.facebook.com": ["/home", "/about"],
+    "instagram.com": ["/profilecard"],
+    "tiktok.com": ["/profile"],
+    "x.com": ["/with_replies", "/media"],
 }
 
 
@@ -61,10 +72,23 @@ def canonicalize_url(url: str) -> str:
 
     scheme = "https"
     host = parsed.hostname.lower().removeprefix("www.")
+    # Canonical host normalizations (twitter.com → x.com).
+    # Done before path/query handling so dedup catches both.
+    if host == "twitter.com":
+        host = "x.com"
+    if host == "mobile.twitter.com":
+        host = "x.com"
     path = _strip_known_suffixes(host, parsed.path)
     # Lowercase path for short-URL hosts (Amazon, bit.ly, etc.) for dedup
     if host in _SHORT_URL_HOSTS:
         path = path.lower()
+    # Lowercase first path segment on social platforms (handles are case-insensitive
+    # on IG/TT/X/etc, case-sensitive on Notion/Substack — only fold known platforms)
+    if host in _SOCIAL_HANDLE_HOSTS and path and path != "/":
+        segments = path.split("/", 2)
+        if len(segments) >= 2 and segments[1]:
+            segments[1] = segments[1].lower()
+            path = "/".join(segments)
     if path.endswith("/") and path != "/":
         path = path.rstrip("/")
 

@@ -49,6 +49,26 @@ export function CreatorDestinations({
     (grouped[cls] ||= []).push(d);
   }
 
+  // Within each class, sort by quality signals:
+  // 1. Has raw_text (anchor/button label) before bare URLs
+  // 2. Shorter path (likely the canonical destination, not a sub-page)
+  // 3. Newest harvested_at first
+  for (const cls of Object.keys(grouped)) {
+    grouped[cls].sort((a, b) => {
+      const aHasText = a.raw_text ? 1 : 0;
+      const bHasText = b.raw_text ? 1 : 0;
+      if (aHasText !== bHasText) return bHasText - aHasText;
+
+      const aPath = (() => { try { return new URL(a.canonical_url).pathname.length; } catch { return 999; } })();
+      const bPath = (() => { try { return new URL(b.canonical_url).pathname.length; } catch { return 999; } })();
+      if (aPath !== bPath) return aPath - bPath;
+
+      const aTime = a.harvested_at ? Date.parse(a.harvested_at) : 0;
+      const bTime = b.harvested_at ? Date.parse(b.harvested_at) : 0;
+      return bTime - aTime;
+    });
+  }
+
   return (
     <section className="rounded-lg border border-white/[0.06] bg-[#13131A] p-6">
       <header className="mb-4">

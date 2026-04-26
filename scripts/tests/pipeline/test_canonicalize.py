@@ -6,8 +6,9 @@ from pipeline.canonicalize import canonicalize_url, resolve_short_url
 
 class TestCanonicalizeUrl:
     def test_lowercases_host(self):
+        # Instagram is in _SOCIAL_HANDLE_HOSTS so the handle is also lowercased
         assert canonicalize_url("HTTPS://WWW.Instagram.com/Alice") == \
-            "https://instagram.com/Alice"
+            "https://instagram.com/alice"
 
     def test_strips_www_prefix(self):
         assert canonicalize_url("https://www.linktr.ee/alice") == \
