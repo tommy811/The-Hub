@@ -552,6 +552,52 @@ Add to `.claude/settings.json`:
 
 ---
 
+## 21. Discovery Pipeline Invariants
+
+These invariants are enforced by code + tests. Any future refactor must not break them.
+
+### Duplicate prevention
+
+1. **Handle normalization** — Every account written to `profiles` via `_commit_v2` passes through `_normalize_handle(handle, platform)` (scripts/discover_creator.py). Strips leading `@`, lowercases for case-insensitive platforms (35 platforms in `_CASE_INSENSITIVE_PLATFORMS`). Locked by `tests/test_commit_v2_dedup.py::test_normalize_handle_*`.
+2. **URL canonicalization** — `canonicalize_url()` strips tracking params (utm_*, fbclid, igsh, _r, lang, l_, t, s, aff, ref_id, others), lowercases hosts, normalizes twitter.com→x.com, lowercases first path segment for known social platforms (`_SOCIAL_HANDLE_HOSTS`).
+3. **Same-URL dedup in `_commit_v2`** — accounts list deduped by URL before RPC. Higher discovery_confidence wins. Non-`'other'` platform wins on tie. Locked by `tests/test_commit_v2_dedup.py::test_commit_v2_dedups_*`.
+
+### Noise filtering
+
+4. **`is_noise_url(canonical_url)`** drops API/CDN/legal/empty-path URLs (regex denylist for hosts matching `*.api.*`, `*-service.*`, `auth-*`, `config.*`, `media.*`, `worker.*`, `*.cloudfront.net`, `*.page.link`, etc., plus path patterns for `/terms`, `/privacy`, `/legal`, `/contact`). Applied at:
+   - Resolver entry — immediately after `visited_canonical.add(canon)`
+   - Harvester orchestrator — after Tier 1/Tier 2 fetch
+
+### Specific platform identification
+
+5. **Postgres `platform` enum has 37 values** covering every aggregator + monetization + social platform we recognize. Each has a gazetteer rule mapping URL host → specific platform value, AND an entry in `src/lib/platforms.ts::PLATFORMS` with icon + label. When an unfamiliar host appears, the row gets `platform='other'` and surfaces in the `new_platform_watchdog` SQL view for triage.
+6. **`visit.link.me` redirector classification** — `_classify_linkme_redirector` (scripts/pipeline/classifier.py) parses `sensitiveLinkLabel=OF/Fanvue/Fanfix/Fanplace/Patreon` from query strings and assigns the destination platform + monetization at confidence 1.0. Runs FIRST in `classify()`, ahead of the gazetteer.
+
+### Cross-creator dedup
+
+7. **`run_cross_workspace_merge_pass`** runs at the end of every bulk import. Reads `profile_destination_links` for shared monetization/aggregator URLs across creators and raises merge candidates at confidence ≥ 0.7 (banner UI), auto-merges at 1.0 (direct link chain).
+
+### Watchdog
+
+8. **`new_platform_watchdog` SQL view** — list every active profile row with `platform='other'` grouped by URL host. Run periodically:
+   ```sql
+   SELECT * FROM new_platform_watchdog ORDER BY creator_count DESC LIMIT 50;
+   ```
+   Each row that appears is a candidate for: (a) gazetteer rule, (b) PLATFORMS dict entry, (c) HOST_PLATFORM_MAP entry. Adding all three takes ~5 minutes per platform.
+
+### Known regression-test coverage
+
+| Failure mode | Test |
+|---|---|
+| Different code paths produce `@kira` / `kira` / `@Kira` for same TT account | `test_normalize_handle_*`, `test_commit_v2_normalizes_at_signs_in_handles` |
+| YT/X case differences (`@Gothgirlnatalie` vs `@gothgirlnatalie`) | `test_commit_v2_dedups_youtube_case_variants` |
+| TikTok `?_r=1` and `?lang=en` query params surviving canonicalize | `test_strips_tiktok_r_param`, `test_strips_lang_param` |
+| `visit.link.me?sensitiveLinkLabel=OF` mislabeled as link_in_bio | `test_classify_linkme_of_redirector` |
+| Same person on link.me + fanfix collapsing into one row | `test_commit_v2_dedups_link_me_vs_fanfix_same_handle` (verifies they DON'T collapse) |
+| Pydantic Platform Literal drift from Postgres enum | `test_platform_enum_drift::test_platform_literal_includes_all_t17_additions` |
+
+---
+
 ## Decisions Log
 
 - 2026-04-23: Installed agent architecture (UI skills + SCHEMA.md + Stop hook).
