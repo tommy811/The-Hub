@@ -25,7 +25,11 @@ class TestClassifyRuleMatches:
 class TestClassifyLLMFallback:
     @patch("pipeline.classifier._classify_via_llm")
     def test_unknown_url_falls_through_to_llm(self, mock_llm):
-        mock_llm.return_value = ("other", "monetization", 0.85, "gemini-2.5-flash")
+        mock_llm.return_value = (
+            "other", "monetization", 0.85, "gemini-2.5-flash",
+            {"suggested_label": "Unknown Coaching", "suggested_slug": "unknown_coaching",
+             "description": "A coaching landing page", "icon_category": "monetization"},
+        )
         # Supabase mock so cache lookup misses + insert succeeds
         sb = MagicMock()
         sb.table.return_value.select.return_value.eq.return_value.maybe_single\
@@ -42,7 +46,11 @@ class TestClassifyLLMFallback:
 
     @patch("pipeline.classifier._classify_via_llm")
     def test_llm_low_confidence_returns_other(self, mock_llm):
-        mock_llm.return_value = ("other", "other", 0.5, "gemini-2.5-flash")
+        mock_llm.return_value = (
+            "other", "other", 0.5, "gemini-2.5-flash",
+            {"suggested_label": "", "suggested_slug": "",
+             "description": "", "icon_category": "other"},
+        )
         sb = MagicMock()
         sb.table.return_value.select.return_value.eq.return_value.maybe_single\
             .return_value.execute.return_value.data = None
@@ -74,7 +82,11 @@ class TestClassifyLLMFallback:
         # supabase-py 2.x quirk: .maybe_single().execute() returns None
         # (not an APIResponse) when no row matches. Regression caught by
         # the live smoke on 2026-04-25 — classifier must not crash here.
-        mock_llm.return_value = ("other", "other", 0.85, "gemini-2.5-flash")
+        mock_llm.return_value = (
+            "other", "other", 0.85, "gemini-2.5-flash",
+            {"suggested_label": "Uncached Site", "suggested_slug": "uncached_site",
+             "description": "Test site", "icon_category": "other"},
+        )
         sb = MagicMock()
         sb.table.return_value.select.return_value.eq.return_value.maybe_single\
             .return_value.execute.return_value = None
@@ -146,3 +158,54 @@ def test_classify_linkme_no_label_falls_through():
     )
     # Should NOT be onlyfans — should fall through
     assert result.platform != "onlyfans"
+
+
+@patch("pipeline.classifier._classify_via_llm")
+@patch("pipeline.classifier._cache_lookup")
+def test_classify_caches_llm_enriched_metadata(mock_lookup, mock_llm):
+    """When the LLM is invoked, all 4 enriched fields (label/slug/description/
+    icon_category) MUST be persisted to classifier_llm_guesses."""
+    from unittest.mock import MagicMock
+    mock_lookup.return_value = None
+    mock_llm.return_value = (
+        "other", "monetization", 0.85, "gemini-2.5-flash",
+        {
+            "suggested_label": "Stan Store",
+            "suggested_slug": "stan_store",
+            "description": "Creator e-commerce platform for digital products",
+            "icon_category": "ecommerce",
+        },
+    )
+    sb = MagicMock()
+    from pipeline.classifier import classify
+    # Use a URL that misses both rule-based gazetteer and link.me redirector,
+    # forcing the LLM fallback path.
+    classify("https://novel-platform-xyz.example/alice", supabase=sb)
+
+    upsert_call = sb.table.return_value.upsert.call_args
+    payload = upsert_call.args[0]
+    assert payload["suggested_label"] == "Stan Store"
+    assert payload["suggested_slug"] == "stan_store"
+    assert payload["description"] == "Creator e-commerce platform for digital products"
+    assert payload["icon_category"] == "ecommerce"
+
+
+@patch("pipeline.classifier._classify_via_llm")
+@patch("pipeline.classifier._cache_lookup")
+def test_classify_handles_missing_enriched_fields_gracefully(mock_lookup, mock_llm):
+    """If Gemini returns empty strings for the suggestion fields, cache stores NULL."""
+    from unittest.mock import MagicMock
+    mock_lookup.return_value = None
+    mock_llm.return_value = (
+        "other", "other", 0.4, "gemini-2.5-flash",
+        {"suggested_label": "", "suggested_slug": "", "description": "", "icon_category": ""},
+    )
+    sb = MagicMock()
+    from pipeline.classifier import classify
+    classify("https://uncertain.example.com/foo", supabase=sb)
+
+    upsert_call = sb.table.return_value.upsert.call_args
+    payload = upsert_call.args[0]
+    # Empty strings should become None on insert
+    assert payload.get("suggested_label") is None
+    assert payload.get("suggested_slug") is None

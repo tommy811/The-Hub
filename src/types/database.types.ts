@@ -179,8 +179,12 @@ export type Database = {
           canonical_url: string
           classified_at: string
           confidence: number
+          description: string | null
+          icon_category: string | null
           model_version: string
           platform_guess: Database["public"]["Enums"]["platform"] | null
+          suggested_label: string | null
+          suggested_slug: string | null
         }
         Insert: {
           account_type_guess?:
@@ -189,8 +193,12 @@ export type Database = {
           canonical_url: string
           classified_at?: string
           confidence: number
+          description?: string | null
+          icon_category?: string | null
           model_version: string
           platform_guess?: Database["public"]["Enums"]["platform"] | null
+          suggested_label?: string | null
+          suggested_slug?: string | null
         }
         Update: {
           account_type_guess?:
@@ -199,8 +207,12 @@ export type Database = {
           canonical_url?: string
           classified_at?: string
           confidence?: number
+          description?: string | null
+          icon_category?: string | null
           model_version?: string
           platform_guess?: Database["public"]["Enums"]["platform"] | null
+          suggested_label?: string | null
+          suggested_slug?: string | null
         }
         Relationships: []
       }
@@ -1346,7 +1358,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      new_platform_watchdog: {
+        Row: {
+          account_types_seen:
+            | Database["public"]["Enums"]["account_type"][]
+            | null
+          creator_count: number | null
+          creators: string[] | null
+          description: string | null
+          host: string | null
+          icon_category: string | null
+          last_seen: string | null
+          row_count: number | null
+          sample_url: string | null
+          suggested_label: string | null
+          suggested_slug: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       bulk_import_creator: {

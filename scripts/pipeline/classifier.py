@@ -47,22 +47,32 @@ def _classify_linkme_redirector(canonical_url: str) -> tuple[str, str, str] | No
     platform, account_type = mapping
     return (platform, account_type, f"rule:linkme_redirector_{label_raw}")
 
-_PROMPT_TEMPLATE = """You are classifying a URL into a creator-platform taxonomy.
+_PROMPT_TEMPLATE = """You are classifying a URL into a creator-platform taxonomy AND describing the platform.
 
 URL: {url}
 
 Return a JSON object with these fields:
-- platform: one of [instagram, tiktok, youtube, patreon, twitter, linkedin, facebook, onlyfans, fanvue, fanplace, amazon_storefront, tiktok_shop, linktree, beacons, custom_domain, telegram_channel, telegram_cupidbot, link_me, tapforallmylinks, allmylinks, lnk_bio, snipfeed, launchyoursocials, fanfix, cashapp, venmo, kofi, buymeacoffee, snapchat, reddit, threads, bluesky, spotify, substack, discord, whatsapp, other]
+
+REQUIRED — for the taxonomy:
+- platform: one of [instagram, tiktok, youtube, patreon, twitter, linkedin, facebook, onlyfans, fanvue, fanplace, amazon_storefront, tiktok_shop, linktree, beacons, custom_domain, telegram_channel, telegram_cupidbot, link_me, tapforallmylinks, allmylinks, lnk_bio, snipfeed, launchyoursocials, fanfix, cashapp, venmo, snapchat, reddit, spotify, threads, bluesky, kofi, buymeacoffee, substack, discord, whatsapp, other]
 - account_type: one of [social, monetization, link_in_bio, messaging, other]
 - confidence: float 0.0-1.0 — how confident are you this is the right classification
+
+ALSO REQUIRED — for VA-actionable platform suggestions (used when platform='other'):
+- suggested_label: human-readable platform name (e.g. "Stan Store", "Bunny App", "ManyVids"). If platform isn't 'other', use the canonical platform name.
+- suggested_slug: proposed snake_case slug for our enum (e.g. "stan_store", "bunny_app"). If platform isn't 'other', use the platform value itself.
+- description: one short sentence describing what this platform/site is (e.g. "Creator e-commerce platform for digital products and tips"). Always provide.
+- icon_category: visual class hint, one of [monetization, social, aggregator, messaging, content, ecommerce, other]
 
 Rules:
 - monetization: anywhere a creator collects payment (subscription, tips, PPV, store, coaching landing page)
 - social: content-posting social network profile
 - link_in_bio: aggregator page listing multiple destinations
-- messaging: direct communication channel (Telegram, Discord invite)
-- other: affiliate links, news articles, blog posts, miscellaneous
-- Below 0.7 confidence → prefer platform='other', account_type='other'.
+- messaging: direct communication channel (Telegram, Discord invite, WhatsApp)
+- ecommerce: a Stan-store-like product page or storefront (treat as monetization for account_type, but use icon_category=ecommerce)
+- content: blog/podcast/newsletter (Substack, Medium, Spotify show)
+- other: affiliate links, news articles, miscellaneous
+- Below 0.7 confidence → prefer platform='other', account_type='other', but STILL provide best-guess suggested_label / suggested_slug / description / icon_category from URL host inspection.
 
 Return ONLY the JSON object, no surrounding text.
 """
@@ -77,8 +87,8 @@ class Classification:
     model_version: Optional[str] = None
 
 
-def _classify_via_llm(url: str) -> tuple[str, str, float, str]:
-    """Call Gemini to classify. Returns (platform, account_type, confidence, model_version)."""
+def _classify_via_llm(url: str) -> tuple[str, str, float, str, dict]:
+    """Call Gemini to classify. Returns (platform, account_type, confidence, model_version, enriched_metadata)."""
     genai.configure(api_key=get_gemini_key())
     model = genai.GenerativeModel(_LLM_MODEL)
     resp = model.generate_content(
@@ -86,11 +96,18 @@ def _classify_via_llm(url: str) -> tuple[str, str, float, str]:
         generation_config=genai.GenerationConfig(response_mime_type="application/json"),
     )
     parsed = json.loads(resp.text)
+    enriched = {
+        "suggested_label": parsed.get("suggested_label") or "",
+        "suggested_slug": parsed.get("suggested_slug") or "",
+        "description": parsed.get("description") or "",
+        "icon_category": parsed.get("icon_category") or "",
+    }
     return (
         parsed.get("platform", "other"),
         parsed.get("account_type", "other"),
         float(parsed.get("confidence", 0.0)),
         _LLM_MODEL,
+        enriched,
     )
 
 
@@ -106,14 +123,21 @@ def _cache_lookup(sb, canonical_url: str) -> Optional[dict]:
 
 
 def _cache_insert(sb, canonical_url: str, platform: str, account_type: str,
-                  confidence: float, model_version: str) -> None:
-    sb.table("classifier_llm_guesses").upsert({
+                  confidence: float, model_version: str,
+                  enriched: dict | None = None) -> None:
+    payload = {
         "canonical_url": canonical_url,
         "platform_guess": platform,
         "account_type_guess": account_type,
         "confidence": confidence,
         "model_version": model_version,
-    }).execute()
+    }
+    if enriched:
+        payload["suggested_label"] = enriched.get("suggested_label") or None
+        payload["suggested_slug"] = enriched.get("suggested_slug") or None
+        payload["description"] = enriched.get("description") or None
+        payload["icon_category"] = enriched.get("icon_category") or None
+    sb.table("classifier_llm_guesses").upsert(payload).execute()
 
 
 def classify(canonical_url: str, supabase) -> Classification:
@@ -162,7 +186,7 @@ def classify(canonical_url: str, supabase) -> Classification:
 
     # 4. LLM fallback
     try:
-        platform, account_type, conf, model_v = _classify_via_llm(canonical_url)
+        platform, account_type, conf, model_v, enriched = _classify_via_llm(canonical_url)
     except TimeoutError:
         return Classification(platform="other", account_type="other",
                               confidence=0.0, reason="llm:timeout")
@@ -171,7 +195,7 @@ def classify(canonical_url: str, supabase) -> Classification:
                               confidence=0.0, reason="llm:timeout")
 
     try:
-        _cache_insert(supabase, canonical_url, platform, account_type, conf, model_v)
+        _cache_insert(supabase, canonical_url, platform, account_type, conf, model_v, enriched)
     except Exception:
         pass  # non-fatal — we still return the guess
 
