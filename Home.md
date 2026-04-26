@@ -10,11 +10,11 @@
 - [[06-Sessions/|📅 Sessions]] — daily work logs
 
 ## Current Status
-- Phase: **Phase 2 in progress 🔄** — Discovery v2 live + creator HQ revamped; scraping + trends + content/trends routes next
-- Database: ✅ Supabase (Content OS project) — 23 tables live
+- Phase: **Phase 2 in progress 🔄** — Discovery v2 live + Universal URL Harvester ships (sync 15); scraping + trends + content/trends routes next
+- Database: ✅ Supabase (Content OS project) — 24 tables live
 - Repo: github.com/tommy811/The-Hub
-- Open PR: [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4) — Discovery v2 + UI polish pass
-- Last session: [[06-Sessions/2026-04-25]]
+- Open PR: [#4 phase-2-discovery-v2](https://github.com/tommy811/The-Hub/pull/4) — Discovery v2 + UI polish + recursive funnel + Universal URL Harvester
+- Last session: [[06-Sessions/2026-04-26]]
 
 ## Active Work
 - ✅ Discovery pipeline rebuilt — Apify-grounded context, Linktree/Beacons resolver, grounded Gemini prompt, dead-letter retry, 45 pytest tests (PR #2)
@@ -26,6 +26,8 @@
 - ✅ **Always-on discovery worker** — `scripts/worker.py` runs as a macOS launchd user agent (`com.thehub.worker`). RunAtLoad + KeepAlive + ThrottleInterval=10s. New `scripts/worker_ctl.sh` for install/restart/log management. Logs at `~/Library/Logs/the-hub-worker.{log,err.log}`.
 - ✅ **Live progress bar UI** — `discovery_runs.progress_pct/label` columns + `<DiscoveryProgress>` polling client component. 5 stages: Fetching profile → Resolving links → Analyzing → Saving → Done.
 - ✅ **Discovery surface bugfix sweep** — retry RPC updates last_discovery_run_id, bulk_import platform cast, seed URL written on commit, novel-platform persistence (Wattpad/Substack stub rows), fetcher retry on transient Apify failures. pytest 102 → 107.
+- ✅ **Recursive funnel resolver** (sync 14) — bounded follow-until-terminus expansion. Live smoke on Kira: 3 → 8 profiles. pytest 138.
+- ✅ **Universal URL Harvester** (sync 15) — single entry `harvest_urls()`, 3-tier cascade (cache → httpx Tier 1 → Apify Puppeteer Tier 2 with window.open hooks + auto-click interstitials). New `url_harvest_cache` table (24 tables total). 10-value `DestinationClass`. Creator HQ "All Destinations" section. Live smoke captured Fanplace link behind 2-step Sensitive Content gate. 192 pytest. tsc 0.
 - 🔜 SP1.1 — provision FB + X Apify actors (fetchers are stubbed)
 - 🔜 Wire `/content` and `/trends` routes to live data
 - 🔜 Phase 2 scraping pipeline (IG + TikTok normalizers, `flag_outliers` live, Outliers page)

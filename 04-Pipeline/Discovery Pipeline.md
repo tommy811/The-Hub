@@ -82,8 +82,8 @@ The launchd-spawned process has a **clean environment** (only `PATH` + `HOME` fr
 6. For each URL in `seed_ctx.external_urls`:
    - Resolve short URLs, canonicalize, dedupe via `visited_canonical` set.
    - `classify(canon, supabase)` — deterministic rule-cascade (`monetization_overlay.yaml`) + cached LLM fallback (`classifier_llm_guesses` table).
-   - Append a `DiscoveredUrl(canonical_url, platform, account_type, destination_class, reason)` to `discovered`.
-   - If `account_type == 'link_in_bio'` and not already an aggregator child → expand once via `aggregators/{linktree, beacons, custom_domain}.py`. No chaining.
+   - Append a `DiscoveredUrl(canonical_url, platform, account_type, destination_class, reason, harvest_method, raw_text)` to `discovered`.
+   - **Universal URL Harvester (2026-04-26)** — if the URL needs page-level destination extraction (aggregators, link-in-bio, gated landing pages), call `harvester.harvest_urls(canon, supabase)` to pull all outbound destinations in one shot. Replaces the previous per-aggregator dispatch (`aggregators/{linktree,beacons,custom_domain}.py`, deleted). Cascade described below in **Universal URL Harvester** section.
    - If `account_type ∈ {'social', 'monetization'}` and budget allows → enrich via the platform fetcher. Successful enrichments land in `enriched_contexts[canon] = ctx`.
 
 ### Stage 4: Gemini — canonicalization + niche + text mentions
@@ -157,6 +157,28 @@ Apify scrapers rotate proxies; some profiles get blocked on certain pools and su
 Failed creator card / HQ page → `Re-run Discovery` button → `retryCreatorDiscovery` server action → `retry_creator_discovery` RPC → new `discovery_runs` row with `attempt_number+1`, copies `input_handle` + `input_platform_hint` (with `::platform` cast), updates `creators.last_discovery_run_id` to the new run, resets `onboarding_status='processing'`. Worker picks up the new pending row within ~30s.
 
 > The `last_discovery_run_id` update is critical for the progress UI — without it the polling component would lock onto the previous (terminal) run and never observe the new one.
+
+---
+
+## Universal URL Harvester
+
+Single entry point: `harvester.harvest_urls(url, supabase)`. Replaces the per-aggregator extractor dispatch (`aggregators/{linktree,beacons,custom_domain}.py`, deleted 2026-04-26).
+
+**3-tier cascade:**
+
+1. **Cache** — `url_harvest_cache` table (24h TTL, workspace-agnostic, mirrors `classifier_llm_guesses`). On hit, returns the cached `HarvestedUrl[]` immediately and skips Tiers 1+2. Lives in `harvester/cache.py`.
+2. **Tier 1 (httpx + BS4)** — `harvester/tier1_static.py::fetch_static`. Pulls the page, parses anchors, runs a 4-signal escalation detector: (a) SPA marker (e.g. astro-island, next-data, root div pattern); (b) near-empty anchor count (`< 3` resolved hrefs); (c) sensitive-content gate keywords ("over 18", "i agree", "open link" etc.); (d) JS-only body (no rendered text). Any signal trips → escalate to Tier 2.
+3. **Tier 2 (Apify Puppeteer Scraper)** — `harvester/tier2_headless.py::fetch_headless`. Calls `apify/puppeteer-scraper` with a custom `page_function.js` that hooks `window.open` + `location.href` setters BEFORE page scripts execute (so SPA single-page redirectors get captured even if their click handler tries to navigate the entire window away), then auto-clicks 7 interstitial keyword variants ("open link", "continue", "i am over 18", "i agree", "i confirm", "18+", "enter") via Puppeteer 22+ `page.$$('xpath/...')` selector syntax. Returns the unified anchor + intercepted-navigation set.
+
+**Classification + destination_class mapping** (in `harvester/orchestrator.py`):
+- Each harvested URL is canonicalized (`pipeline.canonicalize.canonicalize_url`) and classified (`pipeline.classifier.classify`).
+- A host-aware `_destination_class_for(account_type, canonical_url)` maps the result through 10 classes — promotes Substack subdomains, Spotify, Apple Podcasts to `content`; amzn.to, geni.us, lnk.to, shareasale, skimresources to `affiliate`; Shopify subdomains, Etsy, Depop to `commerce`; Telegram, WhatsApp, Discord to `messaging`. Same-host self-links are dropped (an aggregator's footer linking to its own homepage shouldn't surface as a destination of itself).
+
+**Cache write** — on Tier 1 or Tier 2 success, the orchestrator writes the result back to `url_harvest_cache` with `expires_at = NOW() + 24h`.
+
+**Audit columns** — `commit_discovery_result` v3+ writes `harvest_method` (`cache|httpx|headless`) and `raw_text` (anchor / button text from harvest) to `profile_destination_links` per URL. Surfaces in Creator HQ as a `gated` chip on rows where `harvest_method='headless'`.
+
+**Live-smoke result (2026-04-26)** — re-discovery of `esmaecursed-1776896975319784` cleanly captured the Fanplace link previously hidden behind tapforallmylinks.com's 2-step "Sensitive Content / Open link" gate. Tier 1 detected the gate, Tier 2 hooked the `location.href` setter and harvested all 6 destinations (4 social + 2 messaging). Total Apify spend ~80¢ across 4 smoke runs.
 
 ---
 

@@ -1,5 +1,58 @@
 # Migration Log
 
+## 2026-04-26 — commit_discovery_result v4 (ON CONFLICT updates destination_class)
+**File:** `supabase/migrations/20260426030000_commit_discovery_result_v4_update_destination_class.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Body identical to v3 except the `ON CONFLICT (profile_id, canonical_url) DO UPDATE` clause on `profile_destination_links` now also updates `destination_class = EXCLUDED.destination_class`. Pre-fix rows from buggy earlier runs stuck around with stale class values — e.g. `t.me/...` URLs sat at `other` even after the resolver was patched to emit `messaging`. Caught during the 2026-04-26 smoke when re-running discovery didn't refresh cached destination rows.
+
+---
+
+## 2026-04-26 — Extend destination_class CHECK constraint to 10 values
+**File:** `supabase/migrations/20260426020000_extend_destination_class_check.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Extends `profile_destination_links.destination_class` CHECK constraint from 4 → 10 values: `monetization | aggregator | social | commerce | messaging | content | affiliate | professional | other | unknown`. Matches the `DestinationClass` Literal in `scripts/harvester/types.py`. Without this, rows tagged `messaging` (Telegram / WhatsApp / Discord) crashed on insert during the 2026-04-26 smoke. TEXT-with-CHECK pattern (not Postgres ENUM) keeps forward-compat additions to a single `DROP CONSTRAINT / ADD CONSTRAINT` swap.
+
+---
+
+## 2026-04-26 — commit_discovery_result v3 (harvester audit fields)
+**File:** `supabase/migrations/20260426010000_commit_discovery_result_v3_harvester_audit.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Threads the new audit columns through `commit_discovery_result`. `p_discovered_urls` jsonb gains optional `harvest_method` (`cache|httpx|headless`) and `raw_text` (anchor / button text) per element. RPC reads them and writes to `profile_destination_links` on insert; ON CONFLICT clause uses `COALESCE(EXCLUDED.x, profile_destination_links.x)` so older rows without audit fields don't get nulled out. Body otherwise identical to `20260425000200`.
+
+---
+
+## 2026-04-26 — Universal URL Harvester v1 schema
+**File:** `supabase/migrations/20260426000000_url_harvester_v1.sql`
+**Applied:** ✅ Supabase (Content OS) via MCP
+**Branch / PR:** `phase-2-discovery-v2`
+
+### What Changed
+Backs the Universal URL Harvester ship.
+
+**Audit columns on `profile_destination_links`:**
+- `harvest_method TEXT` — `cache | httpx | headless`. NULL on rows pre-dating the harvester.
+- `raw_text TEXT` — anchor / button text that surfaced the URL during harvest.
+- `harvested_at TIMESTAMPTZ DEFAULT NOW()` — when this destination was last (re)harvested.
+
+**New table `url_harvest_cache` (23 → 24 tables):**
+- `canonical_url TEXT PRIMARY KEY`
+- `harvest_method TEXT NOT NULL CHECK IN ('httpx','headless')`
+- `destinations JSONB NOT NULL` — array of `{canonical_url, raw_url, raw_text, destination_class}`
+- `harvested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()` + `expires_at TIMESTAMPTZ NOT NULL` (24h TTL set by Python writer)
+- Index `idx_url_harvest_cache_expires` on `expires_at` for TTL filtering
+- No RLS — workspace-agnostic, service role only (mirrors `classifier_llm_guesses`)
+
+---
+
 ## 2026-04-25 — bulk_import_creator missing ::platform cast on discovery_runs INSERT
 **File:** `supabase/migrations/20260425030000_bulk_import_platform_cast.sql`
 **Applied:** ✅ Supabase (Content OS) via MCP

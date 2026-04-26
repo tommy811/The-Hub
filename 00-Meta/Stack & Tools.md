@@ -2,7 +2,7 @@
 
 > The complete toolkit for The Hub. Every AI, every service, every skill, every MCP, every rejected option and why. Read this before onboarding, before deciding whether to adopt a new tool, or when you forget what's connected.
 
-**Last synced:** 2026-04-25 (sync 13 — always-on worker + live progress UI + RPC + token fix sweep)
+**Last synced:** 2026-04-26 (sync 15 — Universal URL Harvester ships, Apify Puppeteer Scraper added)
 
 ---
 
@@ -39,7 +39,7 @@
 | **Supabase** | Postgres + Auth + RLS + Realtime + Storage + Edge Functions | Project: Content OS (`dbkddgwitqwzltuoxmfi`, us-east-1) |
 | **GitHub** | Source control, handoff point between tools | `tommy811/The-Hub` |
 | **Obsidian** | Project knowledge base | Vault path: `/Users/simon/OS/Living VAULT/Content OS/The Hub` (same folder as repo) |
-| **Apify** | Social media scraping platform | Actors: `apify/instagram-scraper`, `clockworks/tiktok-scraper` |
+| **Apify** | Social media scraping platform + page-level harvest | Actors: `apify/instagram-scraper`, `clockworks/tiktok-scraper`, **`apify/puppeteer-scraper`** (added 2026-04-26 — backs Tier 2 of the Universal URL Harvester; runs a custom `page_function.js` that hooks `window.open`/`location.href` setters before page scripts execute and auto-clicks 7 interstitial keyword variants for sensitive-content / "open link" gates) |
 | **macOS launchd** | Always-on discovery worker (local dev) | User agent `com.thehub.worker` at `~/Library/LaunchAgents/com.thehub.worker.plist`. Runs `scripts/worker.py` with RunAtLoad + KeepAlive + ThrottleInterval=10s. Logs at `~/Library/Logs/the-hub-worker.{log,err.log}`. Managed via `scripts/worker_ctl.sh {install|start|stop|restart|unload|status|log|err|uninstall}`. After any pipeline code change, run `scripts/worker_ctl.sh restart` so the process respawns with fresh bytecode. |
 
 ---
@@ -103,15 +103,24 @@ npx skills add git@github.com:kepano/obsidian-skills.git
 ### Backend / Pipeline
 - Python 3.11+
 - `supabase-py` (DB client)
-- `apify-client` (scraping)
+- `apify-client` (scraping + page-level harvest via `apify/puppeteer-scraper`)
 - `google-generativeai` (Gemini)
 - `anthropic` (Claude, Phase 3)
 - `pydantic` v2 (validation)
 - `tenacity` (retry logic)
 - `rapidfuzz` (handle similarity)
-- `httpx` (HTTP client)
-- `beautifulsoup4` (HTML parsing)
+- `httpx` (HTTP client + Tier 1 of Universal URL Harvester)
+- `beautifulsoup4` (HTML parsing + Tier 1 anchor extraction)
+- `curl_cffi` (chrome120 JA3 impersonation — OnlyFans fetcher)
+- `yt-dlp` (YouTube channel info)
 - `rich` (structured logging)
+
+### Pipeline package layout (`scripts/`)
+- `pipeline/` — resolver, classifier, identity, canonicalize, budget
+- `fetchers/` — 9 platform fetchers (IG, TT, YT, OF, Patreon, Fanvue, generic, FB stub, X stub) + `instagram_highlights.py` (shelved, runtime-gated)
+- **`harvester/`** — Universal URL Harvester (added 2026-04-26): `orchestrator.py` (cache → Tier 1 → Tier 2 → classify cascade), `tier1_static.py` (httpx + 4-signal escalation detector), `tier2_headless.py` (Apify Puppeteer Scraper integration), `page_function.js` (in-browser hooks + auto-click), `cache.py` (24h TTL on `url_harvest_cache`), `types.py` (`HarvestedUrl`, `Tier1Result`, 10-value `DestinationClass` Literal). Replaces the deleted `aggregators/` package.
+- `worker.py` — launchd-managed long-running poller (`scripts/worker_ctl.sh` for lifecycle)
+- `discover_creator.py` — per-run orchestration around the resolver
 
 ### Testing
 - ESLint flat config for repo-wide linting

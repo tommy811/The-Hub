@@ -127,3 +127,24 @@ gemini_pro, gemini_flash, claude_opus, claude_sonnet
 link_in_bio, direct_link, cta_mention, qr_code, inferred
 
 *Kinds of `funnel_edges` between profiles.*
+
+---
+
+## destination_class (TEXT with CHECK constraint, **not** a Postgres ENUM)
+
+monetization, aggregator, social, commerce, messaging, content, affiliate, professional, other, unknown
+
+*Lives on `profile_destination_links.destination_class`. Extended from 4 → 10 values on 2026-04-26 (migration `20260426020000`) to back the Universal URL Harvester. Implemented as a TEXT column with a CHECK constraint rather than a Postgres ENUM so forward-compat additions are a single `DROP CONSTRAINT / ADD CONSTRAINT` swap instead of `ALTER TYPE ... ADD VALUE` ceremony.*
+
+| Value | Used for |
+|---|---|
+| monetization | OF, Patreon, Fanvue, paid subs |
+| aggregator | Linktree, Beacons, link.me, custom-domain link-in-bio |
+| social | IG, TikTok, YouTube, FB, X, LinkedIn |
+| commerce | Shopify, Etsy, Depop, owned storefronts |
+| messaging | Telegram, WhatsApp, Discord |
+| content | Substack, Spotify, Apple Podcasts, Medium, Ghost |
+| affiliate | amzn.to, geni.us, lnk.to, shareasale, skimresources |
+| professional | LinkedIn, Calendly, Notion press kits |
+| other | catch-all for non-matched |
+| unknown | classifier returned no confident guess |

@@ -1,5 +1,52 @@
 # Migration Log
 
+## 20260426030000_commit_discovery_result_v4_update_destination_class
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`.
+
+Body identical to `20260426010000` (v3) except the `ON CONFLICT (profile_id, canonical_url) DO UPDATE` clause on the `profile_destination_links` INSERT now also updates `destination_class = EXCLUDED.destination_class`. Without it, rows from buggy pre-fix runs stuck around with stale class values (e.g. `t.me/...` at `other` when the resolver was later patched to map `messaging`). Caught during the 2026-04-26 smoke when re-running discovery on a creator with cached destination rows didn't refresh their class. The `harvest_method` and `raw_text` updates already used `COALESCE(EXCLUDED.x, profile_destination_links.x)`; left those untouched.
+
+---
+
+## 20260426020000_extend_destination_class_check
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`.
+
+Extends the `profile_destination_links.destination_class` CHECK constraint from 4 values (`monetization|aggregator|social|other`) to 10 (`monetization|aggregator|social|commerce|messaging|content|affiliate|professional|other|unknown`) — matching the `DestinationClass` Literal in `scripts/harvester/types.py`. Without this, the harvester crashed on insert any time a row tagged `messaging` (Telegram / WhatsApp / Discord) hit `commit_discovery_result` — caught by the 2026-04-26 smoke. Note: TEXT-with-CHECK pattern, not a Postgres ENUM. Forward-compat extensions are a single `DROP CONSTRAINT / ADD CONSTRAINT` instead of `ALTER TYPE ... ADD VALUE` ceremony.
+
+---
+
+## 20260426010000_commit_discovery_result_v3_harvester_audit
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`.
+
+Extends `commit_discovery_result` to write the 3 new audit columns on `profile_destination_links` (`harvest_method`, `raw_text`, `harvested_at`). The `p_discovered_urls` jsonb shape gains optional fields `harvest_method` and `raw_text` per element; the RPC reads `v_url->>'harvest_method'` and `v_url->>'raw_text'` and threads them through both the INSERT and the ON CONFLICT DO UPDATE (using `COALESCE(EXCLUDED.x, profile_destination_links.x)` so older rows without the audit fields don't get nulled out). Body otherwise identical to `20260425000200`.
+
+---
+
+## 20260426000000_url_harvester_v1
+
+Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`.
+
+Backs the Universal URL Harvester ship.
+
+**Audit columns on `profile_destination_links`:**
+- `harvest_method TEXT` — `cache | httpx | headless`. NULL on rows pre-dating the harvester.
+- `raw_text TEXT` — the anchor / button text that surfaced the URL during harvest.
+- `harvested_at TIMESTAMPTZ DEFAULT NOW()` — when this destination was last (re)harvested.
+
+**New table `url_harvest_cache` (23 → 24 tables):**
+- `canonical_url TEXT PRIMARY KEY`
+- `harvest_method TEXT NOT NULL CHECK IN ('httpx','headless')`
+- `destinations JSONB NOT NULL` — array of `{canonical_url, raw_url, raw_text, destination_class}`
+- `harvested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- `expires_at TIMESTAMPTZ NOT NULL` — 24h TTL by default; set by Python writer
+- `created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+- Index `idx_url_harvest_cache_expires` on `expires_at` for TTL-aware lookups
+- No RLS — workspace-agnostic, service role only (mirrors `classifier_llm_guesses`)
+
+---
+
 ## 20260425030000_bulk_import_platform_cast
 
 Applied 2026-04-25 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`, PR #4.
@@ -222,3 +269,5 @@ RLS on all tables. All indexes.
 ## Pending
 
 No pending migrations at this time. Next migration slated is the Phase 2 scraping work (Apify ingestion + `quality_flag`/`quality_reason` on `scraped_content` per PROJECT_STATE §15.2).
+
+> **Tooling note:** `npm run db:schema` is still blocked on missing `SUPABASE_DB_URL` in `scripts/.env`. Live DB has 24 tables; `docs/SCHEMA.md` shows 23. PROJECT_STATE.md §4.1 has been hand-updated. See PROJECT_STATE §20 Known Limitations for the regen runbook.

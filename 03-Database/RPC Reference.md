@@ -4,14 +4,14 @@ All callable via: `supabase.rpc('function_name', { args })`
 
 ---
 
-## commit_discovery_result (v2, 2026-04-25)
+## commit_discovery_result (v4, 2026-04-26)
 **Called by:** Python discovery pipeline (`pipeline/resolver.py` → `discover_creator._commit_v2`) on successful resolver output
 **Args:**
 - `p_run_id` UUID
 - `p_creator_data` JSONB — `{canonical_name, known_usernames[], display_name_variants[], primary_platform, primary_niche, monetization_model}`
 - `p_accounts` JSONB — array of `{account_type, platform, handle, url, display_name, bio, follower_count, is_primary, discovery_confidence, reasoning}`
 - `p_funnel_edges` JSONB — array of `{from_handle, from_platform, to_handle, to_platform, edge_type, confidence}`
-- `p_discovered_urls` JSONB DEFAULT `'[]'` — array of `{canonical_url, platform, account_type, destination_class, reason}` (v2)
+- `p_discovered_urls` JSONB DEFAULT `'[]'` — array of `{canonical_url, platform, account_type, destination_class, reason, harvest_method, raw_text}` (`harvest_method` + `raw_text` added in v3)
 - `p_bulk_import_id` UUID DEFAULT NULL (v2)
 
 **Returns:** `{creator_id, accounts_upserted, merge_candidates_raised, urls_recorded}`
@@ -21,11 +21,15 @@ All callable via: `supabase.rpc('function_name', { args })`
 2. On `source='manual_add'`: only union-merges `known_usernames` on the existing creator (preserves human-confirmed canonical_name / primary_niche / monetization_model). On any other source: enriches creator with canonical_name / niches / monetization_model and sets `onboarding_status='ready'`.
 3. Upserts each proposed account as a `profiles` row (unique on `(workspace_id, platform, handle)`).
 4. Inserts funnel edges after resolving from/to handles to profile_ids.
-5. Records each discovered URL in `profile_destination_links` against the creator's primary profile.
+5. Records each discovered URL in `profile_destination_links` against the creator's primary profile, **including the v3 audit fields `harvest_method` and `raw_text`**. ON CONFLICT clause **(v4)** updates `destination_class` so post-fix re-runs refresh stale class values; audit fields are merged via `COALESCE(EXCLUDED.x, profile_destination_links.x)` so older rows without audit data don't get nulled out.
 6. Marks discovery_run completed (`completed_at = NOW()`, `assets_discovered_count`, `funnel_edges_discovered_count`, `bulk_import_id`).
 7. If `p_bulk_import_id` is set, increments `bulk_imports.seeds_committed`.
 
 > **Fixed 2026-04-25 (migration `20260425000200`):** v2 initially wrote `UPDATE discovery_runs SET updated_at = NOW()`, but `discovery_runs` has only `created_at` — caused Postgres `42703 column does not exist` on every successful Stage A. `completed_at` carries the "finished" signal; `updated_at` assignment dropped.
+
+> **Extended 2026-04-26 (migration `20260426010000`, v3):** writes `harvest_method` (`cache|httpx|headless`) and `raw_text` (anchor / button text captured during harvest) to `profile_destination_links`. Backs the Universal URL Harvester ship.
+
+> **Patched 2026-04-26 (migration `20260426030000`, v4):** ON CONFLICT clause now updates `destination_class = EXCLUDED.destination_class`. Pre-fix rows kept stale class values across re-runs (e.g. `t.me/...` URLs stuck at `other` after the resolver was patched to map `messaging`). Caught by the 2026-04-26 smoke when re-discovery didn't refresh cached destination rows.
 
 ---
 
