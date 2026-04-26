@@ -568,7 +568,9 @@ export type Database = {
         Row: {
           added_by: string | null
           archetype: Database["public"]["Enums"]["content_archetype"] | null
+          banner_url: string | null
           canonical_name: string
+          cover_image_url: string | null
           created_at: string | null
           display_name_variants: string[] | null
           id: string
@@ -583,6 +585,7 @@ export type Database = {
           onboarding_status:
             | Database["public"]["Enums"]["onboarding_status"]
             | null
+          override_avatar_url: string | null
           primary_niche: string | null
           primary_platform: Database["public"]["Enums"]["platform"] | null
           slug: string
@@ -595,7 +598,9 @@ export type Database = {
         Insert: {
           added_by?: string | null
           archetype?: Database["public"]["Enums"]["content_archetype"] | null
+          banner_url?: string | null
           canonical_name: string
+          cover_image_url?: string | null
           created_at?: string | null
           display_name_variants?: string[] | null
           id?: string
@@ -610,6 +615,7 @@ export type Database = {
           onboarding_status?:
             | Database["public"]["Enums"]["onboarding_status"]
             | null
+          override_avatar_url?: string | null
           primary_niche?: string | null
           primary_platform?: Database["public"]["Enums"]["platform"] | null
           slug: string
@@ -622,7 +628,9 @@ export type Database = {
         Update: {
           added_by?: string | null
           archetype?: Database["public"]["Enums"]["content_archetype"] | null
+          banner_url?: string | null
           canonical_name?: string
+          cover_image_url?: string | null
           created_at?: string | null
           display_name_variants?: string[] | null
           id?: string
@@ -637,6 +645,7 @@ export type Database = {
           onboarding_status?:
             | Database["public"]["Enums"]["onboarding_status"]
             | null
+          override_avatar_url?: string | null
           primary_niche?: string | null
           primary_platform?: Database["public"]["Enums"]["platform"] | null
           slug?: string
@@ -1496,6 +1505,25 @@ export type Database = {
         | "telegram_cupidbot"
         | "facebook"
         | "other"
+        | "link_me"
+        | "tapforallmylinks"
+        | "allmylinks"
+        | "lnk_bio"
+        | "snipfeed"
+        | "launchyoursocials"
+        | "fanfix"
+        | "cashapp"
+        | "venmo"
+        | "snapchat"
+        | "reddit"
+        | "spotify"
+        | "threads"
+        | "bluesky"
+        | "kofi"
+        | "buymeacoffee"
+        | "substack"
+        | "discord"
+        | "whatsapp"
       post_type:
         | "reel"
         | "tiktok_video"
@@ -1759,6 +1787,25 @@ export const Constants = {
         "telegram_cupidbot",
         "facebook",
         "other",
+        "link_me",
+        "tapforallmylinks",
+        "allmylinks",
+        "lnk_bio",
+        "snipfeed",
+        "launchyoursocials",
+        "fanfix",
+        "cashapp",
+        "venmo",
+        "snapchat",
+        "reddit",
+        "spotify",
+        "threads",
+        "bluesky",
+        "kofi",
+        "buymeacoffee",
+        "substack",
+        "discord",
+        "whatsapp",
       ],
       post_type: [
         "reel",

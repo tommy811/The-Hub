@@ -21,6 +21,12 @@ import {
   SiThreads,
   SiBluesky,
   SiSnapchat,
+  SiSpotify,
+  SiSubstack,
+  SiDiscord,
+  SiWhatsapp,
+  SiKofi,
+  SiBuymeacoffee,
 } from "react-icons/si";
 import { FaLinkedin, FaAmazon } from "react-icons/fa6";
 
@@ -166,6 +172,48 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     accountType: "monetization",
     sortPriority: 20,
   },
+  fanfix: {
+    label: "Fanfix",
+    // No Si icon — Heart is the convention for fan-platform monetization.
+    color: "#FF3366",
+    bgColor: "rgba(255, 51, 102, 0.1)",
+    icon: Heart,
+    accountType: "monetization",
+    sortPriority: 20,
+  },
+  cashapp: {
+    label: "Cash App",
+    // No Si icon for Cash App.
+    color: "#00D632",
+    bgColor: "rgba(0, 214, 50, 0.1)",
+    icon: DollarSign,
+    accountType: "monetization",
+    sortPriority: 20,
+  },
+  venmo: {
+    label: "Venmo",
+    color: "#3D95CE",
+    bgColor: "rgba(61, 149, 206, 0.1)",
+    icon: DollarSign,
+    accountType: "monetization",
+    sortPriority: 20,
+  },
+  kofi: {
+    label: "Ko-fi",
+    color: "#FF5E5B",
+    bgColor: "rgba(255, 94, 91, 0.1)",
+    icon: SiKofi,
+    accountType: "monetization",
+    sortPriority: 20,
+  },
+  buymeacoffee: {
+    label: "Buy Me a Coffee",
+    color: "#FFDD00",
+    bgColor: "rgba(255, 221, 0, 0.1)",
+    icon: SiBuymeacoffee,
+    accountType: "monetization",
+    sortPriority: 20,
+  },
   amazon_storefront: {
     label: "Amazon Storefront",
     // No SiAmazon in this react-icons (5.6.0) build of /si — fall back to FontAwesome 6.
@@ -204,6 +252,54 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     accountType: "link_in_bio",
     sortPriority: 40,
   },
+  link_me: {
+    label: "link.me",
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
+    accountType: "link_in_bio",
+    sortPriority: 40,
+  },
+  tapforallmylinks: {
+    label: "Tap For All My Links",
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
+    accountType: "link_in_bio",
+    sortPriority: 40,
+  },
+  allmylinks: {
+    label: "AllMyLinks",
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
+    accountType: "link_in_bio",
+    sortPriority: 40,
+  },
+  lnk_bio: {
+    label: "Lnk.Bio",
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
+    accountType: "link_in_bio",
+    sortPriority: 40,
+  },
+  snipfeed: {
+    label: "Snipfeed",
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
+    accountType: "link_in_bio",
+    sortPriority: 40,
+  },
+  launchyoursocials: {
+    label: "Launch Your Socials",
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
+    accountType: "link_in_bio",
+    sortPriority: 40,
+  },
   custom_domain: {
     label: "Custom Domain",
     color: "#A0A0A0",
@@ -227,6 +323,38 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     icon: SiTelegram,
     accountType: "messaging",
     sortPriority: 50,
+  },
+  discord: {
+    label: "Discord",
+    color: "#5865F2",
+    bgColor: "rgba(88, 101, 242, 0.1)",
+    icon: SiDiscord,
+    accountType: "messaging",
+    sortPriority: 50,
+  },
+  whatsapp: {
+    label: "WhatsApp",
+    color: "#25D366",
+    bgColor: "rgba(37, 211, 102, 0.1)",
+    icon: SiWhatsapp,
+    accountType: "messaging",
+    sortPriority: 50,
+  },
+  spotify: {
+    label: "Spotify",
+    color: "#1DB954",
+    bgColor: "rgba(29, 185, 84, 0.1)",
+    icon: SiSpotify,
+    accountType: "other", // content, not strictly social/monetization
+    sortPriority: 60,
+  },
+  substack: {
+    label: "Substack",
+    color: "#FF6719",
+    bgColor: "rgba(255, 103, 25, 0.1)",
+    icon: SiSubstack,
+    accountType: "other",
+    sortPriority: 60,
   },
   other: {
     label: "Other",
@@ -261,6 +389,26 @@ const HOST_PLATFORM_MAP: Record<string, string> = {
   "threads.net": "threads",
   "bsky.app": "bluesky",
   "snapchat.com": "snapchat",
+  // T17 — specific aggregator + monetization hosts so even legacy DB rows tagged
+  // 'other' or 'custom_domain' surface the right icon/label.
+  "link.me": "link_me",
+  "tapforallmylinks.com": "tapforallmylinks",
+  "allmylinks.com": "allmylinks",
+  "lnk.bio": "lnk_bio",
+  "snipfeed.co": "snipfeed",
+  "launchyoursocials.com": "launchyoursocials",
+  "fanfix.io": "fanfix",
+  "app.fanfix.io": "fanfix",
+  "cash.app": "cashapp",
+  "venmo.com": "venmo",
+  "ko-fi.com": "kofi",
+  "buymeacoffee.com": "buymeacoffee",
+  "open.spotify.com": "spotify",
+  "spotify.com": "spotify",
+  "substack.com": "substack",
+  "discord.gg": "discord",
+  "discord.com": "discord",
+  "wa.me": "whatsapp",
 };
 
 export function getPlatformFromUrl(url: string | null | undefined): string | null {
@@ -274,17 +422,37 @@ export function getPlatformFromUrl(url: string | null | undefined): string | nul
 }
 
 // Resolve a (platform, url) pair to PlatformMetadata. If the DB platform is
-// 'other' or unknown, fall back to URL-host inference so UI surfaces (icon,
-// label, sort priority) still render properly for newer platforms not in the
-// Postgres `platform` enum.
+// 'other' / 'custom_domain' / unknown, fall back to URL-host inference so UI
+// surfaces (icon, label, sort priority) still render properly. For a TRULY
+// custom funnel domain (no rule match), build an ad-hoc PlatformMetadata using
+// the URL host as the label (e.g. "ariaswan.com").
 export function resolvePlatform(
   platform: string | null | undefined,
   url: string | null | undefined,
 ): PlatformMetadata {
-  if (platform && platform !== "other" && PLATFORMS[platform.toLowerCase()]) {
+  if (
+    platform &&
+    platform !== "other" &&
+    platform !== "custom_domain" &&
+    PLATFORMS[platform.toLowerCase()]
+  ) {
     return PLATFORMS[platform.toLowerCase()];
   }
+  // For 'other' or 'custom_domain', try inferring from URL host first.
   const inferred = getPlatformFromUrl(url);
   if (inferred && PLATFORMS[inferred]) return PLATFORMS[inferred];
+  // Fall back: if platform is 'custom_domain' and we have a URL, build an
+  // ad-hoc PlatformMetadata using the host as the label.
+  if (platform === "custom_domain" && url) {
+    try {
+      const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+      return {
+        ...PLATFORMS.custom_domain,
+        label: host,
+      };
+    } catch {
+      // fall through to default
+    }
+  }
   return platform ? getPlatform(platform) : PLATFORMS.other;
 }

@@ -89,22 +89,14 @@ entries:
 
   # === Universal Harvester v1 additions (2026-04-26) ===
 
-  # Tip jars / micro-monetization
-  - host: buymeacoffee.com
-    platform: other
-    account_type: monetization
-  - host: ko-fi.com
-    platform: other
-    account_type: monetization
+  # Tip jars / micro-monetization (Throne kept here; ko-fi + buymeacoffee
+  # moved to T17 section below with specific platform values)
   - host: throne.com
     platform: other
     account_type: monetization
 
   # Newsletter / blog content platforms (account_type stays 'other'; host-aware
   # mapping in orchestrator promotes destination_class to 'content')
-  - host: substack.com
-    platform: other
-    account_type: other
   - host: medium.com
     platform: other
     account_type: other
@@ -113,27 +105,9 @@ entries:
     account_type: other
 
   # Audio / podcast content
-  - host: open.spotify.com
-    platform: other
-    account_type: other
-  - host: spotify.com
-    platform: other
-    account_type: other
   - host: podcasts.apple.com
     platform: other
     account_type: other
-
-  # Messaging additions
-  - host: wa.me
-    platform: other
-    account_type: messaging
-  - host: discord.gg
-    platform: other
-    account_type: messaging
-  - host: discord.com
-    platform: other
-    account_type: messaging
-    url_pattern: '^/invite/'
 
   # Affiliate redirectors (host-aware mapping promotes to 'affiliate')
   - host: amzn.to
@@ -166,19 +140,84 @@ entries:
     platform: other
     account_type: monetization
 
-  # Aggregator overlay — confirm tapforallmylinks + launchyoursocials variants
-  - host: tapforallmylinks.com
-    platform: custom_domain
+  # === T17 platform-specificity additions/updates (2026-04-26) ===
+
+  # Aggregators (link-in-bio) — use specific platform for identification
+  - host: link.me
+    platform: link_me
     account_type: link_in_bio
-  - host: launchyoursocials.com
-    platform: custom_domain
+  - host: tapforallmylinks.com
+    platform: tapforallmylinks
     account_type: link_in_bio
   - host: allmylinks.com
-    platform: custom_domain
-    account_type: link_in_bio
-  - host: snipfeed.co
-    platform: custom_domain
+    platform: allmylinks
     account_type: link_in_bio
   - host: lnk.bio
-    platform: custom_domain
+    platform: lnk_bio
     account_type: link_in_bio
+  - host: snipfeed.co
+    platform: snipfeed
+    account_type: link_in_bio
+  - host: launchyoursocials.com
+    platform: launchyoursocials
+    account_type: link_in_bio
+
+  # Monetization platforms
+  - host: fanfix.io
+    platform: fanfix
+    account_type: monetization
+  - host: app.fanfix.io
+    platform: fanfix
+    account_type: monetization
+  - host: cash.app
+    platform: cashapp
+    account_type: monetization
+  - host: venmo.com
+    platform: venmo
+    account_type: monetization
+  - host: ko-fi.com
+    platform: kofi
+    account_type: monetization
+  - host: buymeacoffee.com
+    platform: buymeacoffee
+    account_type: monetization
+
+  # Social
+  - host: snapchat.com
+    platform: snapchat
+    account_type: social
+  - host: reddit.com
+    platform: reddit
+    account_type: social
+  - host: old.reddit.com
+    platform: reddit
+    account_type: social
+  - host: threads.net
+    platform: threads
+    account_type: social
+  - host: bsky.app
+    platform: bluesky
+    account_type: social
+
+  # Content
+  - host: open.spotify.com
+    platform: spotify
+    account_type: other
+  - host: spotify.com
+    platform: spotify
+    account_type: other
+  - host: substack.com
+    platform: substack
+    account_type: other
+
+  # Messaging
+  - host: discord.gg
+    platform: discord
+    account_type: messaging
+  - host: discord.com
+    platform: discord
+    account_type: messaging
+    url_pattern: '^/invite/'
+  - host: wa.me
+    platform: whatsapp
+    account_type: messaging

@@ -7,14 +7,31 @@ PLATFORM_VALUES = (
     "instagram", "tiktok", "youtube", "patreon", "twitter", "linkedin",
     "facebook", "onlyfans", "fanvue", "fanplace", "amazon_storefront",
     "tiktok_shop", "linktree", "beacons", "custom_domain",
-    "telegram_channel", "telegram_cupidbot", "other",
+    "telegram_channel", "telegram_cupidbot",
+    # T17 (2026-04-26): specific aggregator + monetization + content + social
+    # platform values so URLs no longer collapse into 'other' / 'custom_domain'
+    # (kept the unique constraint on profiles diverse).
+    "link_me", "tapforallmylinks", "allmylinks", "lnk_bio",
+    "snipfeed", "launchyoursocials",
+    "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+    "snapchat", "reddit", "threads", "bluesky",
+    "spotify", "substack",
+    "discord", "whatsapp",
+    "other",
 )
 
 Platform = Literal[
     "instagram", "tiktok", "youtube", "patreon", "twitter", "linkedin",
     "facebook", "onlyfans", "fanvue", "fanplace", "amazon_storefront",
     "tiktok_shop", "linktree", "beacons", "custom_domain",
-    "telegram_channel", "telegram_cupidbot", "other",
+    "telegram_channel", "telegram_cupidbot",
+    "link_me", "tapforallmylinks", "allmylinks", "lnk_bio",
+    "snipfeed", "launchyoursocials",
+    "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+    "snapchat", "reddit", "threads", "bluesky",
+    "spotify", "substack",
+    "discord", "whatsapp",
+    "other",
 ]
 
 EdgeType = Literal["link_in_bio", "direct_link", "cta_mention", "qr_code", "inferred"]

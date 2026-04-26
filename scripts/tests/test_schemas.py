@@ -91,12 +91,21 @@ class TestPlatformValuesCompleteness:
         assert "patreon" in PLATFORM_VALUES
 
     def test_matches_documented_db_enum(self):
-        # Full list from PROJECT_STATE §5, excluding 'other'
+        # Full list from the live DB platform enum (sync 15+ — T17 added the
+        # specific aggregator/monetization values 2026-04-26).
         expected = {
             "instagram", "tiktok", "youtube", "patreon", "twitter", "linkedin",
             "facebook", "onlyfans", "fanvue", "fanplace", "amazon_storefront",
             "tiktok_shop", "linktree", "beacons", "custom_domain",
-            "telegram_channel", "telegram_cupidbot", "other",
+            "telegram_channel", "telegram_cupidbot",
+            # T17 (2026-04-26)
+            "link_me", "tapforallmylinks", "allmylinks", "lnk_bio",
+            "snipfeed", "launchyoursocials",
+            "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+            "snapchat", "reddit", "threads", "bluesky",
+            "spotify", "substack",
+            "discord", "whatsapp",
+            "other",
         }
         assert set(PLATFORM_VALUES) == expected
 

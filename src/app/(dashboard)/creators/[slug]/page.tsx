@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { BannerWithFallback } from "@/components/creators/BannerWithFallback";
 import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { MergeBannerActions } from "@/components/creators/MergeBannerActions";
 import { FailedRetryButton } from "@/components/creators/FailedRetryButton";
@@ -89,7 +90,8 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
   }
 
   const primaryProfile = profiles.find(p => p.is_primary) ?? profiles[0];
-  const avatarUrl = primaryProfile?.avatar_url ?? null;
+  // Prefer agency-managed override; fall back to primary profile's scraped avatar.
+  const avatarUrl = creator.override_avatar_url ?? primaryProfile?.avatar_url ?? null;
   const gradient = getGradient(creator.canonical_name);
 
   // Sort at the render layer (not the DB layer) so that other consumers keep insertion order.
@@ -131,6 +133,8 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           </AlertDescription>
         </Alert>
       )}
+
+      <BannerWithFallback bannerUrl={creator.banner_url} coverImageUrl={creator.cover_image_url} />
 
       {/* Header */}
       <div className="flex items-start gap-5 pt-2">

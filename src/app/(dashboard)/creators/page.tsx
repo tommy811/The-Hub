@@ -75,7 +75,9 @@ export default async function CreatorsHubPage({
       id: c.id,
       canonicalName: c.canonical_name,
       slug: c.slug,
-      avatarUrl: primaryProfile?.avatar_url ?? undefined,
+      // Prefer agency-managed override; fall back to primary profile's scraped avatar.
+      avatarUrl: c.override_avatar_url ?? primaryProfile?.avatar_url ?? undefined,
+      coverImageUrl: c.banner_url ?? c.cover_image_url ?? undefined,
       status: c.onboarding_status as "processing" | "ready" | "failed" | "archived",
       trackingType: c.tracking_type ?? "unreviewed",
       monetizationModel: c.monetization_model ?? undefined,

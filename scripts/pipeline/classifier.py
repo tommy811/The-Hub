@@ -15,7 +15,7 @@ _PROMPT_TEMPLATE = """You are classifying a URL into a creator-platform taxonomy
 URL: {url}
 
 Return a JSON object with these fields:
-- platform: one of [instagram, tiktok, youtube, patreon, twitter, linkedin, facebook, onlyfans, fanvue, fanplace, amazon_storefront, tiktok_shop, linktree, beacons, custom_domain, telegram_channel, telegram_cupidbot, other]
+- platform: one of [instagram, tiktok, youtube, patreon, twitter, linkedin, facebook, onlyfans, fanvue, fanplace, amazon_storefront, tiktok_shop, linktree, beacons, custom_domain, telegram_channel, telegram_cupidbot, link_me, tapforallmylinks, allmylinks, lnk_bio, snipfeed, launchyoursocials, fanfix, cashapp, venmo, kofi, buymeacoffee, snapchat, reddit, threads, bluesky, spotify, substack, discord, whatsapp, other]
 - account_type: one of [social, monetization, link_in_bio, messaging, other]
 - confidence: float 0.0-1.0 — how confident are you this is the right classification
 

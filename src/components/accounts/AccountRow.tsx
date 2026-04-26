@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Star } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { resolvePlatform } from "@/lib/platforms";
 
 interface AccountRowProps {
   id: string;
@@ -57,15 +58,11 @@ export function AccountRow({
     <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-background/50 hover:bg-muted/30 transition-colors group">
 
       <div className="flex items-center gap-4 flex-1">
-        <div className="flex items-center gap-2 w-[200px] shrink-0">
+        <div className="flex items-center gap-2 w-[180px] shrink-0">
           <PlatformIcon platform={platform} url={url} size={16} />
-          {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="font-semibold text-sm hover:text-indigo-400 transition-colors flex items-center gap-1">
-              {handle} <ExternalLink className="h-3 w-3 opacity-50" />
-            </a>
-          ) : (
-            <span className="font-semibold text-sm">{handle}</span>
-          )}
+          <span className="font-semibold text-sm truncate">
+            {resolvePlatform(platform, url).label}
+          </span>
           {isPrimary && (
             <TooltipProvider>
               <Tooltip>
@@ -78,8 +75,17 @@ export function AccountRow({
           )}
         </div>
 
-        <div className="text-sm text-foreground/80 w-[200px] truncate">
-          {displayName || <span className="text-muted-foreground italic">No display name</span>}
+        <div className="flex flex-col gap-0.5 w-[280px] truncate">
+          {url ? (
+            <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-foreground/90 hover:text-indigo-400 transition-colors flex items-center gap-1 truncate">
+              {handle} <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
+            </a>
+          ) : (
+            <span className="font-medium text-sm text-foreground/90 truncate">{handle}</span>
+          )}
+          {displayName && (
+            <span className="text-xs text-muted-foreground truncate">{displayName}</span>
+          )}
         </div>
 
         <div className="text-sm font-medium w-[100px]">

@@ -21,6 +21,8 @@ interface CreatorCardProps {
   canonicalName: string;
   slug: string;
   avatarUrl?: string;
+  /** Banner strip — banner_url override wins over scraper-set cover_image_url. */
+  coverImageUrl?: string;
   status: 'processing' | 'ready' | 'failed' | 'archived';
   trackingType: string;
   monetizationModel?: string;
@@ -95,7 +97,7 @@ function CreatorCardAvatar({
 }
 
 export function CreatorCard({
-  id, canonicalName, slug, avatarUrl, status,
+  id, canonicalName, slug, avatarUrl, coverImageUrl, status,
   trackingType, monetizationModel, tags,
   accountCounts, totalFollowers, updatedAgo, hasMergeCandidate, errorMessage,
   lastDiscoveryRunId,
@@ -218,8 +220,16 @@ export function CreatorCard({
               </DropdownMenu>
             </div>
 
+            {coverImageUrl && (
+              <div className="absolute top-0 left-0 right-0 h-16 overflow-hidden opacity-40 pointer-events-none">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverImageUrl} alt="" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#13131A]" />
+              </div>
+            )}
+
             {/* Avatar + name */}
-            <div className="flex flex-col items-center px-6 pt-8 pb-4">
+            <div className="relative flex flex-col items-center px-6 pt-8 pb-4">
               <CreatorCardAvatar
                 avatarUrl={avatarUrl}
                 canonicalName={canonicalName}
