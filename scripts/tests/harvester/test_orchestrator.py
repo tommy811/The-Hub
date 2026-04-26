@@ -147,3 +147,38 @@ def test_canonicalizes_anchors_before_classify(mock_cache, mock_static, mock_cla
     mock_classify.assert_called_once_with("https://onlyfans.com/x", supabase=sb)
     assert result[0].canonical_url == "https://onlyfans.com/x"
     assert result[0].raw_url == "https://onlyfans.com/x?l_=abc&utm_source=ig"
+
+
+@patch("harvester.orchestrator.write_cache")
+@patch("harvester.orchestrator.classify")
+@patch("harvester.orchestrator.fetch_static")
+@patch("harvester.orchestrator.lookup_cache")
+def test_filters_same_host_urls(
+    mock_cache, mock_static, mock_classify, mock_write
+):
+    """An aggregator's footer links pointing to its own homepage shouldn't be
+    surfaced as destinations of itself."""
+    from pipeline.classifier import Classification
+    mock_cache.return_value = None
+    mock_static.return_value = Tier1Result(
+        html="",
+        anchors=[
+            "https://onlyfans.com/x",  # different host — keep
+            "https://tapforallmylinks.com/",  # same host as source — filter
+            "https://www.tapforallmylinks.com/about",  # same host (www stripped) — filter
+        ],
+        anchor_texts={
+            "https://onlyfans.com/x": "OF",
+            "https://tapforallmylinks.com/": "Home",
+            "https://www.tapforallmylinks.com/about": "About",
+        },
+        signals_tripped=set(),
+    )
+    mock_classify.return_value = Classification(
+        platform="onlyfans", account_type="monetization", confidence=1.0,
+        reason="rule:onlyfans_monetization",
+    )
+    sb = MagicMock()
+    result = harvest_urls("https://tapforallmylinks.com/esmae", supabase=sb)
+    assert len(result) == 1
+    assert result[0].canonical_url == "https://onlyfans.com/x"

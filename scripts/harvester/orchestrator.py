@@ -77,6 +77,8 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
 
     `supabase=None` is supported (unit tests, offline). Cache layer skipped.
     """
+    source_host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+
     # 1. Cache layer
     cached = lookup_cache(supabase, url)
     if cached is not None:
@@ -102,6 +104,11 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
     classified: list[HarvestedUrl] = []
     for raw_url, raw_text in raw_entries:
         canon = canonicalize_url(raw_url)
+        # Same-host filter: an aggregator's homepage / footer links to itself
+        # shouldn't be surfaced as destinations OF itself.
+        canon_host = (urlparse(canon).hostname or "").lower().removeprefix("www.")
+        if canon_host == source_host:
+            continue
         if canon in seen_canon:
             continue
         seen_canon.add(canon)

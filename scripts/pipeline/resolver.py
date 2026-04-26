@@ -109,6 +109,7 @@ def _destination_class_for(account_type: str) -> str:
         "monetization": "monetization",
         "link_in_bio": "aggregator",
         "social": "social",
+        "messaging": "messaging",
     }.get(account_type, "other")
 
 

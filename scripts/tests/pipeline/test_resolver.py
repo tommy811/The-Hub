@@ -272,3 +272,15 @@ def test_resolver_propagates_harvester_audit_fields_to_discovered_urls(
     seed = next(d for d in result.discovered_urls if d.canonical_url == "https://tapforallmylinks.com/x")
     assert seed.harvest_method is None
     assert seed.raw_text is None
+
+
+def test_destination_class_for_includes_messaging():
+    """The resolver's local _destination_class_for must include 'messaging'
+    mapping — without it, t.me / wa.me links land in 'other' instead of
+    being routed to the proper messaging class. Caught by 2026-04-26 smoke."""
+    from pipeline.resolver import _destination_class_for
+    assert _destination_class_for("messaging") == "messaging"
+    assert _destination_class_for("monetization") == "monetization"
+    assert _destination_class_for("link_in_bio") == "aggregator"
+    assert _destination_class_for("social") == "social"
+    assert _destination_class_for("other") == "other"
