@@ -25,6 +25,7 @@ from fetchers import twitter as fetch_twitter
 from fetchers import generic as fetch_generic
 from fetchers.base import EmptyDatasetError
 from harvester import harvest_urls
+from harvester.filters import is_noise_url
 from harvester.types import HARVEST_CLASSES
 
 
@@ -274,6 +275,12 @@ def resolve_seed(
         if canon in visited_canonical:
             return
         visited_canonical.add(canon)
+
+        # Drop noise URLs (API endpoints, CDN, legal/footer, empty-path homepages)
+        # before they become DiscoveredUrl rows — same filter the harvester
+        # orchestrator uses post-Tier1/Tier2.
+        if is_noise_url(canon):
+            return
 
         cls: Classification = classify(canon, supabase=supabase)
         audit = harvest_audit.get(canon, {})

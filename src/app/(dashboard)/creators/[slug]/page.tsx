@@ -25,7 +25,7 @@ import {
 } from "@/lib/db/queries";
 import { ComingSoon } from "@/components/shared/ComingSoon";
 import { sortAccounts } from "@/lib/sortAccounts";
-import { PLATFORMS, getSortPriority } from "@/lib/platforms";
+import { PLATFORMS, getSortPriority, resolvePlatform } from "@/lib/platforms";
 
 const GRADIENTS = [
   "from-violet-500 to-indigo-600",
@@ -184,7 +184,13 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           label="Total Reach"
           value={totalFollowers > 0 ? formatNumber(totalFollowers) : '—'}
           icon={Users}
-          sub={socialAccounts.length > 1 ? `across ${socialAccounts.length} platforms` : socialAccounts[0]?.platform || undefined}
+          sub={
+            socialAccounts.length > 1
+              ? `across ${socialAccounts.length} platforms`
+              : socialAccounts[0]
+                ? resolvePlatform(socialAccounts[0].platform, socialAccounts[0].url).label
+                : undefined
+          }
         />
         <StatPanel
           label="Social"
@@ -192,9 +198,8 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           icon={Globe}
           sub={
             socialAccounts.length > 0
-              ? Array.from(new Set(socialAccounts.map(a => a.platform)))
-                  .sort((a, b) => getSortPriority(a) - getSortPriority(b))
-                  .map(p => PLATFORMS[p]?.label ?? p)
+              ? Array.from(new Set(socialAccounts.map(a => resolvePlatform(a.platform, a.url).label)))
+                  .sort()
                   .join(', ')
               : 'none linked'
           }
@@ -205,9 +210,8 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           icon={DollarSign}
           sub={
             monetizationAccounts.length > 0
-              ? Array.from(new Set(monetizationAccounts.map(a => a.platform)))
-                  .sort((a, b) => getSortPriority(a) - getSortPriority(b))
-                  .map(p => PLATFORMS[p]?.label ?? p)
+              ? Array.from(new Set(monetizationAccounts.map(a => resolvePlatform(a.platform, a.url).label)))
+                  .sort()
                   .join(', ')
               : 'none linked'
           }
@@ -216,7 +220,13 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           label="Link-in-Bio"
           value={linkInBioAccounts.length}
           icon={Link2}
-          sub={linkInBioAccounts.length > 0 ? linkInBioAccounts.map(a => a.handle).join(', ') : 'none linked'}
+          sub={
+            linkInBioAccounts.length > 0
+              ? Array.from(new Set(linkInBioAccounts.map(a => resolvePlatform(a.platform, a.url).label)))
+                  .sort((a, b) => a.localeCompare(b))
+                  .join(', ')
+              : 'none linked'
+          }
         />
       </div>
 
@@ -230,9 +240,6 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
       </div>
-
-      {/* All harvested destinations — grouped by destination_class */}
-      <CreatorDestinations destinations={destinations} />
 
       {/* Status banners */}
       {creator.onboarding_status === 'processing' && (
@@ -289,6 +296,22 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
           />
         </TabsContent>
       </Tabs>
+
+      {/* All harvested destinations — collapsed by default, at the bottom.
+          Native <details> avoids pulling in a Collapsible dependency and
+          its `group-open:` modifier handles the chevron rotation. */}
+      <details className="mt-4 rounded-lg border border-white/[0.06] bg-[#13131A] overflow-hidden group">
+        <summary className="cursor-pointer select-none px-6 py-4 flex items-center justify-between gap-3 text-sm font-semibold text-white/80 hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center gap-2">
+            <span>All Destinations</span>
+            <span className="text-xs font-normal text-white/40">({destinations.length})</span>
+          </div>
+          <span className="text-xs text-white/40 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="px-6 pb-6">
+          <CreatorDestinations destinations={destinations} />
+        </div>
+      </details>
     </div>
   );
 }

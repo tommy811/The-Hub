@@ -70,14 +70,11 @@ export function CreatorDestinations({
   }
 
   return (
-    <section className="rounded-lg border border-white/[0.06] bg-[#13131A] p-6">
-      <header className="mb-4">
-        <h2 className="text-sm font-semibold text-white/90">All Destinations</h2>
-        <p className="text-xs text-white/50">
-          Every URL the discovery pipeline harvested for this creator&apos;s network,
-          grouped by class.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <p className="text-xs text-white/50 -mt-1 mb-2">
+        Every URL the discovery pipeline harvested for this creator&apos;s network,
+        grouped by class.
+      </p>
 
       <div className="space-y-5">
         {CLASS_ORDER.filter((c) => grouped[c]?.length).map((cls) => (
@@ -118,7 +115,7 @@ export function CreatorDestinations({
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 

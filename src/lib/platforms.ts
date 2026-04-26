@@ -3,7 +3,7 @@ import {
   DollarSign,
   Heart,
   ShoppingCart,
-  Link2,
+  Link as LinkIcon,
   Globe,
   type LucideIcon,
 } from "lucide-react";
@@ -16,8 +16,11 @@ import {
   SiX,
   SiPatreon,
   SiOnlyfans,
-  SiLinktree,
   SiTelegram,
+  SiReddit,
+  SiThreads,
+  SiBluesky,
+  SiSnapchat,
 } from "react-icons/si";
 import { FaLinkedin, FaAmazon } from "react-icons/fa6";
 
@@ -97,6 +100,38 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     accountType: "social",
     sortPriority: 10,
   },
+  reddit: {
+    label: "Reddit",
+    color: "#FF4500",
+    bgColor: "rgba(255, 69, 0, 0.1)",
+    icon: SiReddit,
+    accountType: "social",
+    sortPriority: 10,
+  },
+  threads: {
+    label: "Threads",
+    color: "#FFFFFF",
+    bgColor: "rgba(255, 255, 255, 0.08)",
+    icon: SiThreads,
+    accountType: "social",
+    sortPriority: 10,
+  },
+  bluesky: {
+    label: "Bluesky",
+    color: "#1185FE",
+    bgColor: "rgba(17, 133, 254, 0.1)",
+    icon: SiBluesky,
+    accountType: "social",
+    sortPriority: 10,
+  },
+  snapchat: {
+    label: "Snapchat",
+    color: "#FFFC00",
+    bgColor: "rgba(255, 252, 0, 0.1)",
+    icon: SiSnapchat,
+    accountType: "social",
+    sortPriority: 10,
+  },
   patreon: {
     label: "Patreon",
     color: "#FF424D",
@@ -150,20 +185,22 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     accountType: "monetization",
     sortPriority: 30,
   },
+  // All link-in-bio aggregators share the unified clip icon — they're "links to
+  // links" by definition, so a single visual marker reads cleaner than per-brand
+  // glyphs.
   linktree: {
     label: "Linktree",
-    color: "#43E660",
-    bgColor: "rgba(67, 230, 96, 0.1)",
-    icon: SiLinktree,
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
     accountType: "link_in_bio",
     sortPriority: 40,
   },
   beacons: {
     label: "Beacons",
-    // No Simple Icon for Beacons — fall back to lucide Link2.
-    color: "#FFFFFF",
-    bgColor: "rgba(255, 255, 255, 0.1)",
-    icon: Link2,
+    color: "#A0A0A0",
+    bgColor: "rgba(160, 160, 160, 0.1)",
+    icon: LinkIcon,
     accountType: "link_in_bio",
     sortPriority: 40,
   },
@@ -171,7 +208,7 @@ export const PLATFORMS: Record<string, PlatformMetadata> = {
     label: "Custom Domain",
     color: "#A0A0A0",
     bgColor: "rgba(160, 160, 160, 0.1)",
-    icon: Globe,
+    icon: LinkIcon,
     accountType: "link_in_bio",
     sortPriority: 40,
   },
@@ -213,4 +250,41 @@ export function getPlatform(p: string | null): PlatformMetadata {
 export function getSortPriority(p: string | null | undefined): number {
   if (!p) return PLATFORMS.other.sortPriority;
   return (PLATFORMS[p.toLowerCase()] ?? PLATFORMS.other).sortPriority;
+}
+
+// Inferred-from-URL platform lookup. Used when DB platform is 'other' but the
+// URL host is a known platform (e.g. Reddit, Threads, Bluesky, Snapchat —
+// anything not in the Postgres `platform` enum but for which we have an icon).
+const HOST_PLATFORM_MAP: Record<string, string> = {
+  "reddit.com": "reddit",
+  "old.reddit.com": "reddit",
+  "threads.net": "threads",
+  "bsky.app": "bluesky",
+  "snapchat.com": "snapchat",
+};
+
+export function getPlatformFromUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const h = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return HOST_PLATFORM_MAP[h] || null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve a (platform, url) pair to PlatformMetadata. If the DB platform is
+// 'other' or unknown, fall back to URL-host inference so UI surfaces (icon,
+// label, sort priority) still render properly for newer platforms not in the
+// Postgres `platform` enum.
+export function resolvePlatform(
+  platform: string | null | undefined,
+  url: string | null | undefined,
+): PlatformMetadata {
+  if (platform && platform !== "other" && PLATFORMS[platform.toLowerCase()]) {
+    return PLATFORMS[platform.toLowerCase()];
+  }
+  const inferred = getPlatformFromUrl(url);
+  if (inferred && PLATFORMS[inferred]) return PLATFORMS[inferred];
+  return platform ? getPlatform(platform) : PLATFORMS.other;
 }

@@ -58,7 +58,7 @@ export function AccountRow({
 
       <div className="flex items-center gap-4 flex-1">
         <div className="flex items-center gap-2 w-[200px] shrink-0">
-          <PlatformIcon platform={platform} size={16} />
+          <PlatformIcon platform={platform} url={url} size={16} />
           {url ? (
             <a href={url} target="_blank" rel="noopener noreferrer" className="font-semibold text-sm hover:text-indigo-400 transition-colors flex items-center gap-1">
               {handle} <ExternalLink className="h-3 w-3 opacity-50" />

@@ -359,6 +359,28 @@ def _commit_v2(sb, run_id: UUID, workspace_id: UUID, result: ResolverResult,
 
     discovered_urls_payload = [du.model_dump() for du in result.discovered_urls]
 
+    # Dedup accounts by URL: an enriched profile (fetcher path) wins over the
+    # "discovered_only_no_fetcher" fallback for the same URL. Higher confidence
+    # wins on ties; non-'other' platform wins on equal confidence. Without this
+    # dedup, link-in-bio URLs surfaced by both gazetteer rule and the
+    # discovered-only loop end up as two profile rows for the same destination.
+    accounts_by_url: dict[str, dict] = {}
+    for a in accounts:
+        url_key = a.get("url") or ""
+        if not url_key:
+            continue
+        existing = accounts_by_url.get(url_key)
+        if existing is None:
+            accounts_by_url[url_key] = a
+            continue
+        a_conf = float(a.get("discovery_confidence") or 0)
+        e_conf = float(existing.get("discovery_confidence") or 0)
+        if a_conf > e_conf:
+            accounts_by_url[url_key] = a
+        elif a_conf == e_conf and existing.get("platform") == "other" and a.get("platform") != "other":
+            accounts_by_url[url_key] = a
+    accounts = list(accounts_by_url.values())
+
     sb.rpc("commit_discovery_result", {
         "p_run_id": str(run_id),
         "p_creator_data": creator_data,
