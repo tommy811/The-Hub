@@ -99,3 +99,103 @@ def test_post_with_full_platform_metrics():
     post = NormalizedPost(**_minimal_post(platform_metrics=pm))
     assert post.platform_metrics.audio.signature == "x"
     assert post.platform_metrics.tagged_accounts == ["foo", "bar"]
+
+
+import json
+from pathlib import Path
+from content_scraper.normalizer import instagram_to_normalized
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures"
+
+
+def _load_fixture(name: str) -> dict:
+    return json.loads((FIXTURE_DIR / name).read_text())
+
+
+def test_instagram_to_normalized_basic_fields():
+    pid = uuid4()
+    raw = _load_fixture("instagram_post.json")
+    post = instagram_to_normalized(raw, profile_id=pid)
+    assert post.profile_id == pid
+    assert post.platform == "instagram"
+    assert post.platform_post_id == "3567890123"
+    assert post.post_url == "https://www.instagram.com/p/C-AbCdEf/"
+    assert post.post_type == "reel"
+    assert post.caption == "summer vibes ☀️ #beach #vacay"
+    assert post.posted_at.year == 2026
+
+
+def test_instagram_to_normalized_engagement():
+    raw = _load_fixture("instagram_post.json")
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.view_count == 18000
+    assert post.like_count == 850
+    assert post.comment_count == 42
+    assert post.share_count is None
+    assert post.save_count is None
+
+
+def test_instagram_to_normalized_structural_flags():
+    raw = _load_fixture("instagram_post.json")
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.is_pinned is False
+    assert post.is_sponsored is False
+    assert post.video_duration_seconds == 28.5
+    assert post.hashtags == ["beach", "vacay"]
+    assert post.mentions == ["friendhandle"]
+
+
+def test_instagram_to_normalized_platform_metrics():
+    raw = _load_fixture("instagram_post.json")
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    pm = post.platform_metrics
+    assert pm.audio.signature == "987654321"
+    assert pm.audio.artist == "Some Artist"
+    assert pm.audio.title == "Summer Song"
+    assert pm.audio.is_original is False
+    assert pm.location.name == "Malibu Beach"
+    assert pm.location.id == "12345"
+    assert pm.tagged_accounts == ["friend1", "friend2"]
+    assert pm.product_type == "clips"
+
+
+def test_instagram_to_normalized_carousel_post_type():
+    raw = _load_fixture("instagram_post.json")
+    raw["type"] = "Sidecar"
+    raw["images"] = ["https://a.jpg", "https://b.jpg", "https://c.jpg"]
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.post_type == "carousel"
+    assert post.media_urls == ["https://a.jpg", "https://b.jpg", "https://c.jpg"]
+
+
+def test_instagram_to_normalized_image_post_type():
+    raw = _load_fixture("instagram_post.json")
+    raw["type"] = "Image"
+    raw["images"] = []
+    raw.pop("videoViewCount", None)
+    raw.pop("videoPlayCount", None)
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.post_type == "image"
+    assert post.view_count == 0
+    assert post.media_urls == ["https://scontent.cdninstagram.com/v/thumb.jpg"]
+
+
+def test_instagram_to_normalized_hook_text_first_50_chars():
+    raw = _load_fixture("instagram_post.json")
+    raw["caption"] = "x" * 100
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.hook_text == "x" * 50
+
+
+def test_instagram_to_normalized_caption_none():
+    raw = _load_fixture("instagram_post.json")
+    raw["caption"] = None
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.caption is None
+    assert post.hook_text is None
+
+
+def test_instagram_to_normalized_raw_payload_preserved():
+    raw = _load_fixture("instagram_post.json")
+    post = instagram_to_normalized(raw, profile_id=uuid4())
+    assert post.raw_apify_payload == raw

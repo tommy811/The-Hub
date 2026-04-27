@@ -76,3 +76,90 @@ class NormalizedPost(BaseModel):
     thumbnail_url: str | None = None
     platform_metrics: PlatformMetrics = PlatformMetrics()
     raw_apify_payload: dict = {}
+
+
+def _ig_post_type(raw_type: str) -> PostType:
+    t = (raw_type or "").lower()
+    if "video" in t:
+        return "reel"
+    if "sidecar" in t or "carousel" in t:
+        return "carousel"
+    if "image" in t:
+        return "image"
+    return "other"
+
+
+def instagram_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
+    """Convert a raw apify/instagram-scraper item to NormalizedPost.
+
+    Field-source comments document which Apify field maps to which normalized
+    field. Single source of truth for IG mapping.
+    """
+    caption = item.get("caption")
+    hook_text = caption[:50] if caption else None
+
+    music = item.get("musicInfo") or {}
+    audio = AudioInfo(
+        signature=str(music["audio_id"]) if music.get("audio_id") else None,
+        artist=music.get("artist_name"),
+        title=music.get("song_name"),
+        is_original=music.get("uses_original_audio"),
+    ) if music else None
+
+    location_name = item.get("locationName")
+    location_id = item.get("locationId")
+    location = LocationInfo(
+        name=location_name,
+        id=str(location_id) if location_id else None,
+    ) if (location_name or location_id) else None
+
+    tagged = [
+        u.get("username") for u in (item.get("taggedUsers") or [])
+        if u.get("username")
+    ]
+
+    platform_metrics = PlatformMetrics(
+        audio=audio,
+        location=location,
+        tagged_accounts=tagged,
+        product_type=item.get("productType"),
+    )
+
+    images = item.get("images") or []
+    if images:
+        media_urls = [u for u in images if u]
+    elif item.get("displayUrl"):
+        media_urls = [item["displayUrl"]]
+    else:
+        media_urls = []
+
+    view_count = (
+        item.get("videoPlayCount")
+        or item.get("videoViewCount")
+        or 0
+    )
+
+    return NormalizedPost(
+        profile_id=profile_id,
+        platform="instagram",
+        platform_post_id=str(item["id"]),
+        post_url=item.get("url") or "",
+        post_type=_ig_post_type(item.get("type", "")),
+        caption=caption,
+        hook_text=hook_text,
+        posted_at=item["timestamp"],
+        view_count=int(view_count),
+        like_count=int(item.get("likesCount") or 0),
+        comment_count=int(item.get("commentsCount") or 0),
+        share_count=None,
+        save_count=None,
+        is_pinned=False,
+        is_sponsored=bool(item.get("isSponsored", False)),
+        video_duration_seconds=item.get("videoDuration"),
+        hashtags=list(item.get("hashtags") or []),
+        mentions=list(item.get("mentions") or []),
+        media_urls=media_urls,
+        thumbnail_url=item.get("displayUrl"),
+        platform_metrics=platform_metrics,
+        raw_apify_payload=item,
+    )

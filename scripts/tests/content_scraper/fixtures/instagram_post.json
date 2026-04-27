@@ -1,0 +1,29 @@
+{
+  "id": "3567890123",
+  "shortCode": "C-AbCdEf",
+  "url": "https://www.instagram.com/p/C-AbCdEf/",
+  "type": "Video",
+  "productType": "clips",
+  "caption": "summer vibes ☀️ #beach #vacay",
+  "timestamp": "2026-04-15T14:30:00.000Z",
+  "videoViewCount": 12500,
+  "videoPlayCount": 18000,
+  "likesCount": 850,
+  "commentsCount": 42,
+  "videoDuration": 28.5,
+  "displayUrl": "https://scontent.cdninstagram.com/v/thumb.jpg",
+  "videoUrl": "https://scontent.cdninstagram.com/v/video.mp4",
+  "images": [],
+  "isSponsored": false,
+  "hashtags": ["beach", "vacay"],
+  "mentions": ["friendhandle"],
+  "musicInfo": {
+    "audio_id": "987654321",
+    "artist_name": "Some Artist",
+    "song_name": "Summer Song",
+    "uses_original_audio": false
+  },
+  "locationName": "Malibu Beach",
+  "locationId": "12345",
+  "taggedUsers": [{"username": "friend1"}, {"username": "friend2"}]
+}
