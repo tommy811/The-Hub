@@ -75,7 +75,34 @@ Both Apify actors accept a list of targets per run (`directUrls` for IG, `profil
 
 ### 3.3 Normalized post contract
 
+The model promotes every analytically useful field into structured form. `raw_apify_payload` still captures the full untransformed actor response for forensic / future-extraction use, but anything we'd ever want to filter, sort, group, or aggregate by lives in a top-level column or in a defined-shape `platform_metrics` jsonb key.
+
 ```python
+class AudioInfo(BaseModel):
+    signature: str | None         # platform-stable audio ID (IG musicInfo.audio_id, TT musicMeta.musicId)
+    artist: str | None
+    title: str | None
+    is_original: bool | None      # IG uses_original_audio / TT musicMeta.musicOriginal
+
+class LocationInfo(BaseModel):
+    name: str | None
+    id: str | None
+
+class PlatformMetrics(BaseModel):
+    audio: AudioInfo | None
+    location: LocationInfo | None
+    tagged_accounts: list[str] = []      # IG @-tags inside the post
+    product_type: str | None             # IG: clips | feed | igtv
+    effects: list[str] = []              # TT effect stickers
+    is_slideshow: bool | None            # TT
+    is_muted: bool | None                # TT
+    video_aspect_ratio: float | None     # TT videoMeta.ratio
+    video_resolution: str | None         # TT "1080x1920"
+    subtitles: str | None                # TT auto-generated subtitle text (priming for Phase 3 transcription)
+
+    class Config:
+        extra = "forbid"                 # no freeform keys; if a future field is needed, add it here
+
 class NormalizedPost(BaseModel):
     profile_id: UUID
     platform: Literal["instagram", "tiktok"]
@@ -83,24 +110,39 @@ class NormalizedPost(BaseModel):
     post_url: str
     post_type: Literal["reel", "tiktok_video", "image", "carousel", "story", "story_highlight", "youtube_short", "youtube_long", "other"]
     caption: str | None
-    hook_text: str | None         # v1: caption[:50]; Phase 3 replaces with real extraction
+    hook_text: str | None                # v1: caption[:50]; Phase 3 replaces with real extraction
     posted_at: datetime
-    view_count: int
-    like_count: int
-    comment_count: int
-    share_count: int | None
-    save_count: int | None
-    media_urls: list[str]
+    # cross-platform engagement
+    view_count: int                      # IG videoViewCount / videoPlayCount; TT playCount; 0 for IG static
+    like_count: int                      # IG likesCount; TT diggCount
+    comment_count: int                   # IG commentsCount; TT commentCount
+    share_count: int | None              # TT shareCount; IG doesn't expose
+    save_count: int | None               # IG (sometimes); TT collectCount
+    # cross-platform structural flags (matter for filtering/sorting)
+    is_pinned: bool = False              # TT isPinned; pinned posts skew profile metrics, must filter
+    is_sponsored: bool = False           # IG isSponsored / TT isAd — UGC vs paid analysis
+    video_duration_seconds: float | None # IG videoDuration / TT videoMeta.duration
+    hashtags: list[str] = []             # IG hashtags / TT hashtags[].name — top hashtag analysis
+    mentions: list[str] = []             # IG mentions / TT mentions — collab / cross-promo network
+    # media
+    media_urls: list[str]                # IG images[] for carousels, TT mediaUrls; primary thumbnail goes in thumbnail_url
     thumbnail_url: str | None
-    platform_metrics: dict        # platform-specific extras (audio sig, video duration, etc.)
-    raw_apify_payload: dict
+    # nested + raw
+    platform_metrics: PlatformMetrics
+    raw_apify_payload: dict              # the untransformed actor item; future extractors can mine fields we didn't anticipate
 ```
 
-`engagement_rate` is generated server-side; not in the model.
-`is_outlier` and `outlier_multiplier` are written by `flag_outliers`, not the normalizer.
-`trend_id` stays NULL until trends/audio extraction ships.
+**Notes:**
+
+- `engagement_rate` is a generated column on `scraped_content`, not in the Pydantic model.
+- `is_outlier` and `outlier_multiplier` are written by `flag_outliers`, not the normalizer.
+- `trend_id` stays NULL until the trends/audio extraction milestone — but `platform_metrics.audio.signature` is captured in v1, so when that milestone lands, the extraction is a pure read-side join, no re-scrape needed.
+- `PlatformMetrics` is `extra="forbid"`. New fields go through schema review (add to the model, document the source field). This prevents silent drift where an actor changes its payload shape and we end up with mystery jsonb keys.
+- Field-source comments in the model body document which Apify actor field maps to which normalized field. Single source of truth for field mapping.
 
 ### 3.4 RPC: `commit_scrape_result`
+
+In plain English: this is the database-side function that the Python orchestrator calls once per profile after the Apify fetch returns. It does two things in one transaction — upserts the post rows into `scraped_content` and writes the daily snapshot rows into `content_metrics_snapshots`. Doing both in one transaction means we never end up with a post row but no snapshot row (or vice versa) if something fails mid-way.
 
 ```sql
 CREATE OR REPLACE FUNCTION commit_scrape_result(
@@ -130,6 +172,8 @@ BEGIN
       profile_id, platform, platform_post_id, post_url, post_type,
       caption, hook_text, posted_at,
       view_count, like_count, comment_count, share_count, save_count,
+      is_pinned, is_sponsored, video_duration_seconds,
+      hashtags, mentions,
       media_urls, thumbnail_url, platform_metrics, raw_apify_payload,
       quality_flag
     )
@@ -147,6 +191,11 @@ BEGIN
       COALESCE((v_post->>'comment_count')::bigint, 0),
       (v_post->>'share_count')::bigint,
       (v_post->>'save_count')::bigint,
+      COALESCE((v_post->>'is_pinned')::bool, false),
+      COALESCE((v_post->>'is_sponsored')::bool, false),
+      (v_post->>'video_duration_seconds')::numeric,
+      ARRAY(SELECT jsonb_array_elements_text(v_post->'hashtags')),
+      ARRAY(SELECT jsonb_array_elements_text(v_post->'mentions')),
       ARRAY(SELECT jsonb_array_elements_text(v_post->'media_urls')),
       v_post->>'thumbnail_url',
       v_post->'platform_metrics',
@@ -159,7 +208,12 @@ BEGIN
       comment_count = EXCLUDED.comment_count,
       share_count = EXCLUDED.share_count,
       save_count = EXCLUDED.save_count,
+      is_pinned = EXCLUDED.is_pinned,
+      is_sponsored = EXCLUDED.is_sponsored,
+      hashtags = EXCLUDED.hashtags,
+      mentions = EXCLUDED.mentions,
       caption = EXCLUDED.caption,
+      platform_metrics = EXCLUDED.platform_metrics,
       raw_apify_payload = EXCLUDED.raw_apify_payload,
       updated_at = NOW()
     RETURNING id INTO v_content_id;
@@ -211,9 +265,10 @@ After `commit_scrape_result` and `flag_outliers` succeed for a profile, the orch
 
 ### 3.6 Schema additions
 
-**Migration 1** — `20260427000000_quality_flag_enum.sql`:
+**Migration 1** — `20260427000000_scraped_content_v1_columns.sql`:
 
 ```sql
+-- Quality flag (anticipates §15.2 watchdog)
 CREATE TYPE quality_flag AS ENUM ('clean', 'suspicious', 'rejected');
 
 ALTER TABLE scraped_content
@@ -223,13 +278,33 @@ ALTER TABLE scraped_content
 CREATE INDEX scraped_content_quality_flag_idx
   ON scraped_content (profile_id, quality_flag)
   WHERE quality_flag <> 'clean';
+
+-- Structural / analytical columns surfaced from Apify payloads
+ALTER TABLE scraped_content
+  ADD COLUMN is_pinned boolean NOT NULL DEFAULT false,
+  ADD COLUMN is_sponsored boolean NOT NULL DEFAULT false,
+  ADD COLUMN video_duration_seconds numeric,
+  ADD COLUMN hashtags text[] NOT NULL DEFAULT '{}',
+  ADD COLUMN mentions text[] NOT NULL DEFAULT '{}';
+
+-- GIN indexes for array contains queries (top hashtag analysis, mention network)
+CREATE INDEX scraped_content_hashtags_gin ON scraped_content USING GIN (hashtags);
+CREATE INDEX scraped_content_mentions_gin ON scraped_content USING GIN (mentions);
+
+-- Btree on common filter axes
+CREATE INDEX scraped_content_is_pinned_idx ON scraped_content (profile_id, is_pinned)
+  WHERE is_pinned = true;
+CREATE INDEX scraped_content_is_sponsored_idx ON scraped_content (profile_id, is_sponsored)
+  WHERE is_sponsored = true;
 ```
 
-The partial index makes "show me suspicious / rejected rows for this workspace" cheap once the watchdog populates them (query joins `scraped_content → profiles` to filter by `workspace_id`, since `scraped_content` itself has no `workspace_id` column — tenant scope is via `profile_id`). Cost on the `clean` write path is zero.
+The two partial btree indexes are zero-cost on the common path (`is_pinned = false`, `is_sponsored = false`) and make "show me all sponsored posts" / "show me pinned posts to exclude from medians" fast.
+
+The two GIN indexes support hashtag and mention filtering with PG's array `&&` (overlaps) and `@>` (contains) operators — `WHERE hashtags @> ARRAY['summer']` becomes an index scan, not a full table scan.
 
 **Migration 2** — `20260427000100_commit_scrape_result.sql`: the RPC body above.
 
-No `scraped_content` columns are added beyond `quality_flag` + `quality_reason`. Trends/audio columns already exist (`trend_id` FK, `platform_metrics` jsonb is sufficient for audio signature payloads later).
+`platform_metrics` jsonb is sufficient for audio signature, location, effects, etc. — those don't need top-level columns because nothing in v1 sorts/filters by them at the DB level. The future trend/audio extraction milestone will read `platform_metrics->>'audio'->>'signature'` and join into the existing `trends` table; no migration needed at that point.
 
 ## 4. CLI surface
 
