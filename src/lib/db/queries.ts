@@ -424,6 +424,187 @@ export async function getRecentOutliersForWorkspace(
   }))
 }
 
+export type ContentLibraryRow = {
+  id: string
+  platform: Enums<'platform'>
+  profileHandle: string
+  creatorSlug: string | null
+  creatorName: string | null
+  postUrl: string | null
+  postType: Enums<'post_type'>
+  caption: string | null
+  postedAt: string | null
+  viewCount: number
+  likeCount: number
+  commentCount: number
+  shareCount: number | null
+  saveCount: number | null
+  engagementRate: number | null
+  thumbnailUrl: string | null
+  isOutlier: boolean
+  outlierMultiplier: number | null
+  isPinned: boolean
+  isSponsored: boolean
+  qualityFlag: 'clean' | 'suspicious' | 'rejected'
+  audioSignature: string | null
+  audioArtist: string | null
+  audioTitle: string | null
+  trendId: string | null
+  trendName: string | null
+  trendUsageCount: number | null
+}
+
+type RawContentRow = {
+  id: string
+  platform: Enums<'platform'>
+  post_url: string | null
+  post_type: Enums<'post_type'>
+  caption: string | null
+  posted_at: string | null
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+  share_count: number | null
+  save_count: number | null
+  engagement_rate: number | null
+  thumbnail_url: string | null
+  is_outlier: boolean | null
+  outlier_multiplier: number | null
+  is_pinned?: boolean | null
+  is_sponsored?: boolean | null
+  quality_flag?: 'clean' | 'suspicious' | 'rejected' | null
+  platform_metrics?: Record<string, unknown> | null
+  trend_id?: string | null
+  trends?: {
+    id: string | null
+    name: string | null
+    usage_count: number | null
+  } | null
+  profiles?: {
+    handle: string | null
+    workspace_id: string | null
+    creators?: { slug: string | null; canonical_name: string | null } | null
+  } | null
+}
+
+function mapContentRow(row: RawContentRow): ContentLibraryRow {
+  const audio = (
+    row.platform_metrics &&
+    typeof row.platform_metrics === 'object' &&
+    'audio' in row.platform_metrics &&
+    row.platform_metrics.audio &&
+    typeof row.platform_metrics.audio === 'object'
+      ? row.platform_metrics.audio
+      : {}
+  ) as Record<string, unknown>
+
+  return {
+    id: row.id,
+    platform: row.platform,
+    profileHandle: row.profiles?.handle ?? '',
+    creatorSlug: row.profiles?.creators?.slug ?? null,
+    creatorName: row.profiles?.creators?.canonical_name ?? null,
+    postUrl: row.post_url,
+    postType: row.post_type,
+    caption: row.caption,
+    postedAt: row.posted_at,
+    viewCount: Number(row.view_count ?? 0),
+    likeCount: Number(row.like_count ?? 0),
+    commentCount: Number(row.comment_count ?? 0),
+    shareCount: row.share_count != null ? Number(row.share_count) : null,
+    saveCount: row.save_count != null ? Number(row.save_count) : null,
+    engagementRate: row.engagement_rate != null ? Number(row.engagement_rate) : null,
+    thumbnailUrl: row.thumbnail_url,
+    isOutlier: row.is_outlier ?? false,
+    outlierMultiplier: row.outlier_multiplier != null ? Number(row.outlier_multiplier) : null,
+    isPinned: row.is_pinned ?? false,
+    isSponsored: row.is_sponsored ?? false,
+    qualityFlag: row.quality_flag ?? 'clean',
+    audioSignature: typeof audio.signature === 'string' ? audio.signature : null,
+    audioArtist: typeof audio.artist === 'string' ? audio.artist : null,
+    audioTitle: typeof audio.title === 'string' ? audio.title : null,
+    trendId: row.trend_id ?? row.trends?.id ?? null,
+    trendName: row.trends?.name ?? null,
+    trendUsageCount: row.trends?.usage_count != null ? Number(row.trends.usage_count) : null,
+  }
+}
+
+export async function getContentLibraryForWorkspace(
+  wsId: string,
+  args: {
+    platform?: 'instagram' | 'tiktok'
+    outliersOnly?: boolean
+    limit?: number
+  } = {}
+): Promise<ContentLibraryRow[]> {
+  const supabase = createServiceClient()
+  let query = supabase
+    .from('scraped_content')
+    .select(`
+      id, platform, post_url, post_type, caption, posted_at,
+      view_count, like_count, comment_count, share_count, save_count,
+      engagement_rate, thumbnail_url, is_outlier, outlier_multiplier,
+      is_pinned, is_sponsored, quality_flag, platform_metrics, trend_id,
+      trends ( id, name, usage_count ),
+      profiles!inner (
+        handle, workspace_id,
+        creators!creator_id ( slug, canonical_name )
+      )
+    `)
+    .eq('profiles.workspace_id', wsId)
+    .order(args.outliersOnly ? 'outlier_multiplier' : 'posted_at', {
+      ascending: false,
+      nullsFirst: false,
+    })
+    .limit(args.limit ?? 100)
+
+  if (args.platform) query = query.eq('platform', args.platform)
+  if (args.outliersOnly) query = query.eq('is_outlier', true)
+
+  const { data, error } = await query
+  if (error) throw new Error(`getContentLibraryForWorkspace: ${error.message}`)
+  return ((data ?? []) as unknown as RawContentRow[])
+    .map(mapContentRow)
+    .filter((row) => row.qualityFlag !== 'rejected')
+}
+
+export type AudioTrendRow = {
+  id: string
+  name: string
+  audioSignature: string | null
+  audioArtist: string | null
+  audioTitle: string | null
+  usageCount: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export async function getAudioTrendsForWorkspace(
+  wsId: string,
+  limit = 200
+): Promise<AudioTrendRow[]> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('trends')
+    .select('id, name, audio_signature, audio_artist, audio_title, usage_count, created_at, updated_at')
+    .eq('workspace_id', wsId)
+    .eq('trend_type', 'audio')
+    .order('usage_count', { ascending: false, nullsFirst: false })
+    .limit(limit)
+
+  if (error) throw new Error(`getAudioTrendsForWorkspace: ${error.message}`)
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    audioSignature: row.audio_signature,
+    audioArtist: row.audio_artist,
+    audioTitle: row.audio_title,
+    usageCount: Number(row.usage_count ?? 0),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
 export async function getActiveTrendSignalsForWorkspace(
   wsId: string,
   limit = 5

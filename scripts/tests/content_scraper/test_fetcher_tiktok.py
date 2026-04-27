@@ -25,6 +25,7 @@ def _make_apify_mock(items: list[dict]) -> MagicMock:
     items_result = MagicMock()
     items_result.items = items
     dataset.list_items.return_value = items_result
+    dataset.iterate_items.return_value = iter(items)
     apify.dataset.return_value = dataset
     return apify
 
@@ -69,7 +70,7 @@ def test_tiktok_fetcher_disaggregates_by_authormeta_name():
             ProfileTarget(profile_id=pid_b, handle="esmae"),
         ],
         since=datetime(2026, 4, 1, tzinfo=timezone.utc),
-    ))
+    )).posts_by_profile
     assert pid_a in result and pid_b in result
     assert result[pid_a][0].platform_post_id == "tt_a"
     assert result[pid_b][0].platform_post_id == "tt_b"
@@ -86,7 +87,7 @@ def test_tiktok_fetcher_handles_authormeta_missing():
     result = asyncio.run(fetcher.fetch(
         [ProfileTarget(profile_id=pid_a, handle="kira")],
         since=datetime(2026, 4, 1, tzinfo=timezone.utc),
-    ))
+    )).posts_by_profile
     assert result == {}
 
 
@@ -94,5 +95,5 @@ def test_tiktok_fetcher_empty_profile_list_makes_no_apify_call():
     apify = _make_apify_mock([])
     fetcher = TikTokContentFetcher(apify_client=apify)
     result = asyncio.run(fetcher.fetch([], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
-    assert result == {}
+    assert result.posts_by_profile == {}
     apify.actor.assert_not_called()

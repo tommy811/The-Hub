@@ -1,11 +1,11 @@
-import { ComingSoon } from "@/components/shared/ComingSoon"
+export const dynamic = "force-dynamic"
 
-export default function TikTokOutliers() {
-  return (
-    <ComingSoon
-      phase={2}
-      feature="TikTok Outliers"
-      description="Posts performing 3× above their median baseline. Activates when scraping ingestion is live."
-    />
-  )
+import { PlatformOutliersPage } from "@/components/content/PlatformOutliersPage"
+
+export default async function TikTokOutliers({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  return <PlatformOutliersPage platform="tiktok" title="TikTok" searchParams={await searchParams} />
 }

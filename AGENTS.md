@@ -4,7 +4,7 @@
 >
 > **Why this file exists:** Simon swaps from Claude Code to Codex when Claude credit is tight or when a task is more architectural / solution-oriented. The Claude-side conventions (Stop hook, subagent dispatch, auto-memory, Skill tool) don't translate directly. This doc carries the conventions across so the project doesn't lose continuity.
 >
-> **Last update:** 2026-04-27, after sync 17. Maintained by Claude Code; if you (Codex) make changes that affect handoff (new tools, new rules, new phase), update the relevant section before ending the session.
+> **Last update:** 2026-04-28, after sync 20. Maintained by Claude Code/Codex; if you make changes that affect handoff (new tools, new rules, new phase), update the relevant section before ending the session.
 
 ---
 
@@ -198,37 +198,24 @@ When fetchers silently return empty: dispatch the actor with a small diagnostic 
 
 ## 7. Current State at Handoff
 
-**Date:** 2026-04-27 (you are reading this on or after this date — confirm via `date`).
+**Date:** 2026-04-28 (you are reading this on or after this date — confirm via `date`).
 
 **Branch:** `phase-2-discovery-v2`. Clean working tree at last sync. Possibly 1+ commits ahead of `main` since last PR merge — check `git log --oneline origin/main..HEAD`.
 
-**Last PROJECT_STATE sync:** sync 17 (commit `b33e442`).
+**Last PROJECT_STATE sync:** sync 20 (90-day scrape + filtered content/outlier/audio trend UI).
 
-**Latest commits (top of branch):**
-```
-302a43c fix(fetchers): handle clockworks/tiktok-scraper bioLink as string OR dict
-b33e442 chore: sync project state — sync 17 (T18 + T19 + T20)
-722f24b feat(classifier): Gemini-enriched suggestions surfaced in new_platform_watchdog
-a12f45e test+ops(pipeline): regression tests + new-platform watchdog SQL view + invariants
-e77a252 fix(pipeline): centralized handle normalization + visit.link.me OF redirector
-```
+**Latest commits:** check `git log --oneline -10`; this handoff is updated through sync 20 work.
 
-**What just shipped (sync 17 / T18–T20):**
-- Centralized `_normalize_handle(handle, platform)` helper in `scripts/discover_creator.py`. 35 case-insensitive platforms in `_CASE_INSENSITIVE_PLATFORMS`. Applied at every commit-side write site (seed, enriched, discovered-only, funnel_edges from_handle + to_handle).
-- `_r` and `lang` added to `_TRACKING_PARAMS` in `scripts/pipeline/canonicalize.py`.
-- `_classify_linkme_redirector` runs FIRST in `pipeline/classifier.py::classify()` — parses `?sensitiveLinkLabel=OF/Fanvue/Fanfix/Fanplace/Patreon` and returns `(<platform>, monetization)` at confidence 1.0.
-- 13 dedup tests at `scripts/tests/test_commit_v2_dedup.py`. Static enum-drift lock at `scripts/tests/test_platform_enum_drift.py`.
-- SQL view `new_platform_watchdog` at migration `20260426060000_new_platform_watchdog_view`. T20 replacement at `20260426080000_watchdog_view_with_llm_suggestions` joins to `classifier_llm_guesses` for one-click VA ratification.
-- 4 nullable TEXT columns added to `classifier_llm_guesses`: `suggested_label`, `suggested_slug`, `description`, `icon_category` (migration `20260426070000`). LLM prompt rewritten to return enriched fields. Empty strings persist as NULL.
+**What just shipped (sync 18–20):**
+- Content scraper v1 manual CLI: `scripts/scrape_content.py` + `scripts/content_scraper/` for batched IG/TT Apify ingestion, Pydantic normalizers, `commit_scrape_result`, `flag_outliers`, and profile snapshots.
+- Scraper observability: migration `20260427000200_scrape_runs_observability` adds `scrape_runs`; local migration file is committed but live apply is pending. The scraper catches `scrape_runs` insert failures and still updates content/profile snapshots.
+- Live scrape: 18 active IG/TT profiles targeted over 90 days; 13 scraped, 5 skipped `no_posts`, 643 posts upserted, 0 failures. Current 90-day library: 639 posts, 75 outliers, 528 posts with audio signatures.
+- Audio trends: `scripts/extract_audio_trends.py --min-usage 2` linked 49 repeated audio trends to 137 scraped posts.
+- Live surfaces: `/scraped-content`, `/platforms/instagram/outliers`, `/platforms/tiktok/outliers`, `/trends` Audio Trends. `/content` is reserved for agency creation tools / Content Hub.
+- Deterministic/manual tooling: `scripts/validate_scraped_content.py`, `scripts/judge_suspicious_content.py`, `scripts/extract_audio_trends.py`, `schemas/social_post.schema.json`.
+- Simon deferred the 12-hour automatic scrape/cron; do not resurrect it unless explicitly asked.
 
-**Test status as of sync 17:** pytest 249/249 + 1 skip; `tsc --noEmit` 0 errors.
-
-**Pre-Phase-2-scraping pre-work items** (Simon and I agreed these should land first):
-1. Fill `SUPABASE_DB_URL` in `scripts/.env`, then `npm run db:schema && npm run db:types` to regen documentation.
-2. Add `quality_flag` enum (`clean | suspicious | rejected`) and `quality_reason` text to `scraped_content`. Required scaffolding for the runtime watchdog stack documented in PROJECT_STATE §15.2. Cheaper to migrate now than backfill after first ingestion.
-3. One-off cleanup: Esmae's stale `handle="tapforallmylinks.com"` row from pre-T17 data — single SQL UPDATE.
-
-These three items are Simon's call to run; if he says go, do them in this order, with a verification step between each.
+**Test status as of sync 20:** content scraper tests previously 43/43; full pytest previously 298/298 + 1 skip; latest close-out ran `npm run typecheck` 0, `npm run lint` 0 errors (2 pre-existing creator-page warnings), content quality/trends pytest 5/5, and route smokes 200 for scraped content, both outlier pages, and audio trends.
 
 ---
 
@@ -240,7 +227,7 @@ Per PROJECT_STATE.md §14:
 2. ✅ Phase 1 UX hardening
 3. ✅ Phase 1 agents — `verify-and-fix` skill
 4. ✅ Vault merged into repo
-5. 🔄 Wire stub routes — IG accounts ✅, TT accounts ✅, `/content` and `/trends` remaining
+5. 🔄 Wire stub routes — IG accounts ✅, TT accounts ✅, scraped content ✅, platform outliers ✅, audio trends ✅; `/content` intentionally reserved for agency creation tools
 6. ✅ Phase 2 discovery rebuild
 7. ✅ Phase 2 schema migration (`20260424170000_phase_2_schema_migration`)
 8. ✅ Discovery v2 (SP1) — two-stage resolver, classifier, identity scorer, multi-platform fetchers
@@ -248,8 +235,8 @@ Per PROJECT_STATE.md §14:
    - ✅ Universal URL Harvester (sync 15)
    - ✅ Profile noise cleanup + specific platforms + AccountRow + banner foundation (sync 16)
    - ✅ Duplicate prevention hardened + regression tests + Gemini-enriched watchdog (sync 17)
-9. 🔜 **Phase 2 scraping** ← *next phase*. Subsystems: IG + TikTok Apify ingestion (12h cron via GitHub Actions), normalizers, `flag_outliers` live, Outliers page live, Apify webhook scaffolding (4 events including `SUCCEEDED_WITH_EMPTY_DATASET`), `results-checker` validator chain, `quality_flag` + `quality_reason` columns, hourly Slack cron alert, LLM-as-judge on suspicious rows. **Plan does not yet exist** — write one before code.
-10. 🔜 Phase 2 trends — audio signature extraction, trend linking
+9. 🟡 **Phase 2 scraping** — manual-trigger path is live and hardened. Cron/automatic 12h scraping is explicitly deferred by Simon. Current assets: `scripts/scrape_content.py`, `scripts/content_scraper/`, pending `scrape_runs` migration, live `/scraped-content`, live platform outlier pages, deterministic validator, audio trend extractor, results-checker JSON schema.
+10. 🟡 Phase 2 trends — repeated-audio extraction exists via `scripts/extract_audio_trends.py`; `/trends` is live for Audio Trends, broader `trend_signals` feed still pending.
 11. 🔜 Phase 3 content analysis — Gemini scoring, `profile_scores` + rank tier on UI
 12. 🔜 Phase 3 brand analysis — Claude-driven brand report per creator
 13. 🔜 Phase 3 classification UI — taxonomy curation tabs
@@ -841,7 +828,8 @@ When closing out a session:
 │   ├── discover_creator.py    ← top-level discovery entry; _commit_v2; _normalize_handle; _CASE_INSENSITIVE_PLATFORMS
 │   ├── worker.py              ← launchd-managed always-on worker
 │   ├── worker_ctl.sh          ← install/start/stop/restart/log/err
-│   ├── apify_scraper.py       ← legacy IG profile scrape
+│   ├── scrape_content.py      ← manual IG/TT content scraper CLI
+│   ├── content_scraper/       ← scraper fetchers, normalizers, orchestrator
 │   ├── replay_dead_letter.py  ← (currently a stub per §20 deferred item)
 │   ├── schemas.py             ← Pydantic models, Platform/EdgeType Literals
 │   ├── common.py              ← logging, supabase factory, env loading
@@ -912,7 +900,7 @@ DISCOVERY_HIGHLIGHTS_ENABLED=0  # shelved
 DISCOVERY_MAX_DEPTH=6
 RECURSIVE_GEMINI=1
 
-# Phase 2 scraping (queued, not yet wired)
+# Phase 2 scraping watchdogs (automatic cron/webhooks deferred)
 APIFY_WEBHOOK_URL_SUCCEEDED=
 APIFY_WEBHOOK_URL_FAILED=
 APIFY_WEBHOOK_URL_EMPTY_DATASET=
@@ -925,23 +913,26 @@ SENTRY_ORG_SLUG=
 
 ---
 
-## Appendix C — Phase 2 scraping primer (the next phase)
+## Appendix C — Phase 2 scraping status
 
-When you're picking up Phase 2 scraping, the spec doesn't yet exist. Brainstorm with Simon first, then write the plan at `docs/superpowers/plans/YYYY-MM-DD-phase-2-scraping.md`.
+Phase 2 scraping has a manual-trigger foundation. Specs/plans:
+- `docs/superpowers/specs/2026-04-27-content-scraper-v1-design.md`
+- `docs/superpowers/plans/2026-04-27-content-scraper-v1.md`
+- `docs/superpowers/plans/2026-04-27-scraping-followup-without-cron.md`
 
-**Subsystems the plan needs to cover** (per PROJECT_STATE §14 + §15.2):
+**Subsystem status** (per PROJECT_STATE §14 + §15.2):
 
 1. **Apify ingestion actors** — `apify/instagram-scraper` (post-mode, not details-mode) for IG; `clockworks/tiktok-scraper` for TT. Both already used in discovery; reuse the connection patterns from `scripts/fetchers/`.
-2. **GitHub Actions cron** — every 12h, dispatches scrape jobs for all `tracking_type IN ('managed', 'inspiration', 'competitor', 'candidate', 'hybrid_ai', 'coach')` profiles.
-3. **Normalizers** — Apify post payload → `scraped_content` row. Per-platform normalizer modules.
-4. **`quality_flag` + `quality_reason` columns** on `scraped_content` (this migration is one of the pre-Phase-2 work items).
-5. **Apify webhooks (4 events)** — `ACTOR.RUN.SUCCEEDED`, `FAILED`, `TIMED_OUT`, **`SUCCEEDED_WITH_EMPTY_DATASET`** (the one most teams miss). Handler at a Next.js API route or Supabase Edge Function. Returns 200 < 30s.
-6. **`results-checker` validator chain** — Apify-side. `minItems: 50` (or platform-appropriate floor), `jsonSchema`, fieldRules per-key, `compareWithPreviousExecution: true`.
-7. **Inside each actor run** — store raw HTML sample to Apify key-value store; regex-validator for auth-wall keywords; Pydantic validation per row; `tenacity` retries on safety filter / max-tokens / recitation finishes.
-8. **`flag_outliers` cron** — call the existing RPC after each ingestion. Hourly cron alert via Slack if any tracked creator has no successful scrape in 48h.
-9. **LLM-as-judge** — Gemini Flash on the ~5% flagged `suspicious` by deterministic validators. Promotes to `clean` or demotes to `rejected`.
-10. **Outliers page** — wire `/platforms/instagram/outliers` and `/platforms/tiktok/outliers` (currently `⬜ Placeholder`). Data source: `scraped_content WHERE is_outlier=true`.
-11. **Trend Signals feed** — wire the Command Center's mocked feed to `trend_signals` table.
+2. **GitHub Actions cron** — explicitly deferred by Simon on 2026-04-27.
+3. **Normalizers** — live under `scripts/content_scraper/normalizer.py`.
+4. **`quality_flag` + `quality_reason` columns** — live via migration `20260427000000_scraped_content_v1_columns`.
+5. **Apify webhooks (4 events)** — not wired while cron is deferred; future path should write `scrape_runs` after pending migration is applied.
+6. **`results-checker` validator chain** — schema artifact exists at `schemas/social_post.schema.json`; Apify-console chain still deferred.
+7. **Inside each actor run** — Pydantic validation live; deterministic row validator available at `scripts/validate_scraped_content.py`.
+8. **`flag_outliers`** — called per-profile after each manual scrape commit.
+9. **LLM-as-judge** — still deferred; deterministic `suspicious` rows are ready for it.
+10. **Outliers page** — live for Instagram and TikTok with filters.
+11. **Audio Trends** — live at `/trends`; broader Trend Signals feed still pending.
 
 **Dependencies between subsystems:**
 - (4) `quality_flag` migration before (1) ingestion writes any rows

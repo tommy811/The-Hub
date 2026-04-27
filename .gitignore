@@ -6,6 +6,7 @@ playwright-report/
 test-results/
 .DS_Store
 *.log
+scripts/*dead_letter.jsonl
 .env*
 !.env.example
 .next/

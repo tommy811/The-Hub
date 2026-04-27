@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { 
+import {
   BarChart, Boxes, Calendar, FileText, LayoutDashboard, Settings, 
-  Users, Video, MessagesSquare, Wallet, Camera, MonitorPlay, HeartHandshake, FileBadge, Activity
+  Users, Video, MessagesSquare, Wallet, Camera, MonitorPlay, HeartHandshake, FileBadge, Activity, Library
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -33,6 +33,7 @@ export function Sidebar() {
             <NavItem href="#" icon={HeartHandshake} label="Fan Intel Hub" disabled />
             <NavItem href="#" icon={MessagesSquare} label="Chatter Workspace" disabled />
             <NavItem href="/content" icon={Video} label="Content Hub" currentPath={currentPath} />
+            <NavItem href="/scraped-content" icon={Library} label="Scraped Content" currentPath={currentPath} />
             <NavItem href="#" icon={FileBadge} label="Tasks" disabled />
             <NavItem href="#" icon={FileText} label="Customs" disabled />
             <NavItem href="#" icon={Calendar} label="Shift Center" disabled />
@@ -43,7 +44,7 @@ export function Sidebar() {
             <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Analyze</h4>
             <NavItem href="#" icon={Users} label="Fan Analytics" disabled />
             <NavItem href="#" icon={BarChart} label="Revenue" disabled />
-            <NavItem href="/trends" icon={Activity} label="Trends & Alerts" currentPath={currentPath} />
+            <NavItem href="/trends" icon={Activity} label="Audio Trends" currentPath={currentPath} />
             <NavItem href="#" icon={Wallet} label="Finance" disabled />
           </div>
 
@@ -65,7 +66,7 @@ export function Sidebar() {
               </div>
               <div className="ml-[26px] flex flex-col pl-2 border-l border-border/50 gap-1 mt-1">
                 <SubNavItem href="/platforms/instagram/accounts" label="Accounts" currentPath={currentPath} />
-                <SubNavItem href="/platforms/instagram/outliers" label="Outliers" currentPath={currentPath} comingSoon />
+                <SubNavItem href="/platforms/instagram/outliers" label="Outliers" currentPath={currentPath} />
                 <SubNavItem href="/platforms/instagram/classification" label="Classification" currentPath={currentPath} comingSoon />
                 <SubNavItem href="/platforms/instagram/analytics" label="Analytics" currentPath={currentPath} comingSoon />
               </div>
@@ -79,7 +80,7 @@ export function Sidebar() {
               </div>
               <div className="ml-[26px] flex flex-col pl-2 border-l border-border/50 gap-1 mt-1">
                 <SubNavItem href="/platforms/tiktok/accounts" label="Accounts" currentPath={currentPath} />
-                <SubNavItem href="/platforms/tiktok/outliers" label="Outliers" currentPath={currentPath} comingSoon />
+                <SubNavItem href="/platforms/tiktok/outliers" label="Outliers" currentPath={currentPath} />
                 <SubNavItem href="/platforms/tiktok/classification" label="Classification" currentPath={currentPath} comingSoon />
                 <SubNavItem href="/platforms/tiktok/analytics" label="Analytics" currentPath={currentPath} comingSoon />
               </div>

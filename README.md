@@ -54,8 +54,9 @@ src/
   lib/                 Supabase client, utilities
 scripts/
   discover_creator.py  Gemini discovery pipeline
+  scrape_content.py    Manual IG/TikTok content scraper
+  content_scraper/     Content scraper fetchers, normalizers, orchestrator
   worker.py            Background worker (polls discovery_runs)
-  apify_scraper.py     Apify content ingestion
   common.py            Shared DB + API client helpers
 supabase/
   migrations/          SQL migration files

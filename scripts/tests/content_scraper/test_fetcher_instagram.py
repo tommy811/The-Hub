@@ -34,6 +34,7 @@ def _make_apify_mock(items: list[dict]) -> MagicMock:
     dataset_items_result = MagicMock()
     dataset_items_result.items = items
     dataset.list_items.return_value = dataset_items_result
+    dataset.iterate_items.return_value = iter(items)
     apify.dataset.return_value = dataset
     return apify
 
@@ -85,7 +86,7 @@ def test_instagram_fetcher_disaggregates_by_owner_username():
             ProfileTarget(profile_id=pid_b, handle="creator_b"),
         ],
         since=datetime(2026, 4, 1, tzinfo=timezone.utc),
-    ))
+    )).posts_by_profile
 
     assert pid_a in result
     assert pid_b in result
@@ -108,7 +109,7 @@ def test_instagram_fetcher_omits_profiles_with_zero_posts():
             ProfileTarget(profile_id=pid_b, handle="creator_b"),
         ],
         since=datetime(2026, 4, 1, tzinfo=timezone.utc),
-    ))
+    )).posts_by_profile
 
     assert pid_a in result
     assert pid_b not in result
@@ -124,7 +125,7 @@ def test_instagram_fetcher_skips_unmapped_owner():
     result = asyncio.run(fetcher.fetch(
         [ProfileTarget(profile_id=pid_a, handle="creator_a")],
         since=datetime(2026, 4, 1, tzinfo=timezone.utc),
-    ))
+    )).posts_by_profile
     assert result == {}
 
 
@@ -132,5 +133,5 @@ def test_instagram_fetcher_empty_profile_list_makes_no_apify_call():
     apify = _make_apify_mock([])
     fetcher = InstagramContentFetcher(apify_client=apify)
     result = asyncio.run(fetcher.fetch([], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
-    assert result == {}
+    assert result.posts_by_profile == {}
     apify.actor.assert_not_called()

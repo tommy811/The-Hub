@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://the-hub.local/schemas/social_post.schema.json",
+  "title": "Social post actor output",
+  "type": "object",
+  "anyOf": [
+    { "required": ["id", "url", "ownerUsername"] },
+    { "required": ["id", "webVideoUrl", "authorMeta"] }
+  ],
+  "properties": {
+    "id": { "type": ["string", "number"] },
+    "url": { "type": "string" },
+    "webVideoUrl": { "type": "string" },
+    "ownerUsername": { "type": "string" },
+    "authorMeta": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      }
+    },
+    "caption": { "type": ["string", "null"] },
+    "text": { "type": ["string", "null"] },
+    "timestamp": { "type": ["string", "null"] },
+    "createTimeISO": { "type": ["string", "null"] },
+    "videoViewCount": { "type": ["number", "integer", "null"] },
+    "videoPlayCount": { "type": ["number", "integer", "null"] },
+    "playCount": { "type": ["number", "integer", "null"] }
+  }
+}

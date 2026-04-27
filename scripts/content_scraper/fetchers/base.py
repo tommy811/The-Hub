@@ -7,6 +7,7 @@ into one Apify call (cost optimization — see spec Appendix C).
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable
 from uuid import UUID
@@ -23,6 +24,14 @@ class ProfileTarget:
 
     def __repr__(self) -> str:
         return f"ProfileTarget({self.handle!r}, {self.profile_id})"
+
+
+@dataclass
+class FetchBatchResult:
+    posts_by_profile: dict[UUID, list[NormalizedPost]]
+    actor_id: str
+    apify_run_id: str | None = None
+    dataset_id: str | None = None
 
 
 class BaseContentFetcher(ABC):
@@ -42,10 +51,9 @@ class BaseContentFetcher(ABC):
         profiles: Iterable[ProfileTarget],
         *,
         since: datetime,
-    ) -> dict[UUID, list[NormalizedPost]]:
+    ) -> FetchBatchResult:
         """Fetch posts for the given profiles since the given datetime.
 
-        Returns a dict keyed by profile_id. Profiles that returned no posts
-        (private, login wall, captcha, no posts in window) are absent from
-        the dict — the orchestrator treats absence as "skip with warning."
+        Returns posts keyed by profile_id plus actor run metadata. Profiles
+        that returned no posts are absent from posts_by_profile.
         """

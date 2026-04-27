@@ -9,7 +9,7 @@ from uuid import UUID
 from apify_client import ApifyClient
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-from content_scraper.fetchers.base import BaseContentFetcher, ProfileTarget
+from content_scraper.fetchers.base import BaseContentFetcher, FetchBatchResult, ProfileTarget
 from content_scraper.normalizer import NormalizedPost, instagram_to_normalized
 from fetchers.base import is_transient_apify_error
 
@@ -26,13 +26,13 @@ class InstagramContentFetcher(BaseContentFetcher):
         profiles: Iterable[ProfileTarget],
         *,
         since: datetime,
-    ) -> dict[UUID, list[NormalizedPost]]:
+    ) -> FetchBatchResult:
         targets = list(profiles)
         if not targets:
-            return {}
+            return FetchBatchResult(posts_by_profile={}, actor_id=_ACTOR_ID)
 
         handle_to_pid: dict[str, UUID] = {p.handle.lower(): p.profile_id for p in targets}
-        items = await asyncio.to_thread(
+        run_id, dataset_id, items = await asyncio.to_thread(
             self._call_actor,
             direct_urls=[f"https://www.instagram.com/{p.handle}/" for p in targets],
             since=since,
@@ -50,7 +50,12 @@ class InstagramContentFetcher(BaseContentFetcher):
                 _log.warning("ig_normalize_failed id=%s err=%s", item.get("id"), exc)
                 continue
             out.setdefault(pid, []).append(normalized)
-        return out
+        return FetchBatchResult(
+            posts_by_profile=out,
+            actor_id=_ACTOR_ID,
+            apify_run_id=run_id,
+            dataset_id=dataset_id,
+        )
 
     @retry(
         stop=stop_after_attempt(3),
@@ -58,7 +63,7 @@ class InstagramContentFetcher(BaseContentFetcher):
         retry=retry_if_exception(is_transient_apify_error),
         reraise=True,
     )
-    def _call_actor(self, *, direct_urls: list[str], since: datetime) -> list[dict]:
+    def _call_actor(self, *, direct_urls: list[str], since: datetime) -> tuple[str | None, str | None, list[dict]]:
         run_input = {
             "directUrls": direct_urls,
             "resultsType": "posts",
@@ -67,5 +72,7 @@ class InstagramContentFetcher(BaseContentFetcher):
             "addParentData": False,
         }
         run = self._apify.actor(_ACTOR_ID).call(run_input=run_input)
+        run_id = run.get("id")
         ds_id = run["defaultDatasetId"]
-        return self._apify.dataset(ds_id).list_items().items
+        items = list(self._apify.dataset(ds_id).iterate_items())
+        return run_id, ds_id, items

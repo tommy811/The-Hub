@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import pytest
 
-from content_scraper.fetchers.base import ProfileTarget
+from content_scraper.fetchers.base import FetchBatchResult
 from content_scraper.normalizer import NormalizedPost, PlatformMetrics
 from content_scraper.orchestrator import ScrapeOrchestrator, ProfileScope
 
@@ -50,6 +50,9 @@ def _supabase_mock_with_outlier_query(outlier_count: int = 0) -> MagicMock:
 
     table_chain = MagicMock()
     table_chain.upsert.return_value = table_chain
+    table_chain.insert.return_value = table_chain
+    table_chain.update.return_value = table_chain
+    table_chain.eq.return_value = table_chain
     table_chain.execute.return_value = MagicMock(data=[{}])
 
     sc_select_chain = MagicMock()
@@ -71,11 +74,14 @@ def _supabase_mock_with_outlier_query(outlier_count: int = 0) -> MagicMock:
     def table_factory(name):
         if name == "profile_metrics_snapshots":
             return table_chain
+        if name == "scrape_runs":
+            return table_chain
         if name == "scraped_content":
             sc = MagicMock()
             sc.select.return_value = sc_select_chain
             return sc
         if name == "profiles":
+            profiles_chain.update.return_value = profiles_chain
             return profiles_chain
         return MagicMock()
 
@@ -87,9 +93,14 @@ def test_orchestrator_calls_commit_then_flag_outliers_per_profile():
     pid = uuid4()
     post = _make_post(pid)
     ig_fetcher = MagicMock()
-    ig_fetcher.fetch = MagicMock(return_value=_async_return({pid: [post]}))
+    ig_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(
+        posts_by_profile={pid: [post]},
+        actor_id="apify/instagram-scraper",
+        apify_run_id="run_1",
+        dataset_id="ds_1",
+    )))
     tt_fetcher = MagicMock()
-    tt_fetcher.fetch = MagicMock(return_value=_async_return({}))
+    tt_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={}, actor_id="clockworks/tiktok-scraper")))
 
     sb = _supabase_mock_with_outlier_query()
     orch = ScrapeOrchestrator(
@@ -115,9 +126,9 @@ def test_orchestrator_calls_commit_then_flag_outliers_per_profile():
 def test_orchestrator_skips_profiles_with_zero_posts():
     pid = uuid4()
     ig_fetcher = MagicMock()
-    ig_fetcher.fetch = MagicMock(return_value=_async_return({}))
+    ig_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={}, actor_id="apify/instagram-scraper")))
     tt_fetcher = MagicMock()
-    tt_fetcher.fetch = MagicMock(return_value=_async_return({}))
+    tt_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={}, actor_id="clockworks/tiktok-scraper")))
 
     sb = _supabase_mock_with_outlier_query()
     orch = ScrapeOrchestrator(
@@ -140,9 +151,9 @@ def test_orchestrator_groups_by_platform_and_calls_each_fetcher_once():
     post_tt = post_tt.model_copy(update={"platform": "tiktok", "post_type": "tiktok_video"})
 
     ig_fetcher = MagicMock()
-    ig_fetcher.fetch = MagicMock(return_value=_async_return({pid_ig: [post_ig]}))
+    ig_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={pid_ig: [post_ig]}, actor_id="apify/instagram-scraper")))
     tt_fetcher = MagicMock()
-    tt_fetcher.fetch = MagicMock(return_value=_async_return({pid_tt: [post_tt]}))
+    tt_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={pid_tt: [post_tt]}, actor_id="clockworks/tiktok-scraper")))
 
     sb = _supabase_mock_with_outlier_query()
     orch = ScrapeOrchestrator(
@@ -168,9 +179,9 @@ def test_orchestrator_dead_letters_rpc_failure_and_continues():
     post_a = _make_post(pid_a, "a1")
     post_b = _make_post(pid_b, "b1")
     ig_fetcher = MagicMock()
-    ig_fetcher.fetch = MagicMock(return_value=_async_return({pid_a: [post_a], pid_b: [post_b]}))
+    ig_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={pid_a: [post_a], pid_b: [post_b]}, actor_id="apify/instagram-scraper")))
     tt_fetcher = MagicMock()
-    tt_fetcher.fetch = MagicMock(return_value=_async_return({}))
+    tt_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={}, actor_id="clockworks/tiktok-scraper")))
 
     sb = _supabase_mock_with_outlier_query()
 
@@ -210,14 +221,15 @@ def test_orchestrator_no_dead_letter_path_logs_only():
     pid = uuid4()
     post = _make_post(pid)
     ig_fetcher = MagicMock()
-    ig_fetcher.fetch = MagicMock(return_value=_async_return({pid: [post]}))
+    ig_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={pid: [post]}, actor_id="apify/instagram-scraper")))
     tt_fetcher = MagicMock()
-    tt_fetcher.fetch = MagicMock(return_value=_async_return({}))
+    tt_fetcher.fetch = MagicMock(return_value=_async_return(FetchBatchResult(posts_by_profile={}, actor_id="clockworks/tiktok-scraper")))
 
     sb = MagicMock()
     chain = MagicMock()
     chain.execute.side_effect = RuntimeError("boom")
     sb.rpc.return_value = chain
+    sb.table.return_value = chain
 
     orch = ScrapeOrchestrator(
         supabase=sb, ig_fetcher=ig_fetcher, tt_fetcher=tt_fetcher,

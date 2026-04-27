@@ -1,5 +1,17 @@
 # Migration Log
 
+## 20260427000200_scrape_runs_observability
+
+Adds `scrape_runs`, a durable per-profile content-scrape attempt log used by the manual scraper now and future cron/webhook paths later.
+
+Status: local migration written in sync 19/20, not yet applied to live Supabase as of the 2026-04-27 all-profile scrape. Live evidence: PostgREST returned `PGRST205` for `public.scrape_runs`; scraper continued because run-log writes are non-fatal.
+
+Columns: `workspace_id`, `creator_id`, `profile_id`, `platform`, `source`, `status` (`succeeded|skipped|failed` CHECK), `reason`, `posts_fetched`, `posts_upserted`, `outliers_flagged`, Apify actor/run/dataset ids, `error_message`, `started_at`, `completed_at`, `created_at`.
+
+Indexes support workspace health feeds, latest run per profile, and status dashboards. RLS enabled: workspace members can select; service role can insert. The Python scraper writes one final-status row per profile attempt and updates `profiles.last_scraped_at` after successful commits.
+
+---
+
 ## 20260426080000_watchdog_view_with_llm_suggestions
 
 Applied 2026-04-26 via Supabase MCP `apply_migration`. Branch `phase-2-discovery-v2`. Part of T20 (sync 17).
