@@ -7,6 +7,7 @@ CREATE OR REPLACE FUNCTION commit_scrape_result(
   p_posts jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_workspace_id uuid;
@@ -18,7 +19,7 @@ DECLARE
 BEGIN
   SELECT workspace_id INTO v_workspace_id
   FROM profiles WHERE id = p_profile_id;
-  IF v_workspace_id IS NULL THEN
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'profile not found: %', p_profile_id;
   END IF;
 
@@ -65,6 +66,7 @@ BEGIN
       save_count = EXCLUDED.save_count,
       is_pinned = EXCLUDED.is_pinned,
       is_sponsored = EXCLUDED.is_sponsored,
+      video_duration_seconds = EXCLUDED.video_duration_seconds,
       hashtags = EXCLUDED.hashtags,
       mentions = EXCLUDED.mentions,
       caption = EXCLUDED.caption,
