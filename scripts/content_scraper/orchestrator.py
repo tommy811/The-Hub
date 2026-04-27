@@ -95,24 +95,47 @@ class ScrapeOrchestrator:
         posts: list[NormalizedPost],
         summary: ScrapeRunSummary,
     ) -> None:
-        payload = [p.model_dump(mode="json") for p in posts]
-        commit_resp = await asyncio.to_thread(
-            lambda: self._sb.rpc("commit_scrape_result", {
-                "p_profile_id": str(scope.profile_id),
-                "p_posts": payload,
-            }).execute()
-        )
-        commit_data = commit_resp.data or {}
-        summary.posts_upserted += int(commit_data.get("posts_upserted", 0))
+        try:
+            payload = [p.model_dump(mode="json") for p in posts]
+            commit_resp = await asyncio.to_thread(
+                lambda: self._sb.rpc("commit_scrape_result", {
+                    "p_profile_id": str(scope.profile_id),
+                    "p_posts": payload,
+                }).execute()
+            )
+            commit_data = commit_resp.data or {}
+            summary.posts_upserted += int(commit_data.get("posts_upserted", 0))
 
-        await asyncio.to_thread(
-            lambda: self._sb.rpc("flag_outliers", {
-                "p_profile_id": str(scope.profile_id),
-            }).execute()
-        )
+            await asyncio.to_thread(
+                lambda: self._sb.rpc("flag_outliers", {
+                    "p_profile_id": str(scope.profile_id),
+                }).execute()
+            )
 
-        await self._write_profile_snapshot(scope, posts, summary)
-        summary.profiles_scraped += 1
+            await self._write_profile_snapshot(scope, posts, summary)
+            summary.profiles_scraped += 1
+        except Exception as exc:
+            summary.failures += 1
+            _log.error("scrape_failed profile_id=%s handle=%s err=%s",
+                       scope.profile_id, scope.handle, exc)
+            self._dead_letter(scope, exc)
+
+    def _dead_letter(self, scope: ProfileScope, exc: BaseException) -> None:
+        if not self._dead_letter_path:
+            return
+        import json
+        from pathlib import Path
+        entry = {
+            "profile_id": str(scope.profile_id),
+            "creator_id": str(scope.creator_id),
+            "handle": scope.handle,
+            "platform": scope.platform,
+            "error": str(exc),
+            "ts": datetime.utcnow().isoformat() + "Z",
+        }
+        Path(self._dead_letter_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(self._dead_letter_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
 
     async def _write_profile_snapshot(
         self,

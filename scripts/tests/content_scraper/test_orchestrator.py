@@ -152,3 +152,74 @@ def test_orchestrator_groups_by_platform_and_calls_each_fetcher_once():
 
     ig_fetcher.fetch.assert_called_once()
     tt_fetcher.fetch.assert_called_once()
+
+
+import json
+import tempfile
+from pathlib import Path
+
+
+def test_orchestrator_dead_letters_rpc_failure_and_continues():
+    pid_a, pid_b = uuid4(), uuid4()
+    post_a = _make_post(pid_a, "a1")
+    post_b = _make_post(pid_b, "b1")
+    ig_fetcher = MagicMock()
+    ig_fetcher.fetch = MagicMock(return_value=_async_return({pid_a: [post_a], pid_b: [post_b]}))
+    tt_fetcher = MagicMock()
+    tt_fetcher.fetch = MagicMock(return_value=_async_return({}))
+
+    sb = _supabase_mock_with_outlier_query()
+
+    def rpc_side_effect(name, args):
+        chain = MagicMock()
+        if name == "commit_scrape_result" and args["p_profile_id"] == str(pid_b):
+            chain.execute.side_effect = RuntimeError("rpc exploded")
+        else:
+            chain.execute.return_value = MagicMock(data={"posts_upserted": 1, "snapshots_written": 1})
+        return chain
+    sb.rpc.side_effect = rpc_side_effect
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        dl_path = str(Path(tmpdir) / "dead_letter.jsonl")
+        orch = ScrapeOrchestrator(
+            supabase=sb, ig_fetcher=ig_fetcher, tt_fetcher=tt_fetcher,
+            dead_letter_path=dl_path,
+        )
+        summary = asyncio.run(orch.run([
+            ProfileScope(profile_id=pid_a, handle="a", platform="instagram", creator_id=uuid4()),
+            ProfileScope(profile_id=pid_b, handle="b", platform="instagram", creator_id=uuid4()),
+        ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
+
+        assert summary.profiles_scraped == 1
+        assert summary.failures == 1
+
+        dl_lines = Path(dl_path).read_text().strip().splitlines()
+        assert len(dl_lines) == 1
+        entry = json.loads(dl_lines[0])
+        assert entry["profile_id"] == str(pid_b)
+        assert entry["platform"] == "instagram"
+        assert "rpc exploded" in entry["error"]
+
+
+def test_orchestrator_no_dead_letter_path_logs_only():
+    """When dead_letter_path is None, failures still don't crash the run."""
+    pid = uuid4()
+    post = _make_post(pid)
+    ig_fetcher = MagicMock()
+    ig_fetcher.fetch = MagicMock(return_value=_async_return({pid: [post]}))
+    tt_fetcher = MagicMock()
+    tt_fetcher.fetch = MagicMock(return_value=_async_return({}))
+
+    sb = MagicMock()
+    chain = MagicMock()
+    chain.execute.side_effect = RuntimeError("boom")
+    sb.rpc.return_value = chain
+
+    orch = ScrapeOrchestrator(
+        supabase=sb, ig_fetcher=ig_fetcher, tt_fetcher=tt_fetcher,
+        dead_letter_path=None,
+    )
+    summary = asyncio.run(orch.run([
+        ProfileScope(profile_id=pid, handle="a", platform="instagram", creator_id=uuid4()),
+    ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
+    assert summary.failures == 1
