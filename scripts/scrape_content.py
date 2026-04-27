@@ -93,6 +93,7 @@ def _resolve_scopes(sb, args: argparse.Namespace) -> list[ProfileScope]:
             handle=r["handle"],
             platform=r["platform"],
             creator_id=r["creator_id"],
+            workspace_id=r["workspace_id"],
         ))
     return scopes
 

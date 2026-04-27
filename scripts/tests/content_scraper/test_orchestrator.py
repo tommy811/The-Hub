@@ -53,9 +53,13 @@ def _supabase_mock_with_outlier_query(outlier_count: int = 0) -> MagicMock:
     table_chain.execute.return_value = MagicMock(data=[{}])
 
     sc_select_chain = MagicMock()
+    sc_select_chain.in_.return_value = sc_select_chain
     sc_select_chain.eq.return_value = sc_select_chain
     sc_select_chain.execute.return_value = MagicMock(
-        data=[{"view_count": 100, "is_outlier": i < outlier_count} for i in range(5)]
+        data=[
+            {"view_count": 100, "is_outlier": i < outlier_count, "engagement_rate": 0.05}
+            for i in range(5)
+        ]
     )
 
     profiles_chain = MagicMock()
@@ -95,7 +99,7 @@ def test_orchestrator_calls_commit_then_flag_outliers_per_profile():
         dead_letter_path=None,
     )
     asyncio.run(orch.run([
-        ProfileScope(profile_id=pid, handle="x", platform="instagram", creator_id=uuid4()),
+        ProfileScope(profile_id=pid, handle="x", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
     ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
 
     rpc_calls = sb.rpc.call_args_list
@@ -123,7 +127,7 @@ def test_orchestrator_skips_profiles_with_zero_posts():
         dead_letter_path=None,
     )
     asyncio.run(orch.run([
-        ProfileScope(profile_id=pid, handle="x", platform="instagram", creator_id=uuid4()),
+        ProfileScope(profile_id=pid, handle="x", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
     ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
 
     sb.rpc.assert_not_called()
@@ -146,8 +150,8 @@ def test_orchestrator_groups_by_platform_and_calls_each_fetcher_once():
         dead_letter_path=None,
     )
     asyncio.run(orch.run([
-        ProfileScope(profile_id=pid_ig, handle="x", platform="instagram", creator_id=uuid4()),
-        ProfileScope(profile_id=pid_tt, handle="y", platform="tiktok", creator_id=uuid4()),
+        ProfileScope(profile_id=pid_ig, handle="x", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
+        ProfileScope(profile_id=pid_tt, handle="y", platform="tiktok", creator_id=uuid4(), workspace_id=uuid4()),
     ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
 
     ig_fetcher.fetch.assert_called_once()
@@ -186,8 +190,8 @@ def test_orchestrator_dead_letters_rpc_failure_and_continues():
             dead_letter_path=dl_path,
         )
         summary = asyncio.run(orch.run([
-            ProfileScope(profile_id=pid_a, handle="a", platform="instagram", creator_id=uuid4()),
-            ProfileScope(profile_id=pid_b, handle="b", platform="instagram", creator_id=uuid4()),
+            ProfileScope(profile_id=pid_a, handle="a", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
+            ProfileScope(profile_id=pid_b, handle="b", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
         ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
 
         assert summary.profiles_scraped == 1
@@ -220,6 +224,6 @@ def test_orchestrator_no_dead_letter_path_logs_only():
         dead_letter_path=None,
     )
     summary = asyncio.run(orch.run([
-        ProfileScope(profile_id=pid, handle="a", platform="instagram", creator_id=uuid4()),
+        ProfileScope(profile_id=pid, handle="a", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
     ], since=datetime(2026, 4, 1, tzinfo=timezone.utc)))
     assert summary.failures == 1

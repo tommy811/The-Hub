@@ -9,7 +9,7 @@ import asyncio
 import logging
 import statistics
 from dataclasses import dataclass
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Iterable
 from uuid import UUID
 
@@ -27,6 +27,7 @@ class ProfileScope:
     handle: str
     platform: str  # "instagram" | "tiktok"
     creator_id: UUID
+    workspace_id: UUID
 
 
 @dataclass
@@ -131,7 +132,7 @@ class ScrapeOrchestrator:
             "handle": scope.handle,
             "platform": scope.platform,
             "error": str(exc),
-            "ts": datetime.utcnow().isoformat() + "Z",
+            "ts": datetime.now(timezone.utc).isoformat(),
         }
         Path(self._dead_letter_path).parent.mkdir(parents=True, exist_ok=True)
         with open(self._dead_letter_path, "a") as f:
@@ -143,33 +144,51 @@ class ScrapeOrchestrator:
         posts: list[NormalizedPost],
         summary: ScrapeRunSummary,
     ) -> None:
+        # Re-read just-scraped posts (now flagged by flag_outliers) — excluding pinned.
+        # Includes the DB-computed engagement_rate generated column.
+        post_ids = [p.platform_post_id for p in posts]
         rows_resp = await asyncio.to_thread(
             lambda: self._sb.table("scraped_content")
-                .select("view_count,is_outlier")
+                .select("view_count,is_outlier,engagement_rate")
+                .in_("platform_post_id", post_ids)
                 .eq("profile_id", str(scope.profile_id))
+                .eq("is_pinned", False)
                 .execute()
         )
         rows = rows_resp.data or []
         view_counts = [r.get("view_count") or 0 for r in rows]
         outlier_count = sum(1 for r in rows if r.get("is_outlier"))
         median_views = int(statistics.median(view_counts)) if view_counts else 0
+        engagement_rates = [
+            float(r["engagement_rate"]) for r in rows
+            if r.get("engagement_rate") is not None
+        ]
+        avg_engagement_rate = (
+            sum(engagement_rates) / len(engagement_rates)
+            if engagement_rates else None
+        )
         summary.outliers_flagged += outlier_count
 
         prof_resp = await asyncio.to_thread(
             lambda: self._sb.table("profiles")
                 .select("follower_count")
                 .eq("id", str(scope.profile_id))
+                .eq("workspace_id", str(scope.workspace_id))
                 .single()
                 .execute()
         )
         follower_count = (prof_resp.data or {}).get("follower_count")
 
+        snapshot_row = {
+            "profile_id": str(scope.profile_id),
+            "snapshot_date": date.today().isoformat(),
+            "follower_count": follower_count,
+            "median_views": median_views,
+            "outlier_count": outlier_count,
+            "avg_engagement_rate": avg_engagement_rate,
+        }
         await asyncio.to_thread(
-            lambda: self._sb.table("profile_metrics_snapshots").upsert({
-                "profile_id": str(scope.profile_id),
-                "snapshot_date": date.today().isoformat(),
-                "follower_count": follower_count,
-                "median_views": median_views,
-                "outlier_count": outlier_count,
-            }, on_conflict="profile_id,snapshot_date").execute()
+            lambda: self._sb.table("profile_metrics_snapshots")
+                .upsert(snapshot_row, on_conflict="profile_id,snapshot_date")
+                .execute()
         )
