@@ -199,3 +199,66 @@ def test_instagram_to_normalized_raw_payload_preserved():
     raw = _load_fixture("instagram_post.json")
     post = instagram_to_normalized(raw, profile_id=uuid4())
     assert post.raw_apify_payload == raw
+
+
+from content_scraper.normalizer import tiktok_to_normalized
+
+
+def test_tiktok_to_normalized_basic_fields():
+    pid = uuid4()
+    raw = _load_fixture("tiktok_post.json")
+    post = tiktok_to_normalized(raw, profile_id=pid)
+    assert post.profile_id == pid
+    assert post.platform == "tiktok"
+    assert post.platform_post_id == "7234567890123456789"
+    assert post.post_url == "https://www.tiktok.com/@kira/video/7234567890123456789"
+    assert post.post_type == "tiktok_video"
+    assert post.caption == "follow my links pls #fyp #foryou"
+
+
+def test_tiktok_to_normalized_engagement():
+    raw = _load_fixture("tiktok_post.json")
+    post = tiktok_to_normalized(raw, profile_id=uuid4())
+    assert post.view_count == 250000
+    assert post.like_count == 18500
+    assert post.comment_count == 320
+    assert post.share_count == 1100
+    assert post.save_count == 6700
+
+
+def test_tiktok_to_normalized_structural_flags():
+    raw = _load_fixture("tiktok_post.json")
+    post = tiktok_to_normalized(raw, profile_id=uuid4())
+    assert post.is_pinned is True
+    assert post.is_sponsored is False
+    assert post.video_duration_seconds == 22
+    assert post.hashtags == ["fyp", "foryou"]
+    assert post.mentions == []
+
+
+def test_tiktok_to_normalized_platform_metrics():
+    raw = _load_fixture("tiktok_post.json")
+    post = tiktok_to_normalized(raw, profile_id=uuid4())
+    pm = post.platform_metrics
+    assert pm.audio.signature == "7100000000000000000"
+    assert pm.audio.artist == "kira"
+    assert pm.audio.title == "original sound"
+    assert pm.audio.is_original is True
+    assert pm.effects == ["Sparkle Filter", "Beauty"]
+    assert pm.is_slideshow is False
+    assert pm.is_muted is False
+    assert pm.video_aspect_ratio == 0.5625
+    assert pm.video_resolution == "1080x1920"
+    assert pm.subtitles == "follow my links please"
+
+
+def test_tiktok_to_normalized_thumbnail_from_videometa_cover():
+    raw = _load_fixture("tiktok_post.json")
+    post = tiktok_to_normalized(raw, profile_id=uuid4())
+    assert post.thumbnail_url == "https://p.tiktokcdn.com/cover.jpg"
+
+
+def test_tiktok_to_normalized_raw_payload_preserved():
+    raw = _load_fixture("tiktok_post.json")
+    post = tiktok_to_normalized(raw, profile_id=uuid4())
+    assert post.raw_apify_payload == raw

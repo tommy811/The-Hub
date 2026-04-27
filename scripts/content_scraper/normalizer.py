@@ -163,3 +163,74 @@ def instagram_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
         platform_metrics=platform_metrics,
         raw_apify_payload=item,
     )
+
+
+def tiktok_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
+    """Convert a raw clockworks/tiktok-scraper item to NormalizedPost."""
+    caption = item.get("text")
+    hook_text = caption[:50] if caption else None
+
+    music = item.get("musicMeta") or {}
+    audio = AudioInfo(
+        signature=str(music["musicId"]) if music.get("musicId") else None,
+        artist=music.get("musicAuthor"),
+        title=music.get("musicName"),
+        is_original=music.get("musicOriginal"),
+    ) if music else None
+
+    video_meta = item.get("videoMeta") or {}
+    width = video_meta.get("width")
+    height = video_meta.get("height")
+    resolution = f"{width}x{height}" if width and height else None
+
+    effects = [
+        e.get("name") for e in (item.get("effectStickers") or [])
+        if e.get("name")
+    ]
+
+    platform_metrics = PlatformMetrics(
+        audio=audio,
+        location=None,
+        tagged_accounts=[],
+        product_type=None,
+        effects=effects,
+        is_slideshow=item.get("isSlideshow"),
+        is_muted=item.get("isMuted"),
+        video_aspect_ratio=video_meta.get("ratio"),
+        video_resolution=resolution,
+        subtitles=item.get("subtitles"),
+    )
+
+    hashtags_raw = item.get("hashtags") or []
+    hashtags = [
+        h.get("name") for h in hashtags_raw if h.get("name")
+    ] if hashtags_raw else []
+
+    media_urls = item.get("mediaUrls") or (
+        [item["videoUrl"]] if item.get("videoUrl") else []
+    )
+
+    return NormalizedPost(
+        profile_id=profile_id,
+        platform="tiktok",
+        platform_post_id=str(item["id"]),
+        post_url=item.get("webVideoUrl") or "",
+        post_type="tiktok_video",
+        caption=caption,
+        hook_text=hook_text,
+        posted_at=item["createTimeISO"],
+        view_count=int(item.get("playCount") or 0),
+        like_count=int(item.get("diggCount") or 0),
+        comment_count=int(item.get("commentCount") or 0),
+        share_count=int(item["shareCount"]) if item.get("shareCount") is not None else None,
+        save_count=int(item["collectCount"]) if item.get("collectCount") is not None else None,
+        is_pinned=bool(item.get("isPinned", False)),
+        is_sponsored=bool(item.get("isAd", False)),
+        video_duration_seconds=video_meta.get("duration"),
+        hashtags=hashtags,
+        mentions=list(item.get("mentions") or []),
+        media_urls=media_urls,
+        thumbnail_url=video_meta.get("originalCoverUrl"),
+        platform_metrics=platform_metrics,
+        raw_apify_payload=item,
+    )
