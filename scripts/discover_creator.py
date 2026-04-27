@@ -12,7 +12,7 @@ from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wai
 
 from common import get_supabase, get_gemini_key, console
 from schemas import DiscoveryInput, InputContext, DiscoveryResultV2, TextMention
-from apify_scraper import get_apify_client, scrape_instagram_profile
+from common import get_apify_client
 from fetchers.base import EmptyDatasetError
 
 from pipeline.resolver import resolve_seed, ResolverResult, _confidence_at_depth
@@ -460,9 +460,6 @@ def run(inp: DiscoveryInput, bulk_import_id: str | None = None,
             "apify_cost_cents": budget.spent_cents,
         }).eq("id", str(inp.run_id)).execute()
 
-        if result.seed_context.platform == "instagram":
-            console.log(f"[cyan]Dispatching Apify posts scrape for @{inp.input_handle}[/cyan]")
-            scrape_instagram_profile(str(inp.workspace_id), inp.input_handle, limit=5)
 
     except EmptyDatasetError as e:
         console.log(f"[yellow]Discovery aborted — empty context: {e}[/yellow]")

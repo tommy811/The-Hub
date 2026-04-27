@@ -26,3 +26,9 @@ def get_apify_token() -> str:
     if not token:
         raise ValueError("Missing APIFY_TOKEN in environment.")
     return token
+
+def get_apify_client():
+    """Get ApifyClient configured with token from APIFY_TOKEN env var."""
+    from apify_client import ApifyClient
+    token = get_apify_token()
+    return ApifyClient(token)
