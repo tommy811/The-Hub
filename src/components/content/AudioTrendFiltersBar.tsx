@@ -69,12 +69,25 @@ export function AudioTrendFiltersBar({ filters }: { filters: AudioTrendFilters }
           </SelectContent>
         </Select>
 
+        <Select value={String(filters.minCreators)} onValueChange={(value) => setParam("minCreators", value ?? "1", "1")}>
+          <SelectTrigger className="h-9 w-[145px] rounded-lg border-border/50 bg-background/60">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1">Any creators</SelectItem>
+            <SelectItem value="2">2+ creators</SelectItem>
+            <SelectItem value="3">3+ creators</SelectItem>
+            <SelectItem value="5">5+ creators</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Select value={filters.sort} onValueChange={(value) => setParam("sort", value ?? "usage", "usage")}>
           <SelectTrigger className="h-9 w-[135px] rounded-lg border-border/50 bg-background/60">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="usage">Usage</SelectItem>
+            <SelectItem value="creators">Creators</SelectItem>
             <SelectItem value="name">Name</SelectItem>
             <SelectItem value="recent">Recently linked</SelectItem>
           </SelectContent>

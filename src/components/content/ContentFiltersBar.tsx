@@ -82,11 +82,24 @@ export function ContentFiltersBar({
           </Select>
         )}
 
+        <Select value={filters.postType} onValueChange={(value) => setParam("type", value, "all")}>
+          <SelectTrigger className="h-9 w-[135px] rounded-lg border-border/50 bg-background/60">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All formats</SelectItem>
+            <SelectItem value="reel">Reels</SelectItem>
+            <SelectItem value="tiktok_video">TikToks</SelectItem>
+            <SelectItem value="carousel">Carousels</SelectItem>
+            <SelectItem value="image">Images</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Select
           value={outliersOnly ? (filters.scope === "all" ? "outliers" : filters.scope) : filters.scope}
           onValueChange={(value) => setParam("scope", value, outliersOnly ? "outliers" : "all")}
         >
-          <SelectTrigger className="h-9 w-[145px] rounded-lg border-border/50 bg-background/60">
+          <SelectTrigger className="h-9 w-[160px] rounded-lg border-border/50 bg-background/60">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -95,6 +108,10 @@ export function ContentFiltersBar({
             <SelectItem value="audio">Has audio</SelectItem>
             <SelectItem value="trended">Repeat audio</SelectItem>
             <SelectItem value="untrended">No trend</SelectItem>
+            <SelectItem value="with_views">Has views</SelectItem>
+            <SelectItem value="missing_views">Missing views</SelectItem>
+            <SelectItem value="pinned">Pinned</SelectItem>
+            <SelectItem value="sponsored">Sponsored</SelectItem>
             <SelectItem value="review">Needs review</SelectItem>
           </SelectContent>
         </Select>
@@ -117,15 +134,20 @@ export function ContentFiltersBar({
         )}
 
         <Select value={filters.sort} onValueChange={(value) => setParam("sort", value, "recent")}>
-          <SelectTrigger className="h-9 w-[145px] rounded-lg border-border/50 bg-background/60">
+          <SelectTrigger className="h-9 w-[155px] rounded-lg border-border/50 bg-background/60">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="copy_priority">Copy priority</SelectItem>
             <SelectItem value="recent">Recent</SelectItem>
             <SelectItem value="views">Views</SelectItem>
             <SelectItem value="engagement">Engagement</SelectItem>
             <SelectItem value="outlier">Outlier lift</SelectItem>
             <SelectItem value="trend_usage">Trend usage</SelectItem>
+            <SelectItem value="likes">Likes</SelectItem>
+            <SelectItem value="comments">Comments</SelectItem>
+            <SelectItem value="shares">Shares</SelectItem>
+            <SelectItem value="saves">Saves</SelectItem>
             <SelectItem value="profile">Profile</SelectItem>
           </SelectContent>
         </Select>

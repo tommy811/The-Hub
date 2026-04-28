@@ -50,6 +50,8 @@ class PlatformMetrics(BaseModel):
     video_aspect_ratio: float | None = None
     video_resolution: str | None = None
     subtitles: str | None = None
+    view_count_source: str | None = None
+    author_avatar_url: str | None = None
 
 
 class NormalizedPost(BaseModel):
@@ -118,11 +120,30 @@ def instagram_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
         if u.get("username")
     ]
 
+    view_count = (
+        item.get("videoPlayCount")
+        or item.get("videoViewCount")
+        or 0
+    )
+    view_count_source = (
+        "videoPlayCount" if item.get("videoPlayCount") is not None
+        else "videoViewCount" if item.get("videoViewCount") is not None
+        else None
+    )
+
     platform_metrics = PlatformMetrics(
         audio=audio,
         location=location,
         tagged_accounts=tagged,
         product_type=item.get("productType"),
+        view_count_source=view_count_source,
+        author_avatar_url=_first_string(
+            item,
+            "profilePicUrlHD",
+            "profilePicUrl",
+            "ownerProfilePicUrl",
+            "ownerProfilePicUrlHD",
+        ),
     )
 
     images = item.get("images") or []
@@ -132,12 +153,6 @@ def instagram_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
         media_urls = [item["displayUrl"]]
     else:
         media_urls = []
-
-    view_count = (
-        item.get("videoPlayCount")
-        or item.get("videoViewCount")
-        or 0
-    )
 
     return NormalizedPost(
         profile_id=profile_id,
@@ -169,6 +184,7 @@ def tiktok_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
     """Convert a raw clockworks/tiktok-scraper item to NormalizedPost."""
     caption = item.get("text")
     hook_text = caption[:50] if caption else None
+    author = item.get("authorMeta") or {}
 
     music = item.get("musicMeta") or {}
     audio = AudioInfo(
@@ -199,6 +215,8 @@ def tiktok_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
         video_aspect_ratio=video_meta.get("ratio"),
         video_resolution=resolution,
         subtitles=item.get("subtitles"),
+        view_count_source="playCount" if item.get("playCount") is not None else None,
+        author_avatar_url=_first_string(author, "avatar", "avatarLarger", "avatarMedium", "avatarThumb"),
     )
 
     hashtags_raw = item.get("hashtags") or []
@@ -234,3 +252,11 @@ def tiktok_to_normalized(item: dict, *, profile_id: UUID) -> NormalizedPost:
         platform_metrics=platform_metrics,
         raw_apify_payload=item,
     )
+
+
+def _first_string(source: dict, *keys: str) -> str | None:
+    for key in keys:
+        value = source.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None

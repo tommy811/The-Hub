@@ -30,6 +30,17 @@ function formatDate(v: string | null): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(v))
 }
 
+function viewLabel(row: { viewCount: number; viewCountAvailable: boolean }): string {
+  return row.viewCountAvailable ? compact(row.viewCount) : "Unavailable"
+}
+
+function priorityClass(label: "high" | "strong" | "watch" | "scan"): string {
+  if (label === "high") return "bg-emerald-500/15 text-emerald-300"
+  if (label === "strong") return "bg-indigo-500/15 text-indigo-300"
+  if (label === "watch") return "bg-amber-500/15 text-amber-300"
+  return "bg-muted text-muted-foreground"
+}
+
 export async function PlatformOutliersPage({
   platform,
   title,
@@ -55,6 +66,8 @@ export async function PlatformOutliersPage({
   const rows = filterContentRows(allRows, filters)
   const top = rows[0]?.outlierMultiplier ?? null
   const trended = rows.filter((row) => row.trendId).length
+  const rowsWithViews = rows.filter((row) => row.viewCountAvailable).length
+  const highPriority = rows.filter((row) => row.copyPriorityScore >= 70).length
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -65,7 +78,7 @@ export async function PlatformOutliersPage({
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Outlier Posts</CardTitle>
@@ -91,6 +104,21 @@ export async function PlatformOutliersPage({
             {trended}
           </CardContent>
         </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">View Coverage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{rows.length > 0 ? Math.round((rowsWithViews / rows.length) * 100) : 0}%</div>
+            <p className="mt-1 text-xs text-muted-foreground">{rowsWithViews} with view counts</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">High Priority</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-bold">{highPriority}</CardContent>
+        </Card>
       </div>
 
       <ContentFiltersBar filters={filters} fixedPlatform={platform} outliersOnly />
@@ -112,6 +140,7 @@ export async function PlatformOutliersPage({
                   <TableHead>Multiplier</TableHead>
                   <TableHead>Audio / Trend</TableHead>
                   <TableHead>Views</TableHead>
+                  <TableHead>Priority</TableHead>
                   <TableHead>Engagement</TableHead>
                   <TableHead>Date</TableHead>
                 </TableRow>
@@ -132,6 +161,11 @@ export async function PlatformOutliersPage({
                       ) : (
                         <span className="block truncate font-medium">{row.caption || row.postType}</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={priorityClass(row.copyPriorityLabel)}>
+                        {row.copyPriorityLabel} {row.copyPriorityScore}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
@@ -158,7 +192,7 @@ export async function PlatformOutliersPage({
                             href={`/scraped-content?scope=trended&sort=trend_usage&q=${encodeURIComponent(row.audioSignature ?? row.trendName ?? "")}`}
                             className="truncate text-xs text-indigo-300 hover:underline"
                           >
-                            {row.trendName ?? "Repeat audio"} ({row.trendUsageCount ?? 0})
+                            {row.trendName ?? "Repeat audio"} ({row.trendUsageCount ?? 0} posts, {row.trendCreatorCount ?? 0} creators)
                           </Link>
                         ) : row.audioSignature ? (
                           <span className="text-xs text-muted-foreground">single-use audio</span>
@@ -167,7 +201,13 @@ export async function PlatformOutliersPage({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{compact(row.viewCount)}</TableCell>
+                    <TableCell>
+                      {row.viewCountAvailable ? (
+                        compact(row.viewCount)
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{viewLabel(row)}</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {row.engagementRate != null ? `${row.engagementRate.toFixed(1)}%` : "-"}
                     </TableCell>

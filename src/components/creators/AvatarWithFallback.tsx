@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { proxiedAvatarUrl } from "@/lib/avatar-url";
 import { cn } from "@/lib/utils";
 
 interface AvatarWithFallbackProps {
@@ -14,13 +15,14 @@ interface AvatarWithFallbackProps {
 
 export function AvatarWithFallback({ avatarUrl, name, gradient, className, textClassName }: AvatarWithFallbackProps) {
   const [imgError, setImgError] = useState(false);
-  const showFallback = !avatarUrl || imgError;
+  const imageUrl = proxiedAvatarUrl(avatarUrl);
+  const showFallback = !imageUrl || imgError;
 
   return (
     <div className={cn("relative flex items-center justify-center bg-gradient-to-br overflow-hidden", gradient, className)}>
       {!showFallback ? (
         <Image
-          src={avatarUrl!}
+          src={imageUrl}
           alt=""
           fill
           sizes="96px"

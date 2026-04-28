@@ -4,10 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-  BarChart, Boxes, Calendar, FileText, LayoutDashboard, Settings, 
-  Users, Video, MessagesSquare, Wallet, Camera, MonitorPlay, HeartHandshake, FileBadge, Activity, Library
+  Boxes, LayoutDashboard,
+  Users, Camera, MonitorPlay, Activity, Library
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function Sidebar() {
@@ -25,36 +24,18 @@ export function Sidebar() {
       <ScrollArea className="flex-1 overflow-y-auto mt-4 pb-12">
         <nav className="flex flex-col gap-6 px-4">
           
-          {/* DAILY */}
           <div className="flex flex-col gap-1">
-            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Daily</h4>
+            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Command</h4>
             <NavItem href="/" icon={LayoutDashboard} label="Command Center" currentPath={currentPath} />
-            <NavItem href="#" icon={Wallet} label="Revenue Center" disabled />
-            <NavItem href="#" icon={HeartHandshake} label="Fan Intel Hub" disabled />
-            <NavItem href="#" icon={MessagesSquare} label="Chatter Workspace" disabled />
-            <NavItem href="/content" icon={Video} label="Content Hub" currentPath={currentPath} />
-            <NavItem href="/scraped-content" icon={Library} label="Scraped Content" currentPath={currentPath} />
-            <NavItem href="#" icon={FileBadge} label="Tasks" disabled />
-            <NavItem href="#" icon={FileText} label="Customs" disabled />
-            <NavItem href="#" icon={Calendar} label="Shift Center" disabled />
+            <NavItem href="/creators" icon={Users} label="Creators" currentPath={currentPath} />
           </div>
 
-          {/* ANALYZE */}
           <div className="flex flex-col gap-1">
-            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Analyze</h4>
-            <NavItem href="#" icon={Users} label="Fan Analytics" disabled />
-            <NavItem href="#" icon={BarChart} label="Revenue" disabled />
+            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Content Intel</h4>
+            <NavItem href="/scraped-content" icon={Library} label="Content Library" currentPath={currentPath} />
             <NavItem href="/trends" icon={Activity} label="Audio Trends" currentPath={currentPath} />
-            <NavItem href="#" icon={Wallet} label="Finance" disabled />
           </div>
 
-          {/* CREATORS */}
-          <div className="flex flex-col gap-1 mb-4">
-            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Creators</h4>
-            <NavItem href="/creators" icon={Users} label="All Creators" currentPath={currentPath} />
-          </div>
-
-          {/* PLATFORMS */}
           <div className="flex flex-col gap-1">
             <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Platforms</h4>
             
@@ -67,8 +48,6 @@ export function Sidebar() {
               <div className="ml-[26px] flex flex-col pl-2 border-l border-border/50 gap-1 mt-1">
                 <SubNavItem href="/platforms/instagram/accounts" label="Accounts" currentPath={currentPath} />
                 <SubNavItem href="/platforms/instagram/outliers" label="Outliers" currentPath={currentPath} />
-                <SubNavItem href="/platforms/instagram/classification" label="Classification" currentPath={currentPath} comingSoon />
-                <SubNavItem href="/platforms/instagram/analytics" label="Analytics" currentPath={currentPath} comingSoon />
               </div>
             </div>
 
@@ -81,19 +60,8 @@ export function Sidebar() {
               <div className="ml-[26px] flex flex-col pl-2 border-l border-border/50 gap-1 mt-1">
                 <SubNavItem href="/platforms/tiktok/accounts" label="Accounts" currentPath={currentPath} />
                 <SubNavItem href="/platforms/tiktok/outliers" label="Outliers" currentPath={currentPath} />
-                <SubNavItem href="/platforms/tiktok/classification" label="Classification" currentPath={currentPath} comingSoon />
-                <SubNavItem href="/platforms/tiktok/analytics" label="Analytics" currentPath={currentPath} comingSoon />
               </div>
             </div>
-            
-            <NavItem href="#" icon={Video} label="YouTube" disabled />
-            <NavItem href="#" icon={HeartHandshake} label="Patreon" disabled />
-          </div>
-
-          {/* OPS */}
-          <div className="flex flex-col gap-1 mb-8">
-            <h4 className="px-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 mb-1">Ops</h4>
-            <NavItem href="/admin" icon={Settings} label="Admin" currentPath={currentPath} />
           </div>
 
         </nav>
@@ -102,20 +70,8 @@ export function Sidebar() {
   );
 }
 
-function NavItem({ href, icon: Icon, label, disabled, currentPath, badgeCount, badgeLabel }: { href: string; icon: any; label: string; disabled?: boolean; currentPath?: string; badgeCount?: number; badgeLabel?: string }) {
-  const isActive = currentPath === href && !disabled;
-  
-  if (disabled) {
-    return (
-      <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-muted-foreground/50 opacity-60 cursor-not-allowed">
-        <div className="flex items-center gap-2.5">
-          <Icon className="h-4 w-4" />
-          <span>{label}</span>
-        </div>
-        <Badge variant="outline" className="text-[8px] h-4 px-1 py-0 uppercase border-muted-foreground/30 text-muted-foreground/60 font-semibold bg-transparent">Soon</Badge>
-      </div>
-    );
-  }
+function NavItem({ href, icon: Icon, label, currentPath }: { href: string; icon: any; label: string; currentPath?: string }) {
+  const isActive = currentPath === href;
 
   return (
     <Link 
@@ -130,14 +86,6 @@ function NavItem({ href, icon: Icon, label, disabled, currentPath, badgeCount, b
         <Icon className={cn("h-4 w-4", isActive ? "text-indigo-400" : "group-hover:text-foreground")} />
         <span className={isActive ? "font-semibold" : ""}>{label}</span>
       </div>
-      {badgeCount !== undefined && badgeCount > 0 && (
-         <div className="flex items-center gap-1.5">
-           {badgeLabel && <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 opacity-70 group-hover:opacity-100 transition-opacity">{badgeLabel}</span>}
-           <Badge className="h-5 px-1.5 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 border-indigo-500/30 font-bold tabular-nums">
-             {badgeCount}
-           </Badge>
-         </div>
-      )}
     </Link>
   );
 }
@@ -146,12 +94,10 @@ function SubNavItem({
   href,
   label,
   currentPath,
-  comingSoon,
 }: {
   href: string
   label: string
   currentPath?: string
-  comingSoon?: boolean
 }) {
   const isActive = currentPath === href
   return (
@@ -168,14 +114,6 @@ function SubNavItem({
         <div className="absolute -left-[5px] w-2 h-2 rounded-full border-[2px] border-background bg-indigo-500" />
       )}
       <span>{label}</span>
-      {comingSoon && (
-        <Badge
-          variant="outline"
-          className="text-[8px] h-4 px-1 py-0 uppercase border-muted-foreground/30 text-muted-foreground/60 font-semibold bg-transparent"
-        >
-          Soon
-        </Badge>
-      )}
     </Link>
   )
 }

@@ -13,7 +13,9 @@ import pytest
 
 from content_scraper.fetchers.base import FetchBatchResult
 from content_scraper.normalizer import NormalizedPost, PlatformMetrics
-from content_scraper.orchestrator import ScrapeOrchestrator, ProfileScope
+from content_scraper.orchestrator import (
+    ScrapeOrchestrator, ProfileScope, ScrapeRunSummary, _profile_avatar_from_posts,
+)
 
 
 def _make_post(profile_id, post_id="p1", view_count=100) -> NormalizedPost:
@@ -34,6 +36,29 @@ def _make_post(profile_id, post_id="p1", view_count=100) -> NormalizedPost:
     )
 
 
+def test_profile_avatar_from_posts_uses_platform_metrics_first():
+    pid = uuid4()
+    post = _make_post(
+        pid,
+        post_id="avatar",
+    ).model_copy(update={
+        "platform_metrics": PlatformMetrics(author_avatar_url="https://cdn.example/avatar.jpg"),
+    })
+
+    assert _profile_avatar_from_posts([post]) == "https://cdn.example/avatar.jpg"
+
+
+def test_profile_avatar_from_posts_reads_tiktok_author_meta():
+    pid = uuid4()
+    post = _make_post(pid, post_id="tt-avatar").model_copy(update={
+        "platform": "tiktok",
+        "post_type": "tiktok_video",
+        "raw_apify_payload": {"authorMeta": {"avatar": "https://p.tiktokcdn.com/a.jpg"}},
+    })
+
+    assert _profile_avatar_from_posts([post]) == "https://p.tiktokcdn.com/a.jpg"
+
+
 def _async_return(value):
     """Helper: return an awaitable that resolves to `value`."""
     async def _r(*args, **kwargs):
@@ -41,7 +66,10 @@ def _async_return(value):
     return _r()
 
 
-def _supabase_mock_with_outlier_query(outlier_count: int = 0) -> MagicMock:
+def _supabase_mock_with_outlier_query(
+    outlier_count: int = 0,
+    rows: list[dict] | None = None,
+) -> MagicMock:
     """Build a supabase mock where the post-flag query returns `outlier_count` outlier rows."""
     sb = MagicMock()
     rpc_chain = MagicMock()
@@ -59,7 +87,7 @@ def _supabase_mock_with_outlier_query(outlier_count: int = 0) -> MagicMock:
     sc_select_chain.in_.return_value = sc_select_chain
     sc_select_chain.eq.return_value = sc_select_chain
     sc_select_chain.execute.return_value = MagicMock(
-        data=[
+        data=rows if rows is not None else [
             {"view_count": 100, "is_outlier": i < outlier_count, "engagement_rate": 0.05}
             for i in range(5)
         ]
@@ -87,6 +115,35 @@ def _supabase_mock_with_outlier_query(outlier_count: int = 0) -> MagicMock:
 
     sb.table.side_effect = table_factory
     return sb
+
+
+def test_profile_snapshot_median_ignores_missing_static_view_counts():
+    pid = uuid4()
+    post = _make_post(pid)
+    rows = [
+        {"view_count": 0, "is_outlier": False, "engagement_rate": 0.10},
+        {"view_count": 0, "is_outlier": False, "engagement_rate": 0.12},
+        {"view_count": 100, "is_outlier": False, "engagement_rate": 0.05},
+        {"view_count": 200, "is_outlier": False, "engagement_rate": 0.06},
+        {"view_count": 300, "is_outlier": False, "engagement_rate": 0.07},
+    ]
+    sb = _supabase_mock_with_outlier_query(rows=rows)
+    orch = ScrapeOrchestrator(
+        supabase=sb,
+        ig_fetcher=MagicMock(),
+        tt_fetcher=MagicMock(),
+        dead_letter_path=None,
+    )
+
+    asyncio.run(orch._write_profile_snapshot(
+        ProfileScope(profile_id=pid, handle="x", platform="instagram", creator_id=uuid4(), workspace_id=uuid4()),
+        [post],
+        ScrapeRunSummary(),
+    ))
+
+    snapshot_chain = sb.table("profile_metrics_snapshots")
+    snapshot_row = snapshot_chain.upsert.call_args.args[0]
+    assert snapshot_row["median_views"] == 200
 
 
 def test_orchestrator_calls_commit_then_flag_outliers_per_profile():

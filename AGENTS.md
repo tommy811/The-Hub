@@ -4,7 +4,7 @@
 >
 > **Why this file exists:** Simon swaps from Claude Code to Codex when Claude credit is tight or when a task is more architectural / solution-oriented. The Claude-side conventions (Stop hook, subagent dispatch, auto-memory, Skill tool) don't translate directly. This doc carries the conventions across so the project doesn't lose continuity.
 >
-> **Last update:** 2026-04-28, after sync 20. Maintained by Claude Code/Codex; if you make changes that affect handoff (new tools, new rules, new phase), update the relevant section before ending the session.
+> **Last update:** 2026-04-28, after sync 21. Maintained by Claude Code/Codex; if you make changes that affect handoff (new tools, new rules, new phase), update the relevant section before ending the session.
 
 ---
 
@@ -181,8 +181,10 @@ When Simon hands a fix list with "full autonomy / don't ask / use subagents / mi
 - **STATUS:** shipped sync 14 (2026-04-25). The plan at `docs/superpowers/plans/2026-04-25-recursive-funnel-resolution.md` was the basis. Bounded follow-until-terminus expansion through `_expand` in `scripts/pipeline/resolver.py`. Triple-bounded: visited_canonical cycle dedup + BudgetTracker + `MAX_DEPTH=6` (env: `DISCOVERY_MAX_DEPTH`). Confidence drops linearly with depth via `_confidence_at_depth`.
 - **Outdated memory note:** older auto-memory described it as "open plan"; that's stale.
 
-### Highlights v1+v2 — SHELVED
-Code lives in repo, runtime gated off (`DISCOVERY_HIGHLIGHTS_ENABLED=0`). The `apify/instagram-scraper resultsType="stories"` actor returns `no_items` without IG `sessionCookies`. Recursive funnel + Universal URL Harvester are currently good-enough. **Thaw conditions** documented in PROJECT_STATE §20 row "Highlights v1 — shelved 2026-04-25". Spec/plan exist at `docs/superpowers/specs/2026-04-25-highlights-v1-design.md` + `docs/superpowers/plans/2026-04-25-highlights-v1.md`.
+### Highlights split — discovery shelved, content import live
+Discovery-side highlights expansion remains runtime gated off (`DISCOVERY_HIGHLIGHTS_ENABLED=0`). The official `apify/instagram-scraper resultsType="stories"` path is unreliable for pinned highlights: older diagnostics returned `no_items`, and the 2026-04-28 diagnostic on @esmaecursed returned normal feed/reel rows instead of highlight rows. Recursive funnel + Universal URL Harvester remain good-enough for discovery.
+
+Content-library highlights import is live via `scripts/scrape_instagram_highlights.py`, using `seemuapps/instagram-highlights-scraper` and writing `story_highlight` rows through `commit_scrape_result`. It supports `--dataset-id` so paid Apify datasets can be reused without rerunning the actor. Sync 21 imported 139 highlight-story rows from dataset `6XHq1bewmAcEjDVfc`.
 
 ### Apify actor schema drift
 When fetchers silently return empty: dispatch the actor with a small diagnostic script in `.tmp/` (gitignored) and inspect the raw shape before assuming the bug is in our code. Apify actors mutate their output schema between releases — don't blame the fetcher first.
@@ -202,20 +204,23 @@ When fetchers silently return empty: dispatch the actor with a small diagnostic 
 
 **Branch:** `phase-2-discovery-v2`. Clean working tree at last sync. Possibly 1+ commits ahead of `main` since last PR merge — check `git log --oneline origin/main..HEAD`.
 
-**Last PROJECT_STATE sync:** sync 20 (90-day scrape + filtered content/outlier/audio trend UI).
+**Last PROJECT_STATE sync:** sync 21 (winning-content filters, avatar refresh/proxy, IG highlights import).
 
-**Latest commits:** check `git log --oneline -10`; this handoff is updated through sync 20 work.
+**Latest commits:** check `git log --oneline -10`; this handoff is updated through sync 21 work.
 
-**What just shipped (sync 18–20):**
+**What just shipped (sync 18–21):**
 - Content scraper v1 manual CLI: `scripts/scrape_content.py` + `scripts/content_scraper/` for batched IG/TT Apify ingestion, Pydantic normalizers, `commit_scrape_result`, `flag_outliers`, and profile snapshots.
 - Scraper observability: migration `20260427000200_scrape_runs_observability` adds `scrape_runs`; local migration file is committed but live apply is pending. The scraper catches `scrape_runs` insert failures and still updates content/profile snapshots.
-- Live scrape: 18 active IG/TT profiles targeted over 90 days; 13 scraped, 5 skipped `no_posts`, 643 posts upserted, 0 failures. Current 90-day library: 639 posts, 75 outliers, 528 posts with audio signatures.
+- Live scrape: 18 active IG/TT profiles targeted over 90 days; 13 scraped, 5 skipped `no_posts`, 643 posts upserted, 0 failures. After sync 21 highlight import, current live library has 788 rows: 24 images, 85 carousels, 245 reels, 295 TikToks, 139 IG story highlights.
 - Audio trends: `scripts/extract_audio_trends.py --min-usage 2` linked 49 repeated audio trends to 137 scraped posts.
+- Winning-content triage: content/outlier/trend surfaces now show copy-priority, view coverage, format filters, pinned/sponsored scopes, repeat-audio post + distinct-creator counts, and richer sort options.
+- Profile photos: `/api/avatar` proxies allowed IG/TT/YT avatar CDN hosts; creator/account reads fall back to recent scraped avatar payloads. `scripts/refresh_profile_avatars.py` refreshed 16/18 active IG/TT avatars; IG `kirapregiato_backup` and IG `ellableu.fit` still returned no avatar from Apify.
+- Highlights: official `apify/instagram-scraper resultsType=stories` remains unreliable for highlights; `scripts/scrape_instagram_highlights.py` uses `seemuapps/instagram-highlights-scraper` and can import from `--dataset-id` to reuse paid datasets.
 - Live surfaces: `/scraped-content`, `/platforms/instagram/outliers`, `/platforms/tiktok/outliers`, `/trends` Audio Trends. `/content` is reserved for agency creation tools / Content Hub.
-- Deterministic/manual tooling: `scripts/validate_scraped_content.py`, `scripts/judge_suspicious_content.py`, `scripts/extract_audio_trends.py`, `schemas/social_post.schema.json`.
+- Deterministic/manual tooling: `scripts/validate_scraped_content.py`, `scripts/judge_suspicious_content.py`, `scripts/extract_audio_trends.py`, `scripts/refresh_profile_avatars.py`, `scripts/scrape_instagram_highlights.py`, `schemas/social_post.schema.json`.
 - Simon deferred the 12-hour automatic scrape/cron; do not resurrect it unless explicitly asked.
 
-**Test status as of sync 20:** content scraper tests previously 43/43; full pytest previously 298/298 + 1 skip; latest close-out ran `npm run typecheck` 0, `npm run lint` 0 errors (2 pre-existing creator-page warnings), content quality/trends pytest 5/5, and route smokes 200 for scraped content, both outlier pages, and audio trends.
+**Test status as of sync 21:** targeted content scraper/highlight tests 37/37; full Python tests 302/302 + 1 skip; `npm run typecheck` 0; `npm run lint` 0; `npm run build` 0; localhost route smokes 200 for `/`, `/creators`, `/platforms/instagram/accounts`, `/scraped-content`.
 
 ---
 
@@ -235,16 +240,17 @@ Per PROJECT_STATE.md §14:
    - ✅ Universal URL Harvester (sync 15)
    - ✅ Profile noise cleanup + specific platforms + AccountRow + banner foundation (sync 16)
    - ✅ Duplicate prevention hardened + regression tests + Gemini-enriched watchdog (sync 17)
-9. 🟡 **Phase 2 scraping** — manual-trigger path is live and hardened. Cron/automatic 12h scraping is explicitly deferred by Simon. Current assets: `scripts/scrape_content.py`, `scripts/content_scraper/`, pending `scrape_runs` migration, live `/scraped-content`, live platform outlier pages, deterministic validator, audio trend extractor, results-checker JSON schema.
-10. 🟡 Phase 2 trends — repeated-audio extraction exists via `scripts/extract_audio_trends.py`; `/trends` is live for Audio Trends, broader `trend_signals` feed still pending.
+9. 🟡 **Phase 2 scraping** — manual-trigger path is live and hardened. Cron/automatic 12h scraping is explicitly deferred by Simon. Current assets: `scripts/scrape_content.py`, `scripts/content_scraper/`, `scripts/refresh_profile_avatars.py`, `scripts/scrape_instagram_highlights.py`, pending `scrape_runs` migration, live `/scraped-content`, live platform outlier pages, deterministic validator, audio trend extractor, results-checker JSON schema.
+10. 🟡 Phase 2 trends — repeated-audio extraction exists via `scripts/extract_audio_trends.py`; `/trends` is live for Audio Trends with distinct-creator counts, broader `trend_signals` feed still pending.
 11. 🔜 Phase 3 content analysis — Gemini scoring, `profile_scores` + rank tier on UI
 12. 🔜 Phase 3 brand analysis — Claude-driven brand report per creator
 13. 🔜 Phase 3 classification UI — taxonomy curation tabs
 14. 🔜 Phase 4 funnel editor — React Flow drag-to-connect for `funnel_edges`
 15. 🔜 Phase 4 monetization intel — dashboards across creators
 
-**Shelved (explicit decisions to not do):**
-- **Highlights v1 + v2** — shelved 2026-04-25. See [§6](#6-memory-facts) and PROJECT_STATE §20 for thaw conditions.
+**Shelved / split:**
+- **Discovery highlights expansion** — still shelved/off (`DISCOVERY_HIGHLIGHTS_ENABLED=0`) because the official IG scraper's stories mode is unreliable without session cookies.
+- **Content-library highlights import** — live via `scripts/scrape_instagram_highlights.py` + dedicated `seemuapps/instagram-highlights-scraper`; imported 139 `story_highlight` rows on 2026-04-28.
 
 **Deferred (no decision against, no scheduled date):**
 See PROJECT_STATE §20 Known Limitations for the full list. Notable:

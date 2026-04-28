@@ -141,7 +141,7 @@ class ScrapeOrchestrator:
             )
 
             outlier_count = await self._write_profile_snapshot(scope, posts, summary)
-            await self._mark_profile_scraped(scope)
+            await self._mark_profile_scraped(scope, posts)
             await self._record_scrape_run(
                 scope,
                 status="succeeded",
@@ -208,7 +208,10 @@ class ScrapeOrchestrator:
                 .execute()
         )
         rows = rows_resp.data or []
-        view_counts = [r.get("view_count") or 0 for r in rows]
+        view_counts = [
+            int(r["view_count"]) for r in rows
+            if r.get("view_count") is not None and int(r["view_count"]) > 0
+        ]
         outlier_count = sum(1 for r in rows if r.get("is_outlier"))
         median_views = int(statistics.median(view_counts)) if view_counts else 0
         engagement_rates = [
@@ -246,11 +249,15 @@ class ScrapeOrchestrator:
         )
         return outlier_count
 
-    async def _mark_profile_scraped(self, scope: ProfileScope) -> None:
+    async def _mark_profile_scraped(self, scope: ProfileScope, posts: list[NormalizedPost]) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        update_payload = {"last_scraped_at": now}
+        avatar_url = _profile_avatar_from_posts(posts)
+        if avatar_url:
+            update_payload["avatar_url"] = avatar_url
         await asyncio.to_thread(
             lambda: self._sb.table("profiles")
-                .update({"last_scraped_at": now})
+                .update(update_payload)
                 .eq("id", str(scope.profile_id))
                 .eq("workspace_id", str(scope.workspace_id))
                 .execute()
@@ -297,3 +304,37 @@ class ScrapeOrchestrator:
                 status,
                 exc,
             )
+
+
+def _profile_avatar_from_posts(posts: list[NormalizedPost]) -> str | None:
+    for post in posts:
+        metrics_url = post.platform_metrics.author_avatar_url
+        if metrics_url:
+            return metrics_url
+
+        raw = post.raw_apify_payload or {}
+        if post.platform == "instagram":
+            value = _first_string(
+                raw,
+                "profilePicUrlHD",
+                "profilePicUrl",
+                "ownerProfilePicUrlHD",
+                "ownerProfilePicUrl",
+            )
+            if value:
+                return value
+        if post.platform == "tiktok":
+            author = raw.get("authorMeta") or {}
+            value = _first_string(author, "avatar", "avatarLarger", "avatarMedium", "avatarThumb")
+            if value:
+                return value
+
+    return None
+
+
+def _first_string(source: dict, *keys: str) -> str | None:
+    for key in keys:
+        value = source.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None

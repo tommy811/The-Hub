@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { ExternalLink, RefreshCw, Archive, Edit3, MoreHorizontal, FileText, Unlink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { proxiedAvatarUrl } from "@/lib/avatar-url";
 import { Badge } from "@/components/ui/badge";
 import { RankBadge } from "./RankBadge";
 import { type RankTier } from "@/lib/ranks";
@@ -26,6 +30,8 @@ export interface AccountCardProps {
 }
 
 export function AccountCard(props: AccountCardProps) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarSrc = proxiedAvatarUrl(props.avatarUrl);
   const initials = props.displayName.substring(0, 2).toUpperCase();
 
   return (
@@ -72,14 +78,15 @@ export function AccountCard(props: AccountCardProps) {
         )}
 
         <div className="relative">
-          {props.avatarUrl ? (
+          {avatarSrc && !avatarFailed ? (
             <Image
-              src={props.avatarUrl}
+              src={avatarSrc}
               alt={props.handle}
               width={96}
               height={96}
               unoptimized
               className="w-24 h-24 rounded-2xl object-cover border-4 border-background shadow-lg group-hover:scale-105 transition-transform duration-500"
+              onError={() => setAvatarFailed(true)}
             />
           ) : (
             <div className="w-24 h-24 rounded-2xl border-4 border-background shadow-lg bg-muted flex items-center justify-center">

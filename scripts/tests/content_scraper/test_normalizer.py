@@ -95,10 +95,12 @@ def test_post_with_full_platform_metrics():
         video_aspect_ratio=0.5625,
         video_resolution="1080x1920",
         subtitles="hello world",
+        view_count_source="playCount",
     )
     post = NormalizedPost(**_minimal_post(platform_metrics=pm))
     assert post.platform_metrics.audio.signature == "x"
     assert post.platform_metrics.tagged_accounts == ["foo", "bar"]
+    assert post.platform_metrics.view_count_source == "playCount"
 
 
 import json
@@ -157,6 +159,8 @@ def test_instagram_to_normalized_platform_metrics():
     assert pm.location.id == "12345"
     assert pm.tagged_accounts == ["friend1", "friend2"]
     assert pm.product_type == "clips"
+    assert pm.view_count_source == "videoPlayCount"
+    assert pm.author_avatar_url == "https://scontent.cdninstagram.com/v/avatar_hd.jpg"
 
 
 def test_instagram_to_normalized_carousel_post_type():
@@ -177,6 +181,7 @@ def test_instagram_to_normalized_image_post_type():
     post = instagram_to_normalized(raw, profile_id=uuid4())
     assert post.post_type == "image"
     assert post.view_count == 0
+    assert post.platform_metrics.view_count_source is None
     assert post.media_urls == ["https://scontent.cdninstagram.com/v/thumb.jpg"]
 
 
@@ -250,6 +255,8 @@ def test_tiktok_to_normalized_platform_metrics():
     assert pm.video_aspect_ratio == 0.5625
     assert pm.video_resolution == "1080x1920"
     assert pm.subtitles == "follow my links please"
+    assert pm.view_count_source == "playCount"
+    assert pm.author_avatar_url == "https://p.tiktokcdn.com/avatar.jpg"
 
 
 def test_tiktok_to_normalized_thumbnail_from_videometa_cover():

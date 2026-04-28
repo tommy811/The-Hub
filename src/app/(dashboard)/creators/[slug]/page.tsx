@@ -26,7 +26,7 @@ import {
 } from "@/lib/db/queries";
 import { ComingSoon } from "@/components/shared/ComingSoon";
 import { sortAccounts } from "@/lib/sortAccounts";
-import { PLATFORMS, getSortPriority, resolvePlatform } from "@/lib/platforms";
+import { resolvePlatform } from "@/lib/platforms";
 
 const GRADIENTS = [
   "from-violet-500 to-indigo-600",
@@ -48,6 +48,24 @@ function getGradient(name: string): string {
 function formatNumber(n: number | null | undefined): string {
   if (!n) return '—';
   return new Intl.NumberFormat('en-US', { notation: 'compact', compactDisplay: 'short' }).format(n);
+}
+
+function selectCreatorAvatar(profiles: Array<{ avatar_url?: string | null; is_primary?: boolean | null; account_type?: string | null; platform?: string | null; follower_count?: number | null }>): string | null {
+  const candidates = profiles
+    .filter((profile) => profile.avatar_url)
+    .sort((a, b) => {
+      if (!!b.is_primary !== !!a.is_primary) return Number(!!b.is_primary) - Number(!!a.is_primary)
+      if (a.account_type !== b.account_type) {
+        if (a.account_type === "social") return -1
+        if (b.account_type === "social") return 1
+      }
+      const aPlatform = a.platform === "instagram" || a.platform === "tiktok" ? 1 : 0
+      const bPlatform = b.platform === "instagram" || b.platform === "tiktok" ? 1 : 0
+      if (aPlatform !== bPlatform) return bPlatform - aPlatform
+      return (b.follower_count ?? -1) - (a.follower_count ?? -1)
+    })
+
+  return candidates[0]?.avatar_url ?? null
 }
 
 interface StatPanelProps {
@@ -90,8 +108,7 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
   }
 
   const primaryProfile = profiles.find(p => p.is_primary) ?? profiles[0];
-  // Prefer agency-managed override; fall back to primary profile's scraped avatar.
-  const avatarUrl = creator.override_avatar_url ?? primaryProfile?.avatar_url ?? null;
+  const avatarUrl = creator.override_avatar_url ?? selectCreatorAvatar(profiles) ?? primaryProfile?.avatar_url ?? null;
   const gradient = getGradient(creator.canonical_name);
 
   // Sort at the render layer (not the DB layer) so that other consumers keep insertion order.
@@ -343,6 +360,7 @@ function NetworkSection({ title, icon: Icon, accounts }: { title: string, icon: 
               displayName={a.display_name}
               url={a.url}
               followerCount={a.follower_count}
+              avatarUrl={a.avatar_url}
               accountType={a.account_type}
               discoveryConfidence={a.discovery_confidence ?? 1}
               isPrimary={a.is_primary}

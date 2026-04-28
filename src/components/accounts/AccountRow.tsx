@@ -1,12 +1,15 @@
 // src/components/accounts/AccountRow.tsx — Network tab account row component
 "use client";
 
+import Image from "next/image";
+import { useState } from "react";
 import { PlatformIcon } from "./PlatformIcon";
 import { AccountRowMenu } from "./AccountRowMenu";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Star } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { proxiedAvatarUrl } from "@/lib/avatar-url";
 import { resolvePlatform } from "@/lib/platforms";
 
 interface AccountRowProps {
@@ -16,6 +19,7 @@ interface AccountRowProps {
   url?: string;
   displayName?: string;
   followerCount?: number;
+  avatarUrl?: string | null;
   accountType: string;
   discoveryConfidence: number;
   isPrimary?: boolean;
@@ -40,8 +44,10 @@ function formatRelative(iso: string | undefined): string | null {
 }
 
 export function AccountRow({
-  id, platform, handle, url, displayName, followerCount, accountType, discoveryConfidence, isPrimary, lastScrapedAt
+  id, platform, handle, url, displayName, followerCount, avatarUrl, accountType, discoveryConfidence, isPrimary, lastScrapedAt
 }: AccountRowProps) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarSrc = proxiedAvatarUrl(avatarUrl);
 
   const hasFollowers = followerCount !== undefined && followerCount !== null && followerCount > 0;
   const formattedFollowers = hasFollowers
@@ -75,17 +81,34 @@ export function AccountRow({
           )}
         </div>
 
-        <div className="flex flex-col gap-0.5 w-[280px] truncate">
-          {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-foreground/90 hover:text-indigo-400 transition-colors flex items-center gap-1 truncate">
-              {handle} <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
-            </a>
-          ) : (
-            <span className="font-medium text-sm text-foreground/90 truncate">{handle}</span>
-          )}
-          {displayName && (
-            <span className="text-xs text-muted-foreground truncate">{displayName}</span>
-          )}
+        <div className="flex w-[280px] min-w-0 items-center gap-2">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-muted">
+            {avatarSrc && !avatarFailed ? (
+              <Image
+                src={avatarSrc}
+                alt=""
+                fill
+                sizes="36px"
+                unoptimized
+                className="object-cover"
+                onError={() => setAvatarFailed(true)}
+              />
+            ) : (
+              <PlatformIcon platform={platform} url={url} size={16} />
+            )}
+          </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            {url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-foreground/90 hover:text-indigo-400 transition-colors flex items-center gap-1 truncate">
+                {handle} <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
+              </a>
+            ) : (
+              <span className="font-medium text-sm text-foreground/90 truncate">{handle}</span>
+            )}
+            {displayName && (
+              <span className="text-xs text-muted-foreground truncate">{displayName}</span>
+            )}
+          </div>
         </div>
 
         <div className="text-sm font-medium w-[100px]">

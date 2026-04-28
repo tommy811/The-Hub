@@ -69,7 +69,7 @@ class InstagramContentFetcher(BaseContentFetcher):
             "resultsType": "posts",
             "resultsLimit": 200,
             "onlyPostsNewerThan": since.date().isoformat(),
-            "addParentData": False,
+            "addParentData": True,
         }
         run = self._apify.actor(_ACTOR_ID).call(run_input=run_input)
         run_id = run.get("id")

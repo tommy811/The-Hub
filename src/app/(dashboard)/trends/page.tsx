@@ -37,6 +37,8 @@ export default async function TrendsAndAlertsPage({
   const allTrends = await getAudioTrendsForWorkspace(wsId, 500)
   const trends = filterAudioTrends(allTrends, filters)
   const linkedPosts = trends.reduce((sum, trend) => sum + trend.usageCount, 0)
+  const linkedCreators = trends.reduce((sum, trend) => sum + trend.creatorCount, 0)
+  const crossCreatorTrends = trends.filter((trend) => trend.creatorCount >= 2).length
 
   return (
     <div className="flex flex-col gap-6 pb-10">
@@ -47,7 +49,7 @@ export default async function TrendsAndAlertsPage({
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card className="border-border/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Repeat Audios</CardTitle>
@@ -71,6 +73,18 @@ export default async function TrendsAndAlertsPage({
             {trends[0]?.usageCount ?? 0}
           </CardContent>
         </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Creator Uses</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-bold">{linkedCreators}</CardContent>
+        </Card>
+        <Card className="border-border/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Cross-Creator</CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-bold">{crossCreatorTrends}</CardContent>
+        </Card>
       </div>
 
       <AudioTrendFiltersBar filters={filters} />
@@ -90,6 +104,7 @@ export default async function TrendsAndAlertsPage({
                   <TableHead>Audio</TableHead>
                   <TableHead>Signature</TableHead>
                   <TableHead>Usage</TableHead>
+                  <TableHead>Creators</TableHead>
                   <TableHead>Updated</TableHead>
                   <TableHead>Content</TableHead>
                 </TableRow>
@@ -109,6 +124,7 @@ export default async function TrendsAndAlertsPage({
                       {trend.audioSignature ?? "-"}
                     </TableCell>
                     <TableCell>{trend.usageCount}</TableCell>
+                    <TableCell>{trend.creatorCount}</TableCell>
                     <TableCell>{formatDate(trend.updatedAt ?? trend.createdAt)}</TableCell>
                     <TableCell>
                       <Link
