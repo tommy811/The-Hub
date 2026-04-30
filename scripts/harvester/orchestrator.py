@@ -87,21 +87,24 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
     tier1 = fetch_static(url)
 
     # 3. Tier 2 escalation
-    raw_entries: list[tuple[str, str]] = []  # (raw_url, raw_text)
+    raw_entries: list[tuple[str, str, str]] = []  # (raw_url, raw_text, harvest_method)
     harvest_method = "httpx"
     if tier1.needs_tier2():
+        for anchor in tier1.anchors:
+            raw_entries.append((anchor, tier1.anchor_texts.get(anchor, ""), "httpx"))
         tier2 = fetch_headless(url)
-        for h in tier2:
-            raw_entries.append((h.raw_url, h.raw_text))
-        harvest_method = "headless"
+        if tier2:
+            for h in tier2:
+                raw_entries.append((h.raw_url, h.raw_text, "headless"))
+            harvest_method = "headless"
     else:
         for anchor in tier1.anchors:
-            raw_entries.append((anchor, tier1.anchor_texts.get(anchor, "")))
+            raw_entries.append((anchor, tier1.anchor_texts.get(anchor, ""), "httpx"))
 
     # 4. Classify + canonicalize each URL
     seen_canon: set[str] = set()
     classified: list[HarvestedUrl] = []
-    for raw_url, raw_text in raw_entries:
+    for raw_url, raw_text, entry_harvest_method in raw_entries:
         canon = canonicalize_url(raw_url)
         # eTLD+1 filter: an aggregator's own subdomains, internal APIs, and
         # legal/footer paths aren't creator destinations.
@@ -119,7 +122,7 @@ def harvest_urls(url: str, supabase=None) -> list[HarvestedUrl]:
             raw_url=raw_url,
             raw_text=raw_text,
             destination_class=_destination_class_for(cls.account_type, canon),
-            harvest_method=harvest_method,
+            harvest_method=entry_harvest_method,
         ))
 
     # 5. Persist to cache (only if we have supabase)

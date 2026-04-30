@@ -98,6 +98,8 @@ def test_tier2_fires_when_signals_tripped(
 
     def _fake_classify(url, supabase):
         from pipeline.classifier import Classification
+        if "t.me" in url:
+            return Classification(platform="telegram_channel", account_type="messaging", confidence=1.0, reason="rule:telegram_messaging")
         return Classification(platform="fanplace", account_type="monetization", confidence=1.0, reason="rule:fanplace_monetization")
 
     mock_classify.side_effect = _fake_classify
@@ -106,9 +108,48 @@ def test_tier2_fires_when_signals_tripped(
     result = harvest_urls("https://tapforallmylinks.com/esmae", supabase=sb)
 
     mock_headless.assert_called_once_with("https://tapforallmylinks.com/esmae")
+    assert len(result) == 2
+    by_url = {row.canonical_url: row for row in result}
+    assert by_url["https://t.me/foo"].destination_class == "messaging"
+    assert by_url["https://t.me/foo"].harvest_method == "httpx"
+    assert by_url["https://fanplace.com/x"].destination_class == "monetization"
+    assert by_url["https://fanplace.com/x"].harvest_method == "headless"
+
+
+@patch("harvester.orchestrator.write_cache")
+@patch("harvester.orchestrator.classify")
+@patch("harvester.orchestrator.fetch_headless")
+@patch("harvester.orchestrator.fetch_static")
+@patch("harvester.orchestrator.lookup_cache")
+def test_tier2_empty_falls_back_to_tier1_anchors(
+    mock_cache, mock_static, mock_headless, mock_classify, mock_write
+):
+    mock_cache.return_value = None
+    mock_static.return_value = Tier1Result(
+        html="<script id='__NEXT_DATA__'></script>",
+        anchors=["https://www.youtube.com/@shirleypunpun"],
+        anchor_texts={"https://www.youtube.com/@shirleypunpun": "Youtube"},
+        signals_tripped={"spa_hydration"},
+    )
+    mock_headless.return_value = []
+
+    from pipeline.classifier import Classification
+    mock_classify.return_value = Classification(
+        platform="youtube",
+        account_type="social",
+        confidence=1.0,
+        reason="rule:youtube_social",
+    )
+    sb = MagicMock()
+
+    result = harvest_urls("https://linktr.ee/punpun8", supabase=sb)
+
+    mock_headless.assert_called_once_with("https://linktr.ee/punpun8")
     assert len(result) == 1
-    assert result[0].destination_class == "monetization"
-    assert result[0].harvest_method == "headless"
+    assert result[0].canonical_url == "https://youtube.com/@shirleypunpun"
+    assert result[0].raw_text == "Youtube"
+    assert result[0].harvest_method == "httpx"
+    mock_write.assert_called_once()
 
 
 @patch("harvester.orchestrator.lookup_cache")

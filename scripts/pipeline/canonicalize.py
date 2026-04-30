@@ -16,6 +16,7 @@ _TRACKING_PARAMS = {
     "_t",         # tiktok share token
     "_r",         # tiktok client refresh
     "lang",       # generic locale param (tiktok ?lang=en, etc.)
+    "hl",         # generic locale param (instagram ?hl=en, youtube ?hl=en, etc.)
     "aff",        # generic affiliate marker
     "ref_id",     # generic affiliate variant
 }

@@ -64,3 +64,7 @@ def test_strips_tiktok_r_param():
 
 def test_strips_lang_param():
     assert canonicalize_url("https://tiktok.com/@kirapregiato_backup?lang=en") == "https://tiktok.com/@kirapregiato_backup"
+
+
+def test_strips_hl_param():
+    assert canonicalize_url("https://instagram.com/shirleypunn/?hl=en") == "https://instagram.com/shirleypunn"

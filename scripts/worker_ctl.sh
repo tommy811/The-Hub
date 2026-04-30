@@ -96,9 +96,9 @@ case "${1:-help}" in
     echo "Unloaded ${LABEL} (no auto-restart until next install/load)"
     ;;
   status)
-    if launchctl list | grep -q "$LABEL"; then
-      echo "PID  STATUS  LABEL"
-      launchctl list | grep "$LABEL"
+    if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+      echo "launchd job: gui/$(id -u)/$LABEL"
+      launchctl print "gui/$(id -u)/$LABEL" | grep -E "state =|pid =|runs ="
       echo
       echo "--- last 5 stdout lines ---"
       tail -n 5 "$LOG_FILE" 2>/dev/null || echo "(no stdout yet)"
