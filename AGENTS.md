@@ -4,7 +4,7 @@
 >
 > **Why this file exists:** Simon swaps from Claude Code to Codex when Claude credit is tight or when a task is more architectural / solution-oriented. The Claude-side conventions (Stop hook, subagent dispatch, auto-memory, Skill tool) don't translate directly. This doc carries the conventions across so the project doesn't lose continuity.
 >
-> **Last update:** 2026-04-28, after sync 21. Maintained by Claude Code/Codex; if you make changes that affect handoff (new tools, new rules, new phase), update the relevant section before ending the session.
+> **Last update:** 2026-05-01, after sync 22. Maintained by Claude Code/Codex; if you make changes that affect handoff (new tools, new rules, new phase), update the relevant section before ending the session.
 
 ---
 
@@ -40,6 +40,7 @@
 3. **Check** `git status` and `git log --oneline -10`. Confirm current branch and recent commits before any work.
 4. **Match scope to ask.** If Simon hands you a task, do that task. Don't refactor surrounding code, don't add features he didn't request, don't introduce abstractions for hypothetical future requirements.
 5. **Verify before claiming done.** No Stop-hook enforcement on Codex — see [§11](#11-verification-protocol) for the manual verification protocol that replaces it.
+6. **Sync before close-out after material work.** For Codex, "material work" includes committed code, live data repair, scraper/discovery runs, worker/ops changes, migrations, or handoff-rule changes. Run §10.3 and write the session note before the final answer unless Simon explicitly pauses.
 
 **Trigger phrases that change behavior** (from Simon's auto-memory; embedded here because Codex has no memory file):
 
@@ -200,15 +201,15 @@ When fetchers silently return empty: dispatch the actor with a small diagnostic 
 
 ## 7. Current State at Handoff
 
-**Date:** 2026-04-28 (you are reading this on or after this date — confirm via `date`).
+**Date:** 2026-05-01 (you are reading this on or after this date — confirm via `date`).
 
 **Branch:** `phase-2-discovery-v2`. Clean working tree at last sync. Possibly 1+ commits ahead of `main` since last PR merge — check `git log --oneline origin/main..HEAD`.
 
-**Last PROJECT_STATE sync:** sync 21 (winning-content filters, avatar refresh/proxy, IG highlights import).
+**Last PROJECT_STATE sync:** sync 22 (harvester hardening, Shirley Pun content backfill, Apify-credit pause).
 
-**Latest commits:** check `git log --oneline -10`; this handoff is updated through sync 21 work.
+**Latest commits:** check `git log --oneline -10`; this handoff is updated through sync 22 work.
 
-**What just shipped (sync 18–21):**
+**What just shipped (sync 18–22):**
 - Content scraper v1 manual CLI: `scripts/scrape_content.py` + `scripts/content_scraper/` for batched IG/TT Apify ingestion, Pydantic normalizers, `commit_scrape_result`, `flag_outliers`, and profile snapshots.
 - Scraper observability: migration `20260427000200_scrape_runs_observability` adds `scrape_runs`; local migration file is committed but live apply is pending. The scraper catches `scrape_runs` insert failures and still updates content/profile snapshots.
 - Live scrape: 18 active IG/TT profiles targeted over 90 days; 13 scraped, 5 skipped `no_posts`, 643 posts upserted, 0 failures. After sync 21 highlight import, current live library has 788 rows: 24 images, 85 carousels, 245 reels, 295 TikToks, 139 IG story highlights.
@@ -216,11 +217,14 @@ When fetchers silently return empty: dispatch the actor with a small diagnostic 
 - Winning-content triage: content/outlier/trend surfaces now show copy-priority, view coverage, format filters, pinned/sponsored scopes, repeat-audio post + distinct-creator counts, and richer sort options.
 - Profile photos: `/api/avatar` proxies allowed IG/TT/YT avatar CDN hosts; creator/account reads fall back to recent scraped avatar payloads. `scripts/refresh_profile_avatars.py` refreshed 16/18 active IG/TT avatars; IG `kirapregiato_backup` and IG `ellableu.fit` still returned no avatar from Apify.
 - Highlights: official `apify/instagram-scraper resultsType=stories` remains unreliable for highlights; `scripts/scrape_instagram_highlights.py` uses `seemuapps/instagram-highlights-scraper` and can import from `--dataset-id` to reuse paid datasets.
+- Sync 22 harvester hardening: Tier 2/headless URL harvesting now merges with Tier 1 static anchors and cannot erase visible static links when headless returns empty. `canonicalize_url()` strips Instagram `hl` params. This fixed Shirley Pun's Linktree discovery gap.
+- Sync 22 Shirley live repair/backfill: discovery now has the Linktree child destinations persisted; content has 152 Shirley rows total (24 IG full-history rows, 128 TikToks). Live scraped-content library count after backfill: 940 rows.
+- Sync 22 ops note: latest discovery retry for `@egirlyui` failed because Apify credits were exhausted (`$0.002231` remaining). Add credits, then retry. Worker is launchd-managed and running; `scripts/worker_ctl.sh status` now reports launchd state through `launchctl print`.
 - Live surfaces: `/scraped-content`, `/platforms/instagram/outliers`, `/platforms/tiktok/outliers`, `/trends` Audio Trends. `/content` is reserved for agency creation tools / Content Hub.
 - Deterministic/manual tooling: `scripts/validate_scraped_content.py`, `scripts/judge_suspicious_content.py`, `scripts/extract_audio_trends.py`, `scripts/refresh_profile_avatars.py`, `scripts/scrape_instagram_highlights.py`, `schemas/social_post.schema.json`.
 - Simon deferred the 12-hour automatic scrape/cron; do not resurrect it unless explicitly asked.
 
-**Test status as of sync 21:** targeted content scraper/highlight tests 37/37; full Python tests 302/302 + 1 skip; `npm run typecheck` 0; `npm run lint` 0; `npm run build` 0; localhost route smokes 200 for `/`, `/creators`, `/platforms/instagram/accounts`, `/scraped-content`.
+**Test status as of sync 22:** full Python tests 304 passed + 1 skip; `npm run typecheck` 0; `npm run lint` 0; `npm run build` 0; sorted route smokes 200.
 
 ---
 
@@ -745,7 +749,7 @@ mkdir -p .tmp
 When closing out a session:
 
 1. **Verify everything that ran.** Full §11 protocol on changed surface area.
-2. **Sync project state** if architectural changes happened. See §10.3.
+2. **Sync project state** after any material code, data, scraper, discovery, worker/ops, migration, or handoff-rule change. See §10.3. If you intentionally skip sync for a trivial turn, say exactly what remains unsynced.
 3. **Write a session note** at `06-Sessions/YYYY-MM-DD.md` (today's date — confirm via `date +%Y-%m-%d`). Append, don't overwrite, if a note exists for today. Format roughly:
    ```markdown
    ## Codex session — <topic>
