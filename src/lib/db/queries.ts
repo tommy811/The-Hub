@@ -70,7 +70,17 @@ export async function getCreatorsForWorkspace(
 
   const { data, error } = await query
   if (error) throw new Error(`getCreatorsForWorkspace: ${error.message}`)
-  return (data ?? []) as CreatorWithProfiles[]
+  const creators = (data ?? []) as CreatorWithProfiles[]
+  const profileIds = creators.flatMap((creator) => creator.profiles.map((profile) => profile.id))
+  const avatarFallbacks = await getLatestProfileAvatarFallbacks(supabase, profileIds)
+
+  return creators.map((creator) => ({
+    ...creator,
+    profiles: creator.profiles.map((profile) => ({
+      ...profile,
+      avatar_url: avatarFallbacks.get(profile.id) ?? profile.avatar_url,
+    })),
+  }))
 }
 
 export async function getCreatorBySlugForWorkspace(
@@ -154,9 +164,52 @@ export async function getProfilesForCreator(
       'id, platform, handle, display_name, url, follower_count, following_count, post_count, bio, account_type, discovery_confidence, is_primary, updated_at, avatar_url'
     )
     .eq('creator_id', creatorId)
+    .eq('is_active', true)
     .order('is_primary', { ascending: false })
   if (error) throw new Error(`getProfilesForCreator: ${error.message}`)
-  return (data ?? []) as ProfileForCreator[]
+  const profiles = (data ?? []) as ProfileForCreator[]
+  const avatarFallbacks = await getLatestProfileAvatarFallbacks(supabase, profiles.map((profile) => profile.id))
+  return profiles.map((profile) => ({
+    ...profile,
+    avatar_url: avatarFallbacks.get(profile.id) ?? profile.avatar_url,
+  }))
+}
+
+// ---------- harvested destinations for one creator ----------
+
+export type CreatorDestination = {
+  canonical_url: string
+  destination_class: string
+  raw_text: string | null
+  harvest_method: string | null
+  harvested_at: string | null
+}
+
+export async function getDestinationsForCreator(
+  creatorId: string
+): Promise<CreatorDestination[]> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('profile_destination_links')
+    .select(`
+      canonical_url,
+      destination_class,
+      raw_text,
+      harvest_method,
+      harvested_at,
+      profiles!inner(creator_id)
+    `)
+    .eq('profiles.creator_id', creatorId)
+    .order('destination_class', { ascending: true })
+  if (error) throw new Error(`getDestinationsForCreator: ${error.message}`)
+  // The join surfaces nested profiles[] in the row; we don't need it after the filter.
+  return (data ?? []).map((d: any) => ({
+    canonical_url: d.canonical_url,
+    destination_class: d.destination_class || 'unknown',
+    raw_text: d.raw_text,
+    harvest_method: d.harvest_method,
+    harvested_at: d.harvested_at,
+  }))
 }
 
 // ---------- platform-account list (Instagram/TikTok pages) ----------
@@ -271,6 +324,8 @@ export async function getPlatformAccountsForWorkspace(
     }
   }
 
+  const avatarFallbacks = await getLatestProfileAvatarFallbacks(supabase, profileIds)
+
   const accounts: PlatformAccountRow[] = rawProfiles.map((p) => {
     const scores = Array.isArray(p.profile_scores)
       ? p.profile_scores[0] ?? null
@@ -283,7 +338,7 @@ export async function getPlatformAccountsForWorkspace(
       id: p.id,
       handle: p.handle ?? '',
       displayName: p.display_name ?? p.handle ?? '',
-      avatarUrl: p.avatar_url ?? null,
+      avatarUrl: avatarFallbacks.get(p.id) ?? p.avatar_url ?? null,
       profileUrl: p.profile_url ?? null,
       followerCount: p.follower_count != null ? Number(p.follower_count) : null,
       postCount: p.post_count != null ? Number(p.post_count) : null,
@@ -310,6 +365,81 @@ export async function getPlatformAccountsForWorkspace(
   })
 
   return accounts
+}
+
+type AvatarPayloadRow = {
+  profile_id: string | null
+  platform_metrics?: Record<string, unknown> | null
+  raw_apify_payload?: Record<string, unknown> | null
+}
+
+async function getLatestProfileAvatarFallbacks(
+  supabase: ReturnType<typeof createServiceClient>,
+  profileIds: string[]
+): Promise<Map<string, string>> {
+  const uniqueProfileIds = Array.from(new Set(profileIds.filter(Boolean)))
+  if (uniqueProfileIds.length === 0) return new Map()
+
+  const { data, error } = await supabase
+    .from('scraped_content')
+    .select('profile_id, platform_metrics, raw_apify_payload, posted_at')
+    .in('profile_id', uniqueProfileIds)
+    .order('posted_at', { ascending: false, nullsFirst: false })
+    .limit(1000)
+
+  if (error) throw new Error(`getLatestProfileAvatarFallbacks: ${error.message}`)
+
+  const out = new Map<string, string>()
+  for (const row of (data ?? []) as AvatarPayloadRow[]) {
+    if (!row.profile_id || out.has(row.profile_id)) continue
+    const avatarUrl = extractAvatarUrlFromContentPayload(row)
+    if (avatarUrl) out.set(row.profile_id, avatarUrl)
+  }
+  return out
+}
+
+function extractAvatarUrlFromContentPayload(row: AvatarPayloadRow): string | null {
+  const metrics = row.platform_metrics
+  if (metrics && typeof metrics === 'object') {
+    const direct = stringValue(metrics.author_avatar_url)
+    if (direct) return direct
+  }
+
+  const raw = row.raw_apify_payload
+  if (!raw || typeof raw !== 'object') return null
+
+  const direct = firstString(raw, [
+    'profilePicUrlHD',
+    'profilePicUrl',
+    'ownerProfilePicUrlHD',
+    'ownerProfilePicUrl',
+    'avatar',
+  ])
+  if (direct) return direct
+
+  const authorMeta = objectValue(raw.authorMeta)
+  const authorAvatar = firstString(authorMeta, ['avatar', 'avatarLarger', 'avatarMedium', 'avatarThumb'])
+  if (authorAvatar) return authorAvatar
+
+  const owner = objectValue(raw.owner)
+  return firstString(owner, ['profilePicUrlHD', 'profilePicUrl', 'avatar'])
+}
+
+function firstString(source: Record<string, unknown> | null, keys: string[]): string | null {
+  if (!source) return null
+  for (const key of keys) {
+    const value = stringValue(source[key])
+    if (value) return value
+  }
+  return null
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 }
 
 // ---------- Command Center ----------
@@ -383,6 +513,311 @@ export async function getRecentOutliersForWorkspace(
     outlierMultiplier: r.outlier_multiplier != null ? Number(r.outlier_multiplier) : null,
     viewCount: Number(r.view_count ?? 0),
     postUrl: r.post_url ?? null,
+  }))
+}
+
+export type ContentLibraryRow = {
+  id: string
+  platform: Enums<'platform'>
+  profileHandle: string
+  creatorSlug: string | null
+  creatorName: string | null
+  postUrl: string | null
+  postType: Enums<'post_type'>
+  caption: string | null
+  postedAt: string | null
+  viewCount: number
+  viewCountAvailable: boolean
+  likeCount: number
+  commentCount: number
+  shareCount: number | null
+  saveCount: number | null
+  engagementRate: number | null
+  thumbnailUrl: string | null
+  isOutlier: boolean
+  outlierMultiplier: number | null
+  isPinned: boolean
+  isSponsored: boolean
+  qualityFlag: 'clean' | 'suspicious' | 'rejected'
+  audioSignature: string | null
+  audioArtist: string | null
+  audioTitle: string | null
+  trendId: string | null
+  trendName: string | null
+  trendUsageCount: number | null
+  trendCreatorCount: number | null
+  copyPriorityScore: number
+  copyPriorityLabel: 'high' | 'strong' | 'watch' | 'scan'
+}
+
+type RawContentRow = {
+  id: string
+  platform: Enums<'platform'>
+  post_url: string | null
+  post_type: Enums<'post_type'>
+  caption: string | null
+  posted_at: string | null
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+  share_count: number | null
+  save_count: number | null
+  engagement_rate: number | null
+  thumbnail_url: string | null
+  is_outlier: boolean | null
+  outlier_multiplier: number | null
+  is_pinned?: boolean | null
+  is_sponsored?: boolean | null
+  quality_flag?: 'clean' | 'suspicious' | 'rejected' | null
+  platform_metrics?: Record<string, unknown> | null
+  trend_id?: string | null
+  trends?: {
+    id: string | null
+    name: string | null
+    usage_count: number | null
+  } | null
+  profiles?: {
+    handle: string | null
+    workspace_id: string | null
+    creators?: { slug: string | null; canonical_name: string | null } | null
+  } | null
+}
+
+function mapContentRow(
+  row: RawContentRow,
+  trendCreatorCounts: Map<string, number> = new Map()
+): ContentLibraryRow {
+  const audio = (
+    row.platform_metrics &&
+    typeof row.platform_metrics === 'object' &&
+    'audio' in row.platform_metrics &&
+    row.platform_metrics.audio &&
+    typeof row.platform_metrics.audio === 'object'
+      ? row.platform_metrics.audio
+      : {}
+  ) as Record<string, unknown>
+
+  const viewCount = Number(row.view_count ?? 0)
+  const trendId = row.trend_id ?? row.trends?.id ?? null
+  const viewCountAvailable =
+    row.view_count != null &&
+    !(row.platform === 'instagram' && (row.post_type === 'image' || row.post_type === 'carousel') && viewCount === 0)
+
+  const copyPriorityScore = calculateCopyPriority({
+    viewCount,
+    viewCountAvailable,
+    engagementRate: row.engagement_rate != null ? Number(row.engagement_rate) : null,
+    outlierMultiplier: row.outlier_multiplier != null ? Number(row.outlier_multiplier) : null,
+    trendCreatorCount: trendId ? trendCreatorCounts.get(trendId) ?? null : null,
+    shareCount: row.share_count != null ? Number(row.share_count) : null,
+    saveCount: row.save_count != null ? Number(row.save_count) : null,
+    isSponsored: row.is_sponsored ?? false,
+  })
+
+  return {
+    id: row.id,
+    platform: row.platform,
+    profileHandle: row.profiles?.handle ?? '',
+    creatorSlug: row.profiles?.creators?.slug ?? null,
+    creatorName: row.profiles?.creators?.canonical_name ?? null,
+    postUrl: row.post_url,
+    postType: row.post_type,
+    caption: row.caption,
+    postedAt: row.posted_at,
+    viewCount,
+    viewCountAvailable,
+    likeCount: Number(row.like_count ?? 0),
+    commentCount: Number(row.comment_count ?? 0),
+    shareCount: row.share_count != null ? Number(row.share_count) : null,
+    saveCount: row.save_count != null ? Number(row.save_count) : null,
+    engagementRate: row.engagement_rate != null ? Number(row.engagement_rate) : null,
+    thumbnailUrl: row.thumbnail_url,
+    isOutlier: row.is_outlier ?? false,
+    outlierMultiplier: row.outlier_multiplier != null ? Number(row.outlier_multiplier) : null,
+    isPinned: row.is_pinned ?? false,
+    isSponsored: row.is_sponsored ?? false,
+    qualityFlag: row.quality_flag ?? 'clean',
+    audioSignature: typeof audio.signature === 'string' ? audio.signature : null,
+    audioArtist: typeof audio.artist === 'string' ? audio.artist : null,
+    audioTitle: typeof audio.title === 'string' ? audio.title : null,
+    trendId,
+    trendName: row.trends?.name ?? null,
+    trendUsageCount: row.trends?.usage_count != null ? Number(row.trends.usage_count) : null,
+    trendCreatorCount: trendId ? trendCreatorCounts.get(trendId) ?? null : null,
+    copyPriorityScore,
+    copyPriorityLabel: copyPriorityLabel(copyPriorityScore),
+  }
+}
+
+function calculateCopyPriority(input: {
+  viewCount: number
+  viewCountAvailable: boolean
+  engagementRate: number | null
+  outlierMultiplier: number | null
+  trendCreatorCount: number | null
+  shareCount: number | null
+  saveCount: number | null
+  isSponsored: boolean
+}): number {
+  let score = 0
+
+  const lift = input.outlierMultiplier ?? 0
+  if (lift >= 10) score += 45
+  else if (lift >= 5) score += 35
+  else if (lift >= 3) score += 25
+
+  const engagement = input.engagementRate ?? 0
+  if (engagement >= 10) score += 15
+  else if (engagement >= 5) score += 10
+  else if (engagement >= 2) score += 5
+
+  const creators = input.trendCreatorCount ?? 0
+  if (creators >= 5) score += 15
+  else if (creators >= 3) score += 12
+  else if (creators >= 2) score += 8
+
+  if ((input.shareCount ?? 0) > 0) score += 8
+  if ((input.saveCount ?? 0) > 0) score += 8
+
+  if (input.viewCountAvailable) {
+    if (input.viewCount >= 1_000_000) score += 10
+    else if (input.viewCount >= 100_000) score += 5
+  }
+
+  if (input.isSponsored) score -= 8
+  return Math.max(0, Math.min(100, score))
+}
+
+function copyPriorityLabel(score: number): ContentLibraryRow['copyPriorityLabel'] {
+  if (score >= 70) return 'high'
+  if (score >= 45) return 'strong'
+  if (score >= 25) return 'watch'
+  return 'scan'
+}
+
+async function getTrendCreatorCounts(
+  supabase: ReturnType<typeof createServiceClient>,
+  wsId: string,
+  trendIds: string[]
+): Promise<Map<string, number>> {
+  const uniqueTrendIds = Array.from(new Set(trendIds.filter(Boolean)))
+  if (uniqueTrendIds.length === 0) return new Map()
+
+  const { data, error } = await supabase
+    .from('scraped_content')
+    .select(`
+      trend_id,
+      profiles!inner ( workspace_id, creator_id )
+    `)
+    .eq('profiles.workspace_id', wsId)
+    .in('trend_id', uniqueTrendIds)
+
+  if (error) throw new Error(`getTrendCreatorCounts: ${error.message}`)
+
+  const creatorsByTrend = new Map<string, Set<string>>()
+  for (const row of (data ?? []) as Array<{
+    trend_id: string | null
+    profiles?: { creator_id: string | null } | { creator_id: string | null }[] | null
+  }>) {
+    if (!row.trend_id) continue
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+    const creatorId = profile?.creator_id
+    if (!creatorId) continue
+    const set = creatorsByTrend.get(row.trend_id) ?? new Set<string>()
+    set.add(creatorId)
+    creatorsByTrend.set(row.trend_id, set)
+  }
+
+  return new Map(Array.from(creatorsByTrend, ([trendId, creators]) => [trendId, creators.size]))
+}
+
+export async function getContentLibraryForWorkspace(
+  wsId: string,
+  args: {
+    platform?: 'instagram' | 'tiktok'
+    outliersOnly?: boolean
+    limit?: number
+  } = {}
+): Promise<ContentLibraryRow[]> {
+  const supabase = createServiceClient()
+  let query = supabase
+    .from('scraped_content')
+    .select(`
+      id, platform, post_url, post_type, caption, posted_at,
+      view_count, like_count, comment_count, share_count, save_count,
+      engagement_rate, thumbnail_url, is_outlier, outlier_multiplier,
+      is_pinned, is_sponsored, quality_flag, platform_metrics, trend_id,
+      trends ( id, name, usage_count ),
+      profiles!inner (
+        handle, workspace_id,
+        creators!creator_id ( slug, canonical_name )
+      )
+    `)
+    .eq('profiles.workspace_id', wsId)
+    .order(args.outliersOnly ? 'outlier_multiplier' : 'posted_at', {
+      ascending: false,
+      nullsFirst: false,
+    })
+    .limit(args.limit ?? 100)
+
+  if (args.platform) query = query.eq('platform', args.platform)
+  if (args.outliersOnly) query = query.eq('is_outlier', true)
+
+  const { data, error } = await query
+  if (error) throw new Error(`getContentLibraryForWorkspace: ${error.message}`)
+  const rawRows = (data ?? []) as unknown as RawContentRow[]
+  const trendCreatorCounts = await getTrendCreatorCounts(
+    supabase,
+    wsId,
+    rawRows.map((row) => row.trend_id ?? row.trends?.id ?? '').filter(Boolean)
+  )
+
+  return rawRows
+    .map((row) => mapContentRow(row, trendCreatorCounts))
+    .filter((row) => row.qualityFlag !== 'rejected')
+}
+
+export type AudioTrendRow = {
+  id: string
+  name: string
+  audioSignature: string | null
+  audioArtist: string | null
+  audioTitle: string | null
+  usageCount: number
+  creatorCount: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export async function getAudioTrendsForWorkspace(
+  wsId: string,
+  limit = 200
+): Promise<AudioTrendRow[]> {
+  const supabase = createServiceClient()
+  const { data, error } = await supabase
+    .from('trends')
+    .select('id, name, audio_signature, audio_artist, audio_title, usage_count, created_at, updated_at')
+    .eq('workspace_id', wsId)
+    .eq('trend_type', 'audio')
+    .order('usage_count', { ascending: false, nullsFirst: false })
+    .limit(limit)
+
+  if (error) throw new Error(`getAudioTrendsForWorkspace: ${error.message}`)
+  const trendCreatorCounts = await getTrendCreatorCounts(
+    supabase,
+    wsId,
+    (data ?? []).map((row) => row.id)
+  )
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    audioSignature: row.audio_signature,
+    audioArtist: row.audio_artist,
+    audioTitle: row.audio_title,
+    usageCount: Number(row.usage_count ?? 0),
+    creatorCount: trendCreatorCounts.get(row.id) ?? 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }))
 }
 

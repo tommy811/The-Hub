@@ -86,7 +86,7 @@ export async function bulkImportCreators(
 export async function importSingleCreator(
   platform: Enums<"platform">,
   handle: string,
-  url?: string
+  _url?: string
 ): Promise<Result<{ creatorId: string }>> {
   try {
     if (!handle || handle.trim().length === 0) {
@@ -105,9 +105,13 @@ export async function importSingleCreator(
     })
     if (!res.ok) return err(res.error)
 
+    // New bulk_import_creator returns jsonb {bulk_import_id, creator_id, run_id}.
+    const payload = res.data as { creator_id: string } | null
+    if (!payload?.creator_id) return err("bulk_import_creator did not return a creator_id")
+
     // url is informational at the action layer; discovery will use it.
     revalidatePath("/creators")
-    return ok({ creatorId: res.data })
+    return ok({ creatorId: payload.creator_id })
   } catch (e: any) {
     return err(e?.message ?? "Single import failed")
   }
@@ -148,6 +152,35 @@ export async function retryCreatorDiscovery(
     return ok({ runId: (res.data as string | null) ?? null })
   } catch (e: any) {
     return err(e?.message ?? "Retry failed")
+  }
+}
+
+// ---------- getDiscoveryProgress ----------
+
+export type DiscoveryProgress = {
+  status: "pending" | "processing" | "completed" | "failed"
+  progressPct: number
+  progressLabel: string | null
+}
+
+export async function getDiscoveryProgress(
+  runId: string
+): Promise<Result<DiscoveryProgress>> {
+  try {
+    const supabase = createServiceClient()
+    const { data, error } = await supabase
+      .from("discovery_runs")
+      .select("status, progress_pct, progress_label")
+      .eq("id", runId)
+      .single()
+    if (error) return err(error.message)
+    return ok({
+      status: data.status as DiscoveryProgress["status"],
+      progressPct: data.progress_pct ?? 0,
+      progressLabel: data.progress_label ?? null,
+    })
+  } catch (e: any) {
+    return err(e?.message ?? "Failed to fetch progress")
   }
 }
 
@@ -205,32 +238,115 @@ export async function addAccountToCreator(
     accountType: Enums<"account_type">
     url?: string
     displayName?: string
+    runDiscovery?: boolean
   }
-): Promise<Result<{ profileId: string }>> {
+): Promise<Result<{ profileId: string; runId: string | null }>> {
   try {
     const userId = getCurrentUserId()
     const wsId = await getCurrentWorkspaceId()
     const supabase = createServiceClient()
+    const cleanHandle = data.handle.replace(/^@/, "")
     const { data: row, error } = await supabase
       .from("profiles")
       .insert({
         workspace_id: wsId,
         creator_id: creatorId,
         platform: data.platform,
-        handle: data.handle.replace(/^@/, ""),
+        handle: cleanHandle,
         account_type: data.accountType,
         url: data.url ?? null,
         display_name: data.displayName ?? null,
         discovery_confidence: 1.0,
+        discovery_reason: "manual_add",
         is_primary: false,
         added_by: userId,
       })
       .select("id")
       .single()
     if (error) return err(error.message)
+
+    // Optional: queue a discovery run so the worker fans out from this account.
+    let runId: string | null = null
+    if (data.runDiscovery !== false) {
+      const { data: runRow, error: runErr } = await supabase
+        .from("discovery_runs")
+        .insert({
+          workspace_id: wsId,
+          creator_id: creatorId,
+          input_handle: cleanHandle,
+          input_platform_hint: data.platform,
+          status: "pending",
+          attempt_number: 1,
+          source: "manual_add",
+          bulk_import_id: null,
+          initiated_by: userId,
+          started_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single()
+      if (runErr) {
+        // Non-fatal: profile is saved; user can retry discovery from the row.
+        console.error("[addAccountToCreator] discovery_runs insert failed:", runErr.message)
+      } else {
+        runId = runRow.id
+      }
+    }
+
     revalidatePath(`/creators/${creatorId}`)
-    return ok({ profileId: row.id })
+    return ok({ profileId: row.id, runId })
   } catch (e: any) {
     return err(e?.message ?? "Add account failed")
+  }
+}
+
+// ---------- removeAccountFromCreator ----------
+// Soft-removes a profile by setting is_active = false. Preserves the row +
+// history so we never lose discovery data; the profile just stops surfacing
+// on the creator detail page.
+
+export async function removeAccountFromCreator(
+  profileId: string
+): Promise<Result<{ ok: true }>> {
+  try {
+    const wsId = await getCurrentWorkspaceId()
+    const supabase = createServiceClient()
+
+    // 1. Look up the profile so we can verify workspace access + revalidate
+    //    the right creator detail path.
+    const { data: profile, error: fetchErr } = await supabase
+      .from("profiles")
+      .select("id, creator_id, workspace_id")
+      .eq("id", profileId)
+      .eq("workspace_id", wsId)
+      .maybeSingle()
+    if (fetchErr) return err(fetchErr.message)
+    if (!profile) return err("Profile not found")
+
+    // 2. Soft-delete: is_active = false.
+    const { error: updateErr } = await supabase
+      .from("profiles")
+      .update({ is_active: false })
+      .eq("id", profileId)
+      .eq("workspace_id", wsId)
+    if (updateErr) return err(updateErr.message)
+
+    // 3. Revalidate the creator detail page. We need the slug for the
+    //    canonical path, but revalidatePath also accepts the id form we
+    //    use elsewhere; both work because the page reads via slug param
+    //    and revalidatePath invalidates the cache key for any matching path.
+    if (profile.creator_id) {
+      const { data: creator } = await supabase
+        .from("creators")
+        .select("slug")
+        .eq("id", profile.creator_id)
+        .maybeSingle()
+      if (creator?.slug) {
+        revalidatePath(`/creators/${creator.slug}`)
+      }
+    }
+
+    return ok({ ok: true })
+  } catch (e: any) {
+    return err(e?.message ?? "Remove account failed")
   }
 }

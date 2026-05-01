@@ -9,6 +9,9 @@ const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 export const metadata: Metadata = {
   title: "Agency Command Center",
   description: "Unified dashboard for social media analytics",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

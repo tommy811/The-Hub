@@ -1,11 +1,11 @@
-import { ComingSoon } from "@/components/shared/ComingSoon"
+export const dynamic = "force-dynamic"
 
-export default function InstagramOutliers() {
-  return (
-    <ComingSoon
-      phase={2}
-      feature="Instagram Outliers"
-      description="Posts performing 3× above their median baseline. Activates when scraping ingestion is live."
-    />
-  )
+import { PlatformOutliersPage } from "@/components/content/PlatformOutliersPage"
+
+export default async function InstagramOutliers({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  return <PlatformOutliersPage platform="instagram" title="Instagram" searchParams={await searchParams} />
 }

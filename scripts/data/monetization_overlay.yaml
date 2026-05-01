@@ -1,0 +1,223 @@
+# scripts/data/monetization_overlay.yaml
+# Hand-curated overlay on top of WhatsMyName. Marks specific destinations as
+# monetization platforms + pins platform enum values per the project's
+# `platform` + `account_type` enums. Classifier loads this after the base
+# gazetteer; overlay entries win on conflict.
+
+# Format per entry:
+#   host: exact hostname match (lowercased, no www)
+#   platform: one of PROJECT_STATE.md §5 `platform` enum values
+#   account_type: one of PROJECT_STATE.md §5 `account_type` enum values
+#   url_pattern: optional regex the URL path must match. If absent, host alone matches.
+
+entries:
+  # Subscription monetization
+  - host: onlyfans.com
+    platform: onlyfans
+    account_type: monetization
+  - host: fanvue.com
+    platform: fanvue
+    account_type: monetization
+  - host: fanplace.com
+    platform: fanplace
+    account_type: monetization
+  - host: patreon.com
+    platform: patreon
+    account_type: monetization
+
+  # Ecommerce
+  - host: amazon.com
+    platform: amazon_storefront
+    account_type: monetization
+    url_pattern: '^/shop/'
+  - host: tiktok.com
+    platform: tiktok_shop
+    account_type: monetization
+    url_pattern: '^/@[^/]+/shop'
+  - host: gumroad.com
+    platform: other
+    account_type: monetization
+  - host: stan.store
+    platform: other
+    account_type: monetization
+
+  # Social (primary)
+  - host: instagram.com
+    platform: instagram
+    account_type: social
+  - host: tiktok.com
+    platform: tiktok
+    account_type: social
+    url_pattern: '^/@[^/]+/?$'
+  - host: youtube.com
+    platform: youtube
+    account_type: social
+  - host: youtu.be
+    platform: youtube
+    account_type: social
+  - host: twitter.com
+    platform: twitter
+    account_type: social
+  - host: x.com
+    platform: twitter
+    account_type: social
+  - host: facebook.com
+    platform: facebook
+    account_type: social
+  - host: linkedin.com
+    platform: linkedin
+    account_type: social
+
+  # Aggregators (link-in-bio)
+  - host: linktr.ee
+    platform: linktree
+    account_type: link_in_bio
+  - host: beacons.ai
+    platform: beacons
+    account_type: link_in_bio
+  - host: beacons.page
+    platform: beacons
+    account_type: link_in_bio
+
+  # Messaging
+  - host: t.me
+    platform: telegram_channel
+    account_type: messaging
+  - host: telegram.me
+    platform: telegram_channel
+    account_type: messaging
+
+  # === Universal Harvester v1 additions (2026-04-26) ===
+
+  # Tip jars / micro-monetization (Throne kept here; ko-fi + buymeacoffee
+  # moved to T17 section below with specific platform values)
+  - host: throne.com
+    platform: other
+    account_type: monetization
+
+  # Newsletter / blog content platforms (account_type stays 'other'; host-aware
+  # mapping in orchestrator promotes destination_class to 'content')
+  - host: medium.com
+    platform: other
+    account_type: other
+  - host: ghost.io
+    platform: other
+    account_type: other
+
+  # Audio / podcast content
+  - host: podcasts.apple.com
+    platform: other
+    account_type: other
+
+  # Affiliate redirectors (host-aware mapping promotes to 'affiliate')
+  - host: amzn.to
+    platform: other
+    account_type: monetization
+  - host: geni.us
+    platform: other
+    account_type: monetization
+  - host: lnk.to
+    platform: other
+    account_type: monetization
+  - host: ltk.app
+    platform: other
+    account_type: monetization
+  - host: rstyle.me
+    platform: other
+    account_type: monetization
+  - host: shopstyle.it
+    platform: other
+    account_type: monetization
+
+  # Commerce — extend (host-aware mapping promotes to 'commerce')
+  - host: shopify.com
+    platform: other
+    account_type: monetization
+  - host: depop.com
+    platform: other
+    account_type: monetization
+  - host: etsy.com
+    platform: other
+    account_type: monetization
+
+  # === T17 platform-specificity additions/updates (2026-04-26) ===
+
+  # Aggregators (link-in-bio) — use specific platform for identification
+  - host: link.me
+    platform: link_me
+    account_type: link_in_bio
+  - host: tapforallmylinks.com
+    platform: tapforallmylinks
+    account_type: link_in_bio
+  - host: allmylinks.com
+    platform: allmylinks
+    account_type: link_in_bio
+  - host: lnk.bio
+    platform: lnk_bio
+    account_type: link_in_bio
+  - host: snipfeed.co
+    platform: snipfeed
+    account_type: link_in_bio
+  - host: launchyoursocials.com
+    platform: launchyoursocials
+    account_type: link_in_bio
+
+  # Monetization platforms
+  - host: fanfix.io
+    platform: fanfix
+    account_type: monetization
+  - host: app.fanfix.io
+    platform: fanfix
+    account_type: monetization
+  - host: cash.app
+    platform: cashapp
+    account_type: monetization
+  - host: venmo.com
+    platform: venmo
+    account_type: monetization
+  - host: ko-fi.com
+    platform: kofi
+    account_type: monetization
+  - host: buymeacoffee.com
+    platform: buymeacoffee
+    account_type: monetization
+
+  # Social
+  - host: snapchat.com
+    platform: snapchat
+    account_type: social
+  - host: reddit.com
+    platform: reddit
+    account_type: social
+  - host: old.reddit.com
+    platform: reddit
+    account_type: social
+  - host: threads.net
+    platform: threads
+    account_type: social
+  - host: bsky.app
+    platform: bluesky
+    account_type: social
+
+  # Content
+  - host: open.spotify.com
+    platform: spotify
+    account_type: other
+  - host: spotify.com
+    platform: spotify
+    account_type: other
+  - host: substack.com
+    platform: substack
+    account_type: other
+
+  # Messaging
+  - host: discord.gg
+    platform: discord
+    account_type: messaging
+  - host: discord.com
+    platform: discord
+    account_type: messaging
+    url_pattern: '^/invite/'
+  - host: wa.me
+    platform: whatsapp
+    account_type: messaging

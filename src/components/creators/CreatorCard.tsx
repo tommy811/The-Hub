@@ -10,8 +10,8 @@ import { toast } from "sonner";
 import { retryCreatorDiscovery } from "@/app/(dashboard)/creators/actions";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,8 @@ interface CreatorCardProps {
   canonicalName: string;
   slug: string;
   avatarUrl?: string;
-  primaryPlatform: string;
+  /** Banner strip — banner_url override wins over scraper-set cover_image_url. */
+  coverImageUrl?: string;
   status: 'processing' | 'ready' | 'failed' | 'archived';
   trackingType: string;
   monetizationModel?: string;
@@ -32,6 +33,7 @@ interface CreatorCardProps {
   updatedAgo: string;
   hasMergeCandidate: boolean;
   errorMessage?: string;
+  lastDiscoveryRunId?: string | null;
 }
 
 const GRADIENTS = [
@@ -51,10 +53,54 @@ function getGradient(name: string): string {
   return GRADIENTS[hash % GRADIENTS.length];
 }
 
+function CreatorCardContainer({
+  children,
+  className,
+  onClick,
+}: {
+  children: ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <Card
+      onClick={onClick}
+      className={cn(
+        "group relative flex flex-col min-h-[260px] overflow-hidden transition-all border border-border/50 bg-[#13131A] rounded-xl",
+        onClick && "cursor-pointer hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10",
+        className
+      )}
+    >
+      {children}
+    </Card>
+  );
+}
+
+function CreatorCardAvatar({
+  avatarUrl,
+  canonicalName,
+  gradient,
+}: {
+  avatarUrl?: string;
+  canonicalName: string;
+  gradient: string;
+}) {
+  return (
+    <AvatarWithFallback
+      avatarUrl={avatarUrl ?? null}
+      name={canonicalName}
+      gradient={gradient}
+      className="w-20 h-20 rounded-2xl border-4 border-background shadow-xl shrink-0"
+      textClassName="text-2xl tracking-tight"
+    />
+  );
+}
+
 export function CreatorCard({
-  id, canonicalName, slug, avatarUrl, primaryPlatform, status,
-  trackingType, monetizationModel, tags, knownUsernames = [],
-  accountCounts, totalFollowers, updatedAgo, hasMergeCandidate, errorMessage
+  id, canonicalName, slug, avatarUrl, coverImageUrl, status,
+  trackingType, monetizationModel, tags,
+  accountCounts, totalFollowers, updatedAgo, hasMergeCandidate, errorMessage,
+  lastDiscoveryRunId,
 }: CreatorCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -72,36 +118,20 @@ export function CreatorCard({
     });
   };
   const totalAccounts = Object.values(accountCounts).reduce((s, n) => s + n, 0);
-  const primaryHandle = knownUsernames[0] || canonicalName.toLowerCase().replace(/\s+/g, '');
 
-  const Container = ({ children, className, onClick }: { children: ReactNode, className?: string, onClick?: () => void }) => (
-    <Card
-      onClick={onClick}
-      className={cn(
-        "group relative flex flex-col min-h-[260px] overflow-hidden transition-all border border-border/50 bg-[#13131A] rounded-xl",
-        onClick && "cursor-pointer hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10",
-        className
-      )}
-    >
-      {children}
-    </Card>
-  );
-
-  const Avatar = () => (
-    <AvatarWithFallback
-      avatarUrl={avatarUrl ?? null}
-      name={canonicalName}
-      gradient={gradient}
-      className="w-20 h-20 rounded-2xl border-4 border-background shadow-xl shrink-0"
-      textClassName="text-2xl tracking-tight"
-    />
-  );
+  const monogram = canonicalName
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <AnimatePresence mode="wait">
       {status === 'processing' && (
         <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <Container className="opacity-60 pointer-events-none">
+          <CreatorCardContainer className="opacity-80 pointer-events-none">
             <div className="absolute top-4 right-4 text-indigo-400">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
@@ -113,23 +143,29 @@ export function CreatorCard({
               </div>
               <div className="text-xs text-indigo-400/80 font-medium">Discovering {canonicalName}…</div>
             </div>
-            <div className="p-4 border-t border-border/30 flex gap-2">
-              <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
-              <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
+            <div className="p-4 border-t border-border/30">
+              {lastDiscoveryRunId ? (
+                <DiscoveryProgress runId={lastDiscoveryRunId} />
+              ) : (
+                <div className="flex gap-2">
+                  <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
+                  <div className="h-4 w-1/4 bg-muted/30 animate-pulse rounded" />
+                </div>
+              )}
             </div>
-          </Container>
+          </CreatorCardContainer>
         </motion.div>
       )}
 
       {status === 'failed' && (
         <motion.div key="failed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <Container className="border-red-900/60 shadow-lg shadow-red-900/10">
+          <CreatorCardContainer className="border-red-900/60 shadow-lg shadow-red-900/10">
             <div className="absolute top-4 right-4 text-red-500">
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="flex flex-col items-center p-6 pt-10 gap-4 flex-1">
-              <div className="w-20 h-20 rounded-2xl bg-red-900/20 flex items-center justify-center border border-red-900/50">
-                <PlatformIcon platform={primaryPlatform} size={24} className="text-red-500 opacity-50" />
+              <div className="w-20 h-20 rounded-2xl bg-red-900/20 flex items-center justify-center border border-red-900/50 text-red-500/60 text-2xl font-bold tracking-tight">
+                {monogram}
               </div>
               <div className="text-center">
                 <div className="font-semibold text-lg">{canonicalName}</div>
@@ -144,16 +180,16 @@ export function CreatorCard({
                 disabled={isPending}
                 className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 border border-red-900/50 rounded-full px-4 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} /> {isPending ? 'Retrying…' : 'Retry Discovery'}
+                <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} /> {isPending ? 'Retrying…' : 'Re-run Discovery'}
               </button>
             </div>
-          </Container>
+          </CreatorCardContainer>
         </motion.div>
       )}
 
       {status === 'ready' && (
         <motion.div key="ready" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-          <Container className="hover:border-indigo-500/50" onClick={() => router.push(`/creators/${slug}`)}>
+          <CreatorCardContainer className="hover:border-indigo-500/50" onClick={() => router.push(`/creators/${slug}`)}>
             {hasMergeCandidate && (
               <div className="absolute top-3 right-3 z-10">
                 <Badge className="bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 border-amber-500/30 font-bold uppercase tracking-widest text-[9px]">
@@ -184,14 +220,22 @@ export function CreatorCard({
               </DropdownMenu>
             </div>
 
-            {/* Avatar + name */}
-            <div className="flex flex-col items-center px-6 pt-8 pb-4">
-              <Avatar />
-              <div className="mt-3 font-bold text-lg text-center leading-snug">{canonicalName}</div>
-              <div className="flex items-center gap-1 mt-1 text-muted-foreground">
-                <PlatformIcon platform={primaryPlatform} size={12} />
-                <span className="text-[11px]">@{primaryHandle}</span>
+            {coverImageUrl && (
+              <div className="absolute top-0 left-0 right-0 h-16 overflow-hidden opacity-40 pointer-events-none">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverImageUrl} alt="" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#13131A]" />
               </div>
+            )}
+
+            {/* Avatar + name */}
+            <div className="relative flex flex-col items-center px-6 pt-8 pb-4">
+              <CreatorCardAvatar
+                avatarUrl={avatarUrl}
+                canonicalName={canonicalName}
+                gradient={gradient}
+              />
+              <div className="mt-3 font-bold text-lg text-center leading-snug">{canonicalName}</div>
             </div>
 
             {/* Badges + tags */}
@@ -204,11 +248,11 @@ export function CreatorCard({
                   trackingType === 'candidate' ? "text-amber-400 border-amber-400/30 bg-amber-500/10" :
                   "text-violet-400 border-violet-400/30 bg-violet-500/10"
                 )}>
-                  {trackingType.replace(/_/g, ' ')}
+                  {trackingType.replaceAll('_', ' ')}
                 </Badge>
                 {monetizationModel && monetizationModel !== 'unknown' && (
                   <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground border-border/50">
-                    {monetizationModel.replace(/_/g, ' ')}
+                    {monetizationModel.replaceAll('_', ' ')}
                   </Badge>
                 )}
               </div>
@@ -235,7 +279,7 @@ export function CreatorCard({
                 <span className="text-[10px] uppercase tracking-widest font-semibold">{updatedAgo}</span>
               </div>
             </div>
-          </Container>
+          </CreatorCardContainer>
         </motion.div>
       )}
     </AnimatePresence>

@@ -19,3 +19,16 @@ def get_gemini_key() -> str:
     if not key:
         raise ValueError("Missing Gemini API key.")
     return key
+
+
+def get_apify_token() -> str:
+    token = os.environ.get("APIFY_TOKEN")
+    if not token:
+        raise ValueError("Missing APIFY_TOKEN in environment.")
+    return token
+
+def get_apify_client():
+    """Get ApifyClient configured with token from APIFY_TOKEN env var."""
+    from apify_client import ApifyClient
+    token = get_apify_token()
+    return ApifyClient(token)

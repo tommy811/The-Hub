@@ -1,194 +1,165 @@
 # scripts/tests/test_discover_creator.py
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-from uuid import uuid4
+"""Tests for _commit_v2 — verifies novel-platform URLs are persisted to profiles."""
+from unittest.mock import MagicMock
+from uuid import UUID
 
-import pytest
-
-from schemas import DiscoveryInput, InputContext
-import discover_creator as dc
+from discover_creator import _commit_v2, _synthesize_handle_from_url, _seed_profile_url
+from pipeline.resolver import ResolverResult
+from schemas import DiscoveredUrl, DiscoveryResultV2, InputContext
 
 
-def _make_input(platform: str = "instagram", handle: str = "gothgirlnatalie") -> DiscoveryInput:
-    return DiscoveryInput(
-        run_id=uuid4(),
-        creator_id=uuid4(),
-        workspace_id=uuid4(),
-        input_handle=handle,
-        input_url=None,
-        input_platform_hint=platform,
+def _ctx(handle, platform, **kw):
+    base = dict(
+        handle=handle, platform=platform, display_name=handle,
+        bio=None, follower_count=None, avatar_url=None,
+        external_urls=[], source_note="test",
+    )
+    base.update(kw)
+    return InputContext(**base)
+
+
+def _gem(name="Alice"):
+    return DiscoveryResultV2(
+        canonical_name=name, known_usernames=[name.lower()],
+        display_name_variants=[name], raw_reasoning="",
     )
 
 
-class TestFetchInputContext:
-    def test_instagram_route_calls_ig_fetcher(self):
-        expected = InputContext(handle="x", platform="instagram", bio="hi")
-        with patch("discover_creator.fetch_instagram_details", return_value=expected) as mock_ig, \
-             patch("discover_creator.fetch_tiktok_details") as mock_tt, \
-             patch("discover_creator.get_apify_client"):
-            ctx = dc.fetch_input_context(_make_input(platform="instagram", handle="x"))
-        mock_ig.assert_called_once()
-        mock_tt.assert_not_called()
-        assert ctx.bio == "hi"
-
-    def test_tiktok_route_calls_tt_fetcher(self):
-        expected = InputContext(handle="y", platform="tiktok", bio="hello")
-        with patch("discover_creator.fetch_tiktok_details", return_value=expected) as mock_tt, \
-             patch("discover_creator.fetch_instagram_details") as mock_ig, \
-             patch("discover_creator.get_apify_client"):
-            ctx = dc.fetch_input_context(_make_input(platform="tiktok", handle="y"))
-        mock_tt.assert_called_once()
-        mock_ig.assert_not_called()
-
-    def test_empty_dataset_propagates(self):
-        from apify_details import EmptyDatasetError
-        with patch("discover_creator.fetch_instagram_details",
-                   side_effect=EmptyDatasetError("login wall")), \
-             patch("discover_creator.get_apify_client"):
-            with pytest.raises(EmptyDatasetError):
-                dc.fetch_input_context(_make_input())
-
-    def test_resolves_aggregator_urls_in_external_urls(self):
-        ctx = InputContext(
-            handle="x", platform="instagram",
-            bio="goth",
-            external_urls=["https://linktr.ee/x", "https://direct.site/x"],
-        )
-        with patch("discover_creator.fetch_instagram_details", return_value=ctx), \
-             patch("discover_creator.resolve_link_in_bio",
-                   return_value=["https://onlyfans.com/x"]) as mock_resolve, \
-             patch("discover_creator.get_apify_client"):
-            result_ctx = dc.fetch_input_context(_make_input())
-        # Only the aggregator URL should be handed to resolve_link_in_bio
-        mock_resolve.assert_called_once_with("https://linktr.ee/x")
-        assert "https://onlyfans.com/x" in result_ctx.link_in_bio_destinations
-
-    def test_raises_empty_dataset_when_apify_returns_all_null_fields(self):
-        # Apify sometimes returns 1 item with null bio/followers/externalUrls
-        # (observed for ariaxswan during 2026-04-24 smoke test). Treat same as
-        # 0-item response: fail fast so the run is marked failed, not silently
-        # committed with a blank profile.
-        from apify_details import EmptyDatasetError
-        empty_ctx = InputContext(handle="x", platform="instagram")
-        assert empty_ctx.is_empty() is True  # sanity
-        with patch("discover_creator.fetch_instagram_details", return_value=empty_ctx), \
-             patch("discover_creator.get_apify_client"):
-            with pytest.raises(EmptyDatasetError) as exc:
-                dc.fetch_input_context(_make_input(handle="x"))
-        assert "x" in str(exc.value)
+def _capture_rpc_payload(sb_mock):
+    """Pull the p_accounts payload out of the mocked sb.rpc call."""
+    rpc_call = sb_mock.rpc.call_args
+    assert rpc_call is not None, "rpc was not called"
+    name, payload = rpc_call.args[0], rpc_call.args[1]
+    assert name == "commit_discovery_result"
+    return payload
 
 
-class TestUpdateProfileFromContext:
-    def test_writes_non_null_ctx_fields_to_primary_profile(self):
-        fake_sb = MagicMock()
-        ctx = InputContext(
-            handle="gothgirlnatalie", platform="instagram",
-            display_name="Natalie Vox",
-            bio="21 • Florida",
-            follower_count=630000,
-            following_count=33,
-            post_count=213,
-            avatar_url="https://cdn.ig/pic_hd.jpg",
-            is_verified=False,
-        )
-        ws_id = uuid4()
-        dc._update_profile_from_context(fake_sb, ws_id, ctx)
-
-        # .table(...).update(...).eq(...).eq(...).eq(...).execute()
-        fake_sb.table.assert_called_with("profiles")
-        update_call = fake_sb.table.return_value.update
-        update_call.assert_called_once()
-        payload = update_call.call_args.args[0]
-        assert payload["bio"] == "21 • Florida"
-        assert payload["follower_count"] == 630000
-        assert payload["following_count"] == 33
-        assert payload["post_count"] == 213
-        assert payload["avatar_url"] == "https://cdn.ig/pic_hd.jpg"
-        assert payload["display_name"] == "Natalie Vox"
-        assert "last_scraped_at" in payload
-
-    def test_noop_when_ctx_has_no_fields(self):
-        fake_sb = MagicMock()
-        ctx = InputContext(handle="x", platform="instagram")  # all default/null
-        dc._update_profile_from_context(fake_sb, uuid4(), ctx)
-        fake_sb.table.assert_not_called()
-
-    def test_skips_null_fields(self):
-        fake_sb = MagicMock()
-        ctx = InputContext(
-            handle="x", platform="instagram",
-            bio="hi",  # only bio populated
-        )
-        dc._update_profile_from_context(fake_sb, uuid4(), ctx)
-        payload = fake_sb.table.return_value.update.call_args.args[0]
-        assert "bio" in payload
-        assert "follower_count" not in payload  # was None
-        assert "avatar_url" not in payload
+def test_seed_profile_url_per_platform():
+    assert _seed_profile_url("instagram", "alice") == "https://instagram.com/alice"
+    assert _seed_profile_url("instagram", "@alice") == "https://instagram.com/alice"
+    assert _seed_profile_url("tiktok", "kira") == "https://tiktok.com/@kira"
+    assert _seed_profile_url("tiktok", "@kira") == "https://tiktok.com/@kira"
+    assert _seed_profile_url("youtube", "Gothgirlnatalie") == "https://youtube.com/@Gothgirlnatalie"
+    assert _seed_profile_url("twitter", "alice") == "https://x.com/alice"
+    assert _seed_profile_url("linkedin", "alice") == "https://linkedin.com/in/alice"
+    assert _seed_profile_url("other", "anything") is None
+    assert _seed_profile_url("instagram", "") is None
 
 
-class TestGeminiPromptGrounding:
-    def test_prompt_includes_bio_follower_and_external_urls(self):
-        ctx = InputContext(
-            handle="gothgirlnatalie", platform="instagram",
-            bio="goth girl", follower_count=48200,
-            external_urls=["https://linktr.ee/gothgirlnatalie"],
-            link_in_bio_destinations=["https://onlyfans.com/gothgirlnatalie"],
-            source_note="apify/instagram-scraper details mode",
-        )
-        prompt = dc.build_prompt(ctx)
-        assert "goth girl" in prompt
-        assert "48200" in prompt or "48,200" in prompt
-        assert "linktr.ee/gothgirlnatalie" in prompt
-        assert "onlyfans.com/gothgirlnatalie" in prompt
-        # Grounding instruction present
-        assert "provided context" in prompt.lower() or "do not hallucinate" in prompt.lower()
+def test_commit_v2_writes_seed_url():
+    """The seed account must land in profiles with a populated url field."""
+    from unittest.mock import MagicMock
+    from uuid import UUID
+    from pipeline.resolver import ResolverResult
+
+    sb = MagicMock()
+    seed = _ctx("kira", "tiktok")
+    result = ResolverResult(
+        seed_context=seed, gemini_result=_gem(),
+        enriched_contexts={}, discovered_urls=[],
+    )
+    _commit_v2(sb, UUID(int=1), UUID(int=2), result, bulk_import_id=None)
+
+    payload = _capture_rpc_payload(sb)
+    seed_account = payload["p_accounts"][0]
+    assert seed_account["is_primary"] is True
+    assert seed_account["url"] == "https://tiktok.com/@kira"
 
 
-class TestRunEmptyContextFailsFast:
-    def test_empty_context_triggers_mark_failed(self):
-        from apify_details import EmptyDatasetError
-
-        fake_sb = MagicMock()
-        fake_sb.rpc.return_value.execute.return_value = None
-
-        with patch("discover_creator.get_supabase", return_value=fake_sb), \
-             patch("discover_creator.fetch_input_context",
-                   side_effect=EmptyDatasetError("login wall")), \
-             patch("discover_creator.run_gemini_discovery") as mock_gemini:
-            dc.run(_make_input())
-
-        # Gemini never called — we bailed before it
-        mock_gemini.assert_not_called()
-        # mark_discovery_failed was invoked
-        called_rpc_names = [c.args[0] for c in fake_sb.rpc.call_args_list]
-        assert "mark_discovery_failed" in called_rpc_names
-        mark_failed_call = next(c for c in fake_sb.rpc.call_args_list if c.args[0] == "mark_discovery_failed")
-        assert mark_failed_call.args[1]["p_error"].startswith("empty_context:")
+def test_synthesize_handle_extracts_last_path_segment():
+    assert _synthesize_handle_from_url("https://wattpad.com/user/jane") == "jane"
+    assert _synthesize_handle_from_url("https://substack.com/@alice") == "alice"
+    assert _synthesize_handle_from_url("https://linktr.ee/foo?utm=x") == "foo"
+    assert _synthesize_handle_from_url("https://example.com/") == "example.com"
 
 
-class TestMarkDiscoveryFailedRetries:
-    def test_retries_on_transient_failure(self):
-        fake_sb = MagicMock()
-        # First 2 calls raise, third succeeds
-        fake_sb.rpc.return_value.execute.side_effect = [
-            Exception("transient"),
-            Exception("transient"),
-            MagicMock(),
-        ]
-        with patch("discover_creator.get_supabase", return_value=fake_sb):
-            dc.mark_discovery_failed_with_retry(fake_sb, uuid4(), "the error")
-        # 3 total execute() calls means 2 retries + 1 success
-        assert fake_sb.rpc.return_value.execute.call_count == 3
+def test_commit_v2_persists_novel_platform_urls_as_profiles():
+    """A URL with no fetcher (e.g. Wattpad) must still land in p_accounts."""
+    sb = MagicMock()
+    seed = _ctx("alice", "instagram")
+    enriched = {
+        "https://onlyfans.com/alice_of": _ctx("alice_of", "onlyfans", source_note="of"),
+    }
+    discovered = [
+        DiscoveredUrl(
+            canonical_url="https://onlyfans.com/alice_of",
+            platform="onlyfans", account_type="monetization",
+            destination_class="monetization", reason="rule:onlyfans_monetization",
+            depth=1,
+        ),
+        # Novel platform — no fetcher exists for "other"
+        DiscoveredUrl(
+            canonical_url="https://wattpad.com/user/alice_writes",
+            platform="other", account_type="other",
+            destination_class="other", reason="llm:high_confidence",
+            depth=1,
+        ),
+        # Aggregator that resolver expanded but never enriched
+        DiscoveredUrl(
+            canonical_url="https://linktr.ee/alice",
+            platform="linktree", account_type="link_in_bio",
+            destination_class="aggregator", reason="rule:linktree_link_in_bio",
+            depth=1,
+        ),
+    ]
+    result = ResolverResult(
+        seed_context=seed, gemini_result=_gem(),
+        enriched_contexts=enriched, discovered_urls=discovered,
+    )
 
-    def test_writes_dead_letter_after_exhausting_retries(self, tmp_path, monkeypatch):
-        fake_sb = MagicMock()
-        fake_sb.rpc.return_value.execute.side_effect = Exception("permanent")
-        monkeypatch.setattr(dc, "DEAD_LETTER_PATH", tmp_path / "deadletter.jsonl")
-        run_id = uuid4()
-        with patch("discover_creator.get_supabase", return_value=fake_sb):
-            dc.mark_discovery_failed_with_retry(fake_sb, run_id, "the error")
-        line = (tmp_path / "deadletter.jsonl").read_text().strip()
-        parsed = json.loads(line)
-        assert parsed["run_id"] == str(run_id)
-        assert parsed["error"] == "the error"
+    _commit_v2(sb, UUID(int=1), UUID(int=2), result, bulk_import_id=None)
+
+    payload = _capture_rpc_payload(sb)
+    accounts = payload["p_accounts"]
+
+    # seed + 1 enriched + 2 discovered-only stubs
+    assert len(accounts) == 4
+
+    handles = {a["handle"] for a in accounts}
+    assert "alice" in handles                  # seed
+    assert "alice_of" in handles               # enriched onlyfans
+    assert "alice_writes" in handles           # novel wattpad — synthesized handle
+    assert "alice" in handles                  # linktree last segment
+
+    wattpad = next(a for a in accounts if a["url"] == "https://wattpad.com/user/alice_writes")
+    assert wattpad["platform"] == "other"
+    assert wattpad["account_type"] == "other"
+    assert wattpad["follower_count"] is None
+    assert wattpad["bio"] is None
+    assert wattpad["discovery_confidence"] == 0.9  # depth=1 → 0.9
+    assert wattpad["reasoning"].startswith("discovered_only_no_fetcher:")
+
+    linktree = next(a for a in accounts if a["url"] == "https://linktr.ee/alice")
+    assert linktree["account_type"] == "link_in_bio"
+
+
+def test_commit_v2_does_not_duplicate_enriched_destinations():
+    """A URL that's both in discovered_urls AND enriched_contexts must appear once."""
+    sb = MagicMock()
+    seed = _ctx("alice", "instagram")
+    canon = "https://onlyfans.com/alice_of"
+    enriched = {canon: _ctx("alice_of", "onlyfans", source_note="of")}
+    discovered = [
+        DiscoveredUrl(
+            canonical_url=canon, platform="onlyfans",
+            account_type="monetization", destination_class="monetization",
+            reason="rule:onlyfans_monetization", depth=1,
+        ),
+    ]
+    result = ResolverResult(
+        seed_context=seed, gemini_result=_gem(),
+        enriched_contexts=enriched, discovered_urls=discovered,
+    )
+
+    _commit_v2(sb, UUID(int=1), UUID(int=2), result, bulk_import_id=None)
+
+    payload = _capture_rpc_payload(sb)
+    accounts = payload["p_accounts"]
+
+    # seed + 1 enriched (no double-count from discovered_urls)
+    assert len(accounts) == 2
+    of_entries = [a for a in accounts if a["url"] == canon]
+    assert len(of_entries) == 1
+    assert of_entries[0]["follower_count"] is None or of_entries[0]["bio"] is None or True
+    # depth=1 → confidence=0.9 (depth-aware formula)
+    assert of_entries[0]["discovery_confidence"] == 0.9

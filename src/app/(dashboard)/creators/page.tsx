@@ -38,13 +38,14 @@ type SortKey = "recently_added" | "name_asc" | "platform"
 export default async function CreatorsHubPage({
   searchParams,
 }: {
-  searchParams: { status?: string; tracking?: string; q?: string; sort?: string }
+  searchParams: Promise<{ status?: string; tracking?: string; q?: string; sort?: string }>
 }) {
   const wsId = await getCurrentWorkspaceId()
-  const status = (searchParams?.status ?? "all") as Enums<"onboarding_status"> | "all"
-  const tracking = (searchParams?.tracking ?? "all") as Enums<"tracking_type"> | "all"
-  const q = searchParams?.q ?? ""
-  const sort = (searchParams?.sort ?? "recently_added") as SortKey
+  const sp = await searchParams
+  const status = (sp?.status ?? "all") as Enums<"onboarding_status"> | "all"
+  const tracking = (sp?.tracking ?? "all") as Enums<"tracking_type"> | "all"
+  const q = sp?.q ?? ""
+  const sort = (sp?.sort ?? "recently_added") as SortKey
 
   const [rawCreators, stats, mergeCandidates] = await Promise.all([
     getCreatorsForWorkspace(wsId, { status, tracking, q, sort }),
@@ -74,8 +75,9 @@ export default async function CreatorsHubPage({
       id: c.id,
       canonicalName: c.canonical_name,
       slug: c.slug,
-      avatarUrl: primaryProfile?.avatar_url ?? undefined,
-      primaryPlatform: c.primary_platform || "other",
+      // Prefer agency-managed override; fall back to primary profile's scraped avatar.
+      avatarUrl: c.override_avatar_url ?? primaryProfile?.avatar_url ?? undefined,
+      coverImageUrl: c.banner_url ?? c.cover_image_url ?? undefined,
       status: c.onboarding_status as "processing" | "ready" | "failed" | "archived",
       trackingType: c.tracking_type ?? "unreviewed",
       monetizationModel: c.monetization_model ?? undefined,
@@ -86,6 +88,7 @@ export default async function CreatorsHubPage({
       updatedAgo: relativeTime(c.updated_at),
       hasMergeCandidate: creatorIdsWithMerge.has(c.id),
       errorMessage: c.last_discovery_error ?? undefined,
+      lastDiscoveryRunId: c.last_discovery_run_id ?? null,
     }
   })
 

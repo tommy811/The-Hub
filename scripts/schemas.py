@@ -7,14 +7,31 @@ PLATFORM_VALUES = (
     "instagram", "tiktok", "youtube", "patreon", "twitter", "linkedin",
     "facebook", "onlyfans", "fanvue", "fanplace", "amazon_storefront",
     "tiktok_shop", "linktree", "beacons", "custom_domain",
-    "telegram_channel", "telegram_cupidbot", "other",
+    "telegram_channel", "telegram_cupidbot",
+    # T17 (2026-04-26): specific aggregator + monetization + content + social
+    # platform values so URLs no longer collapse into 'other' / 'custom_domain'
+    # (kept the unique constraint on profiles diverse).
+    "link_me", "tapforallmylinks", "allmylinks", "lnk_bio",
+    "snipfeed", "launchyoursocials",
+    "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+    "snapchat", "reddit", "threads", "bluesky",
+    "spotify", "substack",
+    "discord", "whatsapp",
+    "other",
 )
 
 Platform = Literal[
     "instagram", "tiktok", "youtube", "patreon", "twitter", "linkedin",
     "facebook", "onlyfans", "fanvue", "fanplace", "amazon_storefront",
     "tiktok_shop", "linktree", "beacons", "custom_domain",
-    "telegram_channel", "telegram_cupidbot", "other",
+    "telegram_channel", "telegram_cupidbot",
+    "link_me", "tapforallmylinks", "allmylinks", "lnk_bio",
+    "snipfeed", "launchyoursocials",
+    "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+    "snapchat", "reddit", "threads", "bluesky",
+    "spotify", "substack",
+    "discord", "whatsapp",
+    "other",
 ]
 
 EdgeType = Literal["link_in_bio", "direct_link", "cta_mention", "qr_code", "inferred"]
@@ -91,4 +108,69 @@ class DiscoveryResult(BaseModel):
     monetization_model: MonetizationModel = "unknown"
     proposed_accounts: list[ProposedAccount]
     proposed_funnel_edges: list[ProposedFunnelEdge]
+    raw_reasoning: str
+
+
+# --- v2 additions ---
+
+DestinationClass = Literal[
+    "monetization", "aggregator", "social",
+    "commerce", "messaging", "content",
+    "affiliate", "professional",
+    "other", "unknown",
+]
+DiscoverySource = Literal["seed", "manual_add", "retry", "auto_expand"]
+
+
+class DiscoveredUrl(BaseModel):
+    """A URL the resolver discovered + classified. One row per URL in the creator's network."""
+    canonical_url: str
+    platform: Platform
+    account_type: AccountType
+    destination_class: DestinationClass
+    reason: str  # 'rule:X' | 'llm:high_confidence' | 'llm:cache_hit' | 'llm:low_confidence' | 'llm:timeout' | 'manual_add'
+    depth: int = 0  # 0 = seed, 1 = surfaced from seed bio, 2 = surfaced from depth-1's bio, ...
+    harvest_method: Optional[Literal["cache", "httpx", "headless"]] = None
+    raw_text: Optional[str] = None
+
+
+class TextMention(BaseModel):
+    """A handle Gemini extracted from bio prose (no URL present). Fed back into Stage B."""
+    platform: Platform
+    handle: str
+    source: Literal["seed_bio", "enriched_bio"] = "seed_bio"
+
+
+HighlightSource = Literal["highlight_link_sticker", "highlight_caption_mention"]
+
+
+class HighlightLink(BaseModel):
+    """A URL or handle surfaced from an IG highlight item.
+
+    Two flavors:
+    - `highlight_link_sticker`: an absolute URL clicked through the link sticker.
+      `url` is populated; `platform`/`handle` may be None.
+    - `highlight_caption_mention`: a @handle mention in the caption/text overlay,
+      extracted by Gemini. `platform` + `handle` are populated; `url` is "" (the
+      resolver synthesizes it via _synthesize_url).
+    """
+    url: str = ""
+    source: HighlightSource
+    platform: Optional[Platform] = None
+    handle: Optional[str] = None
+    source_text: Optional[str] = None  # raw caption / sticker title for debugging
+
+
+class DiscoveryResultV2(BaseModel):
+    """Narrower Gemini output shape — no URL classification, no account proposals.
+
+    Resolver output populates accounts/funnel_edges directly from the classifier
+    and fetchers; Gemini's remaining job is canonicalization + niche + text hints.
+    """
+    canonical_name: str
+    known_usernames: list[str]
+    display_name_variants: list[str]
+    primary_niche: Optional[str] = None
+    monetization_model: MonetizationModel = "unknown"
+    text_mentions: list[TextMention] = Field(default_factory=list)
     raw_reasoning: str

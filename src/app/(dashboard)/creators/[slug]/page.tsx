@@ -2,26 +2,31 @@
 export const dynamic = 'force-dynamic';
 
 import { notFound } from "next/navigation";
-import { PlatformIcon } from "@/components/accounts/PlatformIcon";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccountRow } from "@/components/accounts/AccountRow";
-import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, Users, Globe, DollarSign, Link2, MessageCircle, Sparkles, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
 import { RerunDiscoveryButton } from "@/components/creators/RerunDiscoveryButton";
 import { AddAccountDialog } from "@/components/creators/AddAccountDialog";
 import { AvatarWithFallback } from "@/components/creators/AvatarWithFallback";
+import { BannerWithFallback } from "@/components/creators/BannerWithFallback";
+import { DiscoveryProgress } from "@/components/creators/DiscoveryProgress";
 import { MergeBannerActions } from "@/components/creators/MergeBannerActions";
 import { FailedRetryButton } from "@/components/creators/FailedRetryButton";
+import { CreatorDestinations } from "@/components/creators/CreatorDestinations";
 import { getCurrentWorkspaceId } from "@/lib/workspace";
 import {
   getCreatorBySlugForWorkspace,
   getProfilesForCreator,
   getMergeCandidatesForCreator,
   getCreatorNameById,
+  getDestinationsForCreator,
 } from "@/lib/db/queries";
 import { ComingSoon } from "@/components/shared/ComingSoon";
+import { sortAccounts } from "@/lib/sortAccounts";
+import { resolvePlatform } from "@/lib/platforms";
 
 const GRADIENTS = [
   "from-violet-500 to-indigo-600",
@@ -45,6 +50,24 @@ function formatNumber(n: number | null | undefined): string {
   return new Intl.NumberFormat('en-US', { notation: 'compact', compactDisplay: 'short' }).format(n);
 }
 
+function selectCreatorAvatar(profiles: Array<{ avatar_url?: string | null; is_primary?: boolean | null; account_type?: string | null; platform?: string | null; follower_count?: number | null }>): string | null {
+  const candidates = profiles
+    .filter((profile) => profile.avatar_url)
+    .sort((a, b) => {
+      if (!!b.is_primary !== !!a.is_primary) return Number(!!b.is_primary) - Number(!!a.is_primary)
+      if (a.account_type !== b.account_type) {
+        if (a.account_type === "social") return -1
+        if (b.account_type === "social") return 1
+      }
+      const aPlatform = a.platform === "instagram" || a.platform === "tiktok" ? 1 : 0
+      const bPlatform = b.platform === "instagram" || b.platform === "tiktok" ? 1 : 0
+      if (aPlatform !== bPlatform) return bPlatform - aPlatform
+      return (b.follower_count ?? -1) - (a.follower_count ?? -1)
+    })
+
+  return candidates[0]?.avatar_url ?? null
+}
+
 interface StatPanelProps {
   label: string;
   value: string | number;
@@ -65,14 +88,16 @@ function StatPanel({ label, value, icon: Icon, sub }: StatPanelProps) {
   );
 }
 
-export default async function CreatorDetailPage({ params }: { params: { slug: string } }) {
+export default async function CreatorDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const wsId = await getCurrentWorkspaceId();
-  const creator = await getCreatorBySlugForWorkspace(wsId, params.slug);
+  const creator = await getCreatorBySlugForWorkspace(wsId, slug);
   if (!creator) return notFound();
 
-  const [profiles, mergeCandidates] = await Promise.all([
+  const [profiles, mergeCandidates, destinations] = await Promise.all([
     getProfilesForCreator(creator.id),
     getMergeCandidatesForCreator(creator.id),
+    getDestinationsForCreator(creator.id),
   ]);
 
   let mergeWith: string | null = null;
@@ -83,13 +108,15 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
   }
 
   const primaryProfile = profiles.find(p => p.is_primary) ?? profiles[0];
-  const avatarUrl = primaryProfile?.avatar_url ?? null;
+  const avatarUrl = creator.override_avatar_url ?? selectCreatorAvatar(profiles) ?? primaryProfile?.avatar_url ?? null;
   const gradient = getGradient(creator.canonical_name);
 
-  const socialAccounts = profiles.filter(p => p.account_type === 'social');
-  const monetizationAccounts = profiles.filter(p => p.account_type === 'monetization');
-  const linkInBioAccounts = profiles.filter(p => p.account_type === 'link_in_bio');
-  const messagingAccounts = profiles.filter(p => p.account_type === 'messaging');
+  // Sort at the render layer (not the DB layer) so that other consumers keep insertion order.
+  // sortAccounts: primary first → sortPriority asc → follower_count desc (nulls last) → handle asc.
+  const socialAccounts = sortAccounts(profiles.filter(p => p.account_type === 'social'));
+  const monetizationAccounts = sortAccounts(profiles.filter(p => p.account_type === 'monetization'));
+  const linkInBioAccounts = sortAccounts(profiles.filter(p => p.account_type === 'link_in_bio'));
+  const messagingAccounts = sortAccounts(profiles.filter(p => p.account_type === 'messaging'));
 
   const totalFollowers = socialAccounts.reduce((sum, p) => sum + (p.follower_count || 0), 0);
 
@@ -124,6 +151,8 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
         </Alert>
       )}
 
+      <BannerWithFallback bannerUrl={creator.banner_url} coverImageUrl={creator.cover_image_url} />
+
       {/* Header */}
       <div className="flex items-start gap-5 pt-2">
         <AvatarWithFallback
@@ -137,24 +166,27 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
         <div className="flex flex-col gap-1.5 flex-1 min-w-0 mt-1">
           <div className="flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold tracking-tight leading-none">{creator.canonical_name}</h1>
-            <RerunDiscoveryButton creatorId={creator.id} isProcessing={creator.onboarding_status === 'processing'} />
+            <div className="flex items-center gap-2 shrink-0">
+              <AddAccountDialog
+                creatorId={creator.id}
+                defaultAccountType="social"
+                trigger={
+                  <Button variant="outline" size="sm" className="h-8">
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add Account
+                  </Button>
+                }
+              />
+              <RerunDiscoveryButton creatorId={creator.id} isProcessing={creator.onboarding_status === 'processing'} />
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-            <span className="font-mono text-xs opacity-70">@{primaryProfile?.handle || creator.slug}</span>
-            <span className="text-border">·</span>
-            <PlatformIcon platform={creator.primary_platform || 'other'} showLabel />
-            {creator.tracking_type && (
+          {creator.tracking_type && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
               <Badge variant="outline" className="text-[10px] uppercase font-bold text-muted-foreground">
                 {creator.tracking_type.replace(/_/g, ' ')}
               </Badge>
-            )}
-          </div>
-
-          {primaryProfile?.bio && (
-            <p className="text-sm text-muted-foreground leading-snug line-clamp-2 max-w-xl mt-0.5">
-              {primaryProfile.bio}
-            </p>
+            </div>
           )}
 
           {(creator.tags?.length ?? 0) > 0 && (
@@ -173,33 +205,73 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
           label="Total Reach"
           value={totalFollowers > 0 ? formatNumber(totalFollowers) : '—'}
           icon={Users}
-          sub={socialAccounts.length > 1 ? `across ${socialAccounts.length} platforms` : socialAccounts[0]?.platform || undefined}
+          sub={
+            socialAccounts.length > 1
+              ? `across ${socialAccounts.length} platforms`
+              : socialAccounts[0]
+                ? resolvePlatform(socialAccounts[0].platform, socialAccounts[0].url).label
+                : undefined
+          }
         />
         <StatPanel
           label="Social"
           value={socialAccounts.length}
           icon={Globe}
-          sub={socialAccounts.length > 0 ? socialAccounts.map(a => a.platform).join(', ') : 'none linked'}
+          sub={
+            socialAccounts.length > 0
+              ? Array.from(new Set(socialAccounts.map(a => resolvePlatform(a.platform, a.url).label)))
+                  .sort()
+                  .join(', ')
+              : 'none linked'
+          }
         />
         <StatPanel
           label="Monetization"
           value={monetizationAccounts.length}
           icon={DollarSign}
-          sub={monetizationAccounts.length > 0 ? monetizationAccounts.map(a => a.platform).join(', ') : 'none linked'}
+          sub={
+            monetizationAccounts.length > 0
+              ? Array.from(new Set(monetizationAccounts.map(a => resolvePlatform(a.platform, a.url).label)))
+                  .sort()
+                  .join(', ')
+              : 'none linked'
+          }
         />
         <StatPanel
           label="Link-in-Bio"
           value={linkInBioAccounts.length}
           icon={Link2}
-          sub={linkInBioAccounts.length > 0 ? linkInBioAccounts.map(a => a.handle).join(', ') : 'none linked'}
+          sub={
+            linkInBioAccounts.length > 0
+              ? Array.from(new Set(linkInBioAccounts.map(a => resolvePlatform(a.platform, a.url).label)))
+                  .sort((a, b) => a.localeCompare(b))
+                  .join(', ')
+              : 'none linked'
+          }
         />
+      </div>
+
+      {/* Brand Summary placeholder — Phase 3 surface for Claude brand-analysis output */}
+      <div className="rounded-xl border border-dashed border-border/40 bg-muted/5 p-6 flex items-start gap-4">
+        <Sparkles className="h-5 w-5 text-muted-foreground/60 mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold text-muted-foreground">Brand Summary — Phase 3</div>
+          <div className="text-xs text-muted-foreground/70 mt-1">
+            Niche, archetype, vibe, monetization model, and SEO keywords will be filled by the Claude brand-analysis agent.
+          </div>
+        </div>
       </div>
 
       {/* Status banners */}
       {creator.onboarding_status === 'processing' && (
-        <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl text-indigo-400 flex items-center gap-3">
-          <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
-          <span className="text-sm font-medium">Discovering network footprint… Accounts will appear below as they're mapped.</span>
+        <div className="bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl text-indigo-400 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+            <span className="text-sm font-medium">Discovering network footprint… Accounts will appear below as they&apos;re mapped.</span>
+          </div>
+          {creator.last_discovery_run_id && (
+            <DiscoveryProgress runId={creator.last_discovery_run_id} />
+          )}
         </div>
       )}
 
@@ -213,8 +285,8 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs defaultValue="network" className="w-full">
+      {/* Tabs — explicit horizontal orientation: list above content, full width */}
+      <Tabs defaultValue="network" orientation="horizontal" className="w-full flex flex-col gap-4">
         <TabsList className="w-full justify-start bg-transparent border-b border-border/50 rounded-none h-auto p-0 gap-6">
           <TabsTrigger value="network" className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 data-[state=active]:bg-transparent px-0 pb-3 pt-2 text-sm">
             Network Mapping
@@ -230,14 +302,14 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="network" className="mt-6 space-y-6">
-          <NetworkSection title="Social & Media" icon={Globe} accounts={socialAccounts} creatorId={creator.id} />
-          <NetworkSection title="Link-in-Bio" icon={Link2} accounts={linkInBioAccounts} creatorId={creator.id} />
-          <NetworkSection title="Monetization" icon={DollarSign} accounts={monetizationAccounts} creatorId={creator.id} />
-          <NetworkSection title="Messaging & Communities" icon={MessageCircle} accounts={messagingAccounts} creatorId={creator.id} />
+        <TabsContent value="network" className="space-y-6">
+          <NetworkSection title="Social & Media" icon={Globe} accounts={socialAccounts} />
+          <NetworkSection title="Link-in-Bio" icon={Link2} accounts={linkInBioAccounts} />
+          <NetworkSection title="Monetization" icon={DollarSign} accounts={monetizationAccounts} />
+          <NetworkSection title="Messaging & Communities" icon={MessageCircle} accounts={messagingAccounts} />
         </TabsContent>
 
-        <TabsContent value="funnel" className="mt-6">
+        <TabsContent value="funnel">
           <ComingSoon
             phase={4}
             feature="Funnel visualization"
@@ -245,22 +317,35 @@ export default async function CreatorDetailPage({ params }: { params: { slug: st
           />
         </TabsContent>
       </Tabs>
+
+      {/* All harvested destinations — collapsed by default, at the bottom.
+          Native <details> avoids pulling in a Collapsible dependency and
+          its `group-open:` modifier handles the chevron rotation. */}
+      <details className="mt-4 rounded-lg border border-white/[0.06] bg-[#13131A] overflow-hidden group">
+        <summary className="cursor-pointer select-none px-6 py-4 flex items-center justify-between gap-3 text-sm font-semibold text-white/80 hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden">
+          <div className="flex items-center gap-2">
+            <span>All Destinations</span>
+            <span className="text-xs font-normal text-white/40">({destinations.length})</span>
+          </div>
+          <span className="text-xs text-white/40 transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <div className="px-6 pb-6">
+          <CreatorDestinations destinations={destinations} />
+        </div>
+      </details>
     </div>
   );
 }
 
-function NetworkSection({ title, icon: Icon, accounts, creatorId }: { title: string, icon: React.ElementType, accounts: any[], creatorId: string }) {
+function NetworkSection({ title, icon: Icon, accounts }: { title: string, icon: React.ElementType, accounts: any[] }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <h3 className="font-semibold text-sm">
-            {title}
-          </h3>
-          <span className="text-muted-foreground/50 font-mono text-xs">{accounts.length}</span>
-        </div>
-        <AddAccountDialog creatorId={creatorId} />
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <h3 className="font-semibold text-sm">
+          {title}
+        </h3>
+        <span className="text-muted-foreground/50 font-mono text-xs">{accounts.length}</span>
       </div>
       <div className="flex flex-col gap-1.5">
         {accounts.length === 0 ? (
@@ -275,6 +360,7 @@ function NetworkSection({ title, icon: Icon, accounts, creatorId }: { title: str
               displayName={a.display_name}
               url={a.url}
               followerCount={a.follower_count}
+              avatarUrl={a.avatar_url}
               accountType={a.account_type}
               discoveryConfidence={a.discovery_confidence ?? 1}
               isPrimary={a.is_primary}

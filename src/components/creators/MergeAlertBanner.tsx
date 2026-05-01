@@ -3,7 +3,7 @@
 
 import { AlertTriangle, ArrowRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface MergeAlertBannerProps {
@@ -11,13 +11,9 @@ interface MergeAlertBannerProps {
 }
 
 export function MergeAlertBanner({ count }: MergeAlertBannerProps) {
-  const [isVisible, setIsVisible] = useState(true);
+  const [dismissedCount, setDismissedCount] = useState<number | null>(null);
   const router = useRouter();
-
-  // Reset visibility if count becomes > 0 again
-  useEffect(() => {
-    if (count > 0) setIsVisible(true);
-  }, [count]);
+  const isVisible = count > 0 && dismissedCount !== count;
 
   return (
     <AnimatePresence>
@@ -42,7 +38,7 @@ export function MergeAlertBanner({ count }: MergeAlertBannerProps) {
               >
                 Review <ArrowRight className="h-4 w-4" />
               </button>
-              <button onClick={() => setIsVisible(false)} className="p-1 hover:bg-amber-500/20 rounded opacity-60 hover:opacity-100 transition-all">
+              <button onClick={() => setDismissedCount(count)} className="p-1 hover:bg-amber-500/20 rounded opacity-60 hover:opacity-100 transition-all">
                 <X className="h-4 w-4" />
               </button>
             </div>

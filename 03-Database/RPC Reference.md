@@ -4,22 +4,52 @@ All callable via: `supabase.rpc('function_name', { args })`
 
 ---
 
-## commit_discovery_result
-**Called by:** Python discovery pipeline on successful Gemini response
+## commit_discovery_result (v4, 2026-04-26)
+**Called by:** Python discovery pipeline (`pipeline/resolver.py` → `discover_creator._commit_v2`) on successful resolver output
 **Args:**
 - `p_run_id` UUID
 - `p_creator_data` JSONB — `{canonical_name, known_usernames[], display_name_variants[], primary_platform, primary_niche, monetization_model}`
-- `p_accounts` JSONB — array of `{account_type, platform, handle, url, display_name, bio, follower_count, is_primary, discovery_confidence}`
+- `p_accounts` JSONB — array of `{account_type, platform, handle, url, display_name, bio, follower_count, is_primary, discovery_confidence, reasoning}`
 - `p_funnel_edges` JSONB — array of `{from_handle, from_platform, to_handle, to_platform, edge_type, confidence}`
+- `p_discovered_urls` JSONB DEFAULT `'[]'` — array of `{canonical_url, platform, account_type, destination_class, reason, harvest_method, raw_text}` (`harvest_method` + `raw_text` added in v3)
+- `p_bulk_import_id` UUID DEFAULT NULL (v2)
 
-**Returns:** `{creator_id, accounts_upserted, merge_candidates_raised}`
+**Returns:** `{creator_id, accounts_upserted, merge_candidates_raised, urls_recorded}`
 
 **Does (transactional):**
-1. Enriches creator row with discovered data
-2. For each account: checks for handle collision with different creator → raises merge candidate if found, otherwise upserts profile row
-3. Inserts funnel edges (resolves handle → profile_id)
-4. Marks discovery_run completed
-5. Sets creator.onboarding_status = 'ready'
+1. Reads `discovery_runs.source` for this run.
+2. On `source='manual_add'`: only union-merges `known_usernames` on the existing creator (preserves human-confirmed canonical_name / primary_niche / monetization_model). On any other source: enriches creator with canonical_name / niches / monetization_model and sets `onboarding_status='ready'`.
+3. Upserts each proposed account as a `profiles` row (unique on `(workspace_id, platform, handle)`).
+4. Inserts funnel edges after resolving from/to handles to profile_ids.
+5. Records each discovered URL in `profile_destination_links` against the creator's primary profile, **including the v3 audit fields `harvest_method` and `raw_text`**. ON CONFLICT clause **(v4)** updates `destination_class` so post-fix re-runs refresh stale class values; audit fields are merged via `COALESCE(EXCLUDED.x, profile_destination_links.x)` so older rows without audit data don't get nulled out.
+6. Marks discovery_run completed (`completed_at = NOW()`, `assets_discovered_count`, `funnel_edges_discovered_count`, `bulk_import_id`).
+7. If `p_bulk_import_id` is set, increments `bulk_imports.seeds_committed`.
+
+> **Fixed 2026-04-25 (migration `20260425000200`):** v2 initially wrote `UPDATE discovery_runs SET updated_at = NOW()`, but `discovery_runs` has only `created_at` — caused Postgres `42703 column does not exist` on every successful Stage A. `completed_at` carries the "finished" signal; `updated_at` assignment dropped.
+
+> **Extended 2026-04-26 (migration `20260426010000`, v3):** writes `harvest_method` (`cache|httpx|headless`) and `raw_text` (anchor / button text captured during harvest) to `profile_destination_links`. Backs the Universal URL Harvester ship.
+
+> **Patched 2026-04-26 (migration `20260426030000`, v4):** ON CONFLICT clause now updates `destination_class = EXCLUDED.destination_class`. Pre-fix rows kept stale class values across re-runs (e.g. `t.me/...` URLs stuck at `other` after the resolver was patched to map `messaging`). Caught by the 2026-04-26 smoke when re-discovery didn't refresh cached destination rows.
+
+---
+
+## bulk_import_creator (v2, 2026-04-25)
+**Called by:** Server actions `bulkImportCreators` (one call per handle in the batch) and `importSingleCreator` (single-handle path).
+**Args:** `p_handle` TEXT, `p_platform_hint` TEXT, `p_tracking_type` tracking_type, `p_tags` TEXT[], `p_user_id` UUID, `p_workspace_id` UUID, `p_bulk_import_id` UUID DEFAULT NULL
+**Returns:** JSONB `{bulk_import_id, creator_id, run_id}`
+**Does:** When `p_bulk_import_id` is NULL, creates a new `bulk_imports` row (single-handle path). Inserts creator (placeholder `canonical_name = handle` until discovery fills), primary profile stub, and a pending `discovery_runs` row linked to the bulk. Returns all three ids for the caller to thread.
+
+> **Shape change (v2):** returns JSONB instead of raw UUID. Callers extract `res.data.creator_id` for anything that previously expected a single uuid. Old 6-arg overload was dropped (so the TypeScript type generator sees one signature; `p_bulk_import_id` has a DEFAULT so pre-v2 callers passing 6 args still work).
+
+> **Fixed 2026-04-25 (migration `20260425030000`):** the `discovery_runs` INSERT was passing `p_platform_hint` raw (text) instead of `p_platform_hint::platform`. The `creators` and `profiles` INSERTs already cast — only the third INSERT was missed. Postgres `22P02 column "input_platform_hint" is of type platform but expression is of type text`. Every Bulk Paste / Single Handle import errored in the toast. Same shape as `retry_creator_discovery`'s earlier-day fix — missed in that sweep.
+
+---
+
+## run_cross_workspace_merge_pass (new, 2026-04-25)
+**Called by:** Python worker after each batch of runs terminates, for every `bulk_import_id` represented in the batch.
+**Args:** `p_workspace_id` UUID, `p_bulk_import_id` UUID DEFAULT NULL
+**Returns:** JSONB `{buckets_evaluated, bulk_import_id}`
+**Does:** Reads `profile_destination_links` as an inverted index. For every `canonical_url` with `destination_class IN ('monetization','aggregator')` shared across >1 creator in the workspace, inserts a `creator_merge_candidates` row per pair (ordered `LEAST/GREATEST`). Idempotent via the unique functional pair index (`ON CONFLICT DO UPDATE evidence`). When `p_bulk_import_id` is provided, sets `bulk_imports.merge_pass_completed_at` and final status based on the bulk's seed-level counters.
 
 ---
 
@@ -34,9 +64,21 @@ All callable via: `supabase.rpc('function_name', { args })`
 **Called by:** UI Retry button on failed creator card, and Re-run Discovery button on creator detail page
 **Args:** `p_creator_id` UUID, `p_user_id` UUID
 **Returns:** new `run_id` UUID
-**Does:** Creates new discovery_runs row (increments attempt_number), **copies `input_handle` and `input_platform_hint` from most recent prior run** (so the worker knows what handle to discover), resets creator to onboarding_status = processing
+**Does:** Creates new discovery_runs row (increments attempt_number), **copies `input_handle` and `input_platform_hint` from most recent prior run** (so the worker knows what handle to discover), resets creator to onboarding_status = processing, and **points `creators.last_discovery_run_id` at the new run**.
 
 > **Fixed 2026-04-23:** Previous version did not copy `input_handle` into the new row. Retry runs had NULL handle and immediately failed at the worker's fetch step.
+
+> **Fixed 2026-04-25 (migration `20260425000300`):** Local var `v_platform_hint TEXT` was carrying the value through plpgsql as text, so the INSERT into `discovery_runs(input_platform_hint)` (column type: `platform` enum) failed with `42703 column ... is of type platform but expression is of type text`. UI Re-run / Retry Discovery buttons errored. Fix: explicit `::platform` cast at the INSERT site.
+
+> **Fixed 2026-04-25 (migration `20260425020000`):** RPC was creating the new run but never updating `creators.last_discovery_run_id`. The `<DiscoveryProgress>` UI polls the run pointed to by `last_discovery_run_id` — so after every retry it polled the *previous* failed run, saw its terminal status, and the new run's spinner stuck at "Queued 0%" forever. Fix: add `last_discovery_run_id = v_run_id` to the `UPDATE creators` clause.
+
+---
+
+## getDiscoveryProgress (server action — not an RPC)
+**Called by:** `<DiscoveryProgress>` client component, every 3s while a card is in processing state.
+**Args:** `runId` string
+**Returns:** `Result<{ status, progressPct, progressLabel }>`
+**Does:** Reads the row from `discovery_runs` via service-role client (RLS bypassed; runId is the lookup key). Surfaces three fields the UI needs to render the bar + label and decide whether to fire `router.refresh()`. Lives in `src/app/(dashboard)/creators/actions.ts` next to the other discovery actions; imported via `import { getDiscoveryProgress } from "@/app/(dashboard)/creators/actions"`.
 
 ---
 

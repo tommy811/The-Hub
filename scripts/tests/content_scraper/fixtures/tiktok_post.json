@@ -1,0 +1,40 @@
+{
+  "id": "7234567890123456789",
+  "webVideoUrl": "https://www.tiktok.com/@kira/video/7234567890123456789",
+  "videoUrl": "https://v.tiktokcdn.com/video.mp4",
+  "text": "follow my links pls #fyp #foryou",
+  "createTimeISO": "2026-04-20T10:00:00.000Z",
+  "playCount": 250000,
+  "diggCount": 18500,
+  "commentCount": 320,
+  "shareCount": 1100,
+  "collectCount": 6700,
+  "authorMeta": {
+    "name": "kira",
+    "avatar": "https://p.tiktokcdn.com/avatar.jpg"
+  },
+  "videoMeta": {
+    "duration": 22,
+    "height": 1920,
+    "width": 1080,
+    "ratio": 0.5625,
+    "originalCoverUrl": "https://p.tiktokcdn.com/cover.jpg"
+  },
+  "musicMeta": {
+    "musicId": "7100000000000000000",
+    "musicName": "original sound",
+    "musicAuthor": "kira",
+    "musicAlbum": "",
+    "musicOriginal": true,
+    "playUrl": "https://music.tiktokcdn.com/audio.mp3",
+    "coverThumb": "https://music.tiktokcdn.com/thumb.jpg"
+  },
+  "hashtags": [{"name": "fyp"}, {"name": "foryou"}],
+  "mentions": [],
+  "effectStickers": [{"name": "Sparkle Filter"}, {"name": "Beauty"}],
+  "isAd": false,
+  "isMuted": false,
+  "isSlideshow": false,
+  "isPinned": true,
+  "subtitles": "follow my links please"
+}

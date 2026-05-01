@@ -7,6 +7,9 @@ from schemas import (
     ProposedAccount,
     ProposedFunnelEdge,
     DiscoveryResult,
+    DiscoveredUrl,
+    TextMention,
+    DiscoveryResultV2,
     PLATFORM_VALUES,
 )
 
@@ -88,11 +91,112 @@ class TestPlatformValuesCompleteness:
         assert "patreon" in PLATFORM_VALUES
 
     def test_matches_documented_db_enum(self):
-        # Full list from PROJECT_STATE §5, excluding 'other'
+        # Full list from the live DB platform enum (sync 15+ — T17 added the
+        # specific aggregator/monetization values 2026-04-26).
         expected = {
             "instagram", "tiktok", "youtube", "patreon", "twitter", "linkedin",
             "facebook", "onlyfans", "fanvue", "fanplace", "amazon_storefront",
             "tiktok_shop", "linktree", "beacons", "custom_domain",
-            "telegram_channel", "telegram_cupidbot", "other",
+            "telegram_channel", "telegram_cupidbot",
+            # T17 (2026-04-26)
+            "link_me", "tapforallmylinks", "allmylinks", "lnk_bio",
+            "snipfeed", "launchyoursocials",
+            "fanfix", "cashapp", "venmo", "kofi", "buymeacoffee",
+            "snapchat", "reddit", "threads", "bluesky",
+            "spotify", "substack",
+            "discord", "whatsapp",
+            "other",
         }
         assert set(PLATFORM_VALUES) == expected
+
+
+# --- v2 additions ---
+
+
+class TestDiscoveredUrl:
+    def test_accepts_valid_monetization(self):
+        du = DiscoveredUrl(
+            canonical_url="https://onlyfans.com/alice",
+            platform="onlyfans", account_type="monetization",
+            destination_class="monetization", reason="rule:onlyfans_monetization",
+        )
+        assert du.platform == "onlyfans"
+
+    def test_rejects_invalid_platform(self):
+        with pytest.raises(ValidationError):
+            DiscoveredUrl(
+                canonical_url="x", platform="bogus", account_type="social",
+                destination_class="social", reason="x",
+            )
+
+    def test_rejects_invalid_destination_class(self):
+        with pytest.raises(ValidationError):
+            DiscoveredUrl(
+                canonical_url="x", platform="instagram", account_type="social",
+                destination_class="bogus", reason="x",
+            )
+
+
+class TestTextMention:
+    def test_default_source_is_seed_bio(self):
+        tm = TextMention(platform="instagram", handle="alice")
+        assert tm.source == "seed_bio"
+
+    def test_rejects_unknown_platform(self):
+        with pytest.raises(ValidationError):
+            TextMention(platform="bogus", handle="alice")
+
+
+class TestDiscoveryResultV2:
+    def test_minimal(self):
+        r = DiscoveryResultV2(
+            canonical_name="Alice",
+            known_usernames=["alice"],
+            display_name_variants=["Alice"],
+            raw_reasoning="short",
+        )
+        assert r.monetization_model == "unknown"
+        assert r.text_mentions == []
+
+    def test_no_longer_has_proposed_accounts_or_edges(self):
+        # The v1 DiscoveryResult required proposed_accounts/proposed_funnel_edges.
+        # V2 omits them entirely — classifier + resolver own those.
+        r = DiscoveryResultV2(
+            canonical_name="Alice", known_usernames=["alice"],
+            display_name_variants=["Alice"], raw_reasoning="x",
+        )
+        assert not hasattr(r, "proposed_accounts")
+        assert not hasattr(r, "proposed_funnel_edges")
+
+
+class TestHighlightLink:
+    def test_link_sticker_minimal(self):
+        from schemas import HighlightLink
+        link = HighlightLink(
+            url="https://onlyfans.com/kira",
+            source="highlight_link_sticker",
+        )
+        assert link.url == "https://onlyfans.com/kira"
+        assert link.source == "highlight_link_sticker"
+        assert link.platform is None  # only relevant for caption mentions
+        assert link.handle is None
+        assert link.source_text is None  # optional context
+
+    def test_caption_mention_with_platform_handle(self):
+        from schemas import HighlightLink
+        link = HighlightLink(
+            url="",  # synthesized later
+            source="highlight_caption_mention",
+            platform="tiktok",
+            handle="kira_tt",
+            source_text="follow my tt @kira_tt",
+        )
+        assert link.platform == "tiktok"
+        assert link.handle == "kira_tt"
+
+    def test_rejects_unknown_source(self):
+        from schemas import HighlightLink
+        from pydantic import ValidationError
+        import pytest as _pt
+        with _pt.raises(ValidationError):
+            HighlightLink(url="https://x", source="not_a_real_source")

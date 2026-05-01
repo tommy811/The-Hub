@@ -1,0 +1,340 @@
+"""Content scraper orchestrator."""
+from __future__ import annotations
+import asyncio
+import logging
+import statistics
+from dataclasses import dataclass
+from datetime import datetime, date, timezone
+from typing import Iterable
+from uuid import UUID
+
+from supabase import Client
+
+from content_scraper.fetchers.base import BaseContentFetcher, FetchBatchResult, ProfileTarget
+from content_scraper.normalizer import NormalizedPost
+
+_log = logging.getLogger(__name__)
+
+
+@dataclass
+class ProfileScope:
+    profile_id: UUID
+    handle: str
+    platform: str  # "instagram" | "tiktok"
+    creator_id: UUID
+    workspace_id: UUID
+
+
+@dataclass
+class ScrapeRunSummary:
+    profiles_scraped: int = 0
+    profiles_skipped: int = 0
+    posts_upserted: int = 0
+    outliers_flagged: int = 0
+    failures: int = 0
+
+
+class ScrapeOrchestrator:
+    def __init__(
+        self,
+        *,
+        supabase: Client,
+        ig_fetcher: BaseContentFetcher,
+        tt_fetcher: BaseContentFetcher,
+        dead_letter_path: str | None,
+    ):
+        self._sb = supabase
+        self._ig = ig_fetcher
+        self._tt = tt_fetcher
+        self._dead_letter_path = dead_letter_path
+
+    async def run(
+        self,
+        scopes: Iterable[ProfileScope],
+        *,
+        since: datetime,
+    ) -> ScrapeRunSummary:
+        scope_list = list(scopes)
+        ig_targets, tt_targets = [], []
+        scope_by_pid: dict[UUID, ProfileScope] = {}
+        for s in scope_list:
+            scope_by_pid[s.profile_id] = s
+            target = ProfileTarget(profile_id=s.profile_id, handle=s.handle)
+            if s.platform == "instagram":
+                ig_targets.append(target)
+            elif s.platform == "tiktok":
+                tt_targets.append(target)
+
+        ig_result, tt_result = await asyncio.gather(
+            self._ig.fetch(ig_targets, since=since),
+            self._tt.fetch(tt_targets, since=since),
+            return_exceptions=True,
+        )
+
+        per_profile: dict[UUID, list[NormalizedPost]] = {}
+        batch_meta: dict[UUID, FetchBatchResult] = {}
+        fetch_failures: set[UUID] = set()
+        summary = ScrapeRunSummary()
+
+        for targets, result in ((ig_targets, ig_result), (tt_targets, tt_result)):
+            if isinstance(result, Exception):
+                for target in targets:
+                    scope = scope_by_pid[target.profile_id]
+                    summary.failures += 1
+                    fetch_failures.add(target.profile_id)
+                    _log.error("scrape_fetch_failed profile_id=%s handle=%s err=%s",
+                               scope.profile_id, scope.handle, result)
+                    self._dead_letter(scope, result, reason="fetch_failed")
+                    await self._record_scrape_run(
+                        scope,
+                        status="failed",
+                        reason="fetch_failed",
+                        error_message=str(result),
+                    )
+                continue
+            per_profile.update(result.posts_by_profile)
+            for target in targets:
+                batch_meta[target.profile_id] = result
+
+        for s in scope_list:
+            if s.profile_id in fetch_failures:
+                continue
+            posts = per_profile.get(s.profile_id, [])
+            if not posts:
+                summary.profiles_skipped += 1
+                _log.info("scrape_skip profile_id=%s handle=%s reason=no_posts",
+                          s.profile_id, s.handle)
+                self._dead_letter(s, None, reason="no_posts")
+                await self._record_scrape_run(
+                    s,
+                    status="skipped",
+                    reason="no_posts",
+                    posts_fetched=0,
+                    fetch_result=batch_meta.get(s.profile_id),
+                )
+                continue
+            await self._commit_one_profile(s, posts, summary, batch_meta.get(s.profile_id))
+        return summary
+
+    async def _commit_one_profile(
+        self,
+        scope: ProfileScope,
+        posts: list[NormalizedPost],
+        summary: ScrapeRunSummary,
+        fetch_result: FetchBatchResult | None,
+    ) -> None:
+        try:
+            payload = [p.model_dump(mode="json") for p in posts]
+            commit_resp = await asyncio.to_thread(
+                lambda: self._sb.rpc("commit_scrape_result", {
+                    "p_profile_id": str(scope.profile_id),
+                    "p_posts": payload,
+                }).execute()
+            )
+            commit_data = commit_resp.data or {}
+            summary.posts_upserted += int(commit_data.get("posts_upserted", 0))
+
+            await asyncio.to_thread(
+                lambda: self._sb.rpc("flag_outliers", {
+                    "p_profile_id": str(scope.profile_id),
+                }).execute()
+            )
+
+            outlier_count = await self._write_profile_snapshot(scope, posts, summary)
+            await self._mark_profile_scraped(scope, posts)
+            await self._record_scrape_run(
+                scope,
+                status="succeeded",
+                reason=None,
+                posts_fetched=len(posts),
+                posts_upserted=int(commit_data.get("posts_upserted", 0)),
+                outliers_flagged=outlier_count,
+                fetch_result=fetch_result,
+            )
+            summary.profiles_scraped += 1
+        except Exception as exc:
+            summary.failures += 1
+            _log.error("scrape_failed profile_id=%s handle=%s err=%s",
+                       scope.profile_id, scope.handle, exc)
+            self._dead_letter(scope, exc, reason="commit_failed")
+            await self._record_scrape_run(
+                scope,
+                status="failed",
+                reason="commit_failed",
+                posts_fetched=len(posts),
+                fetch_result=fetch_result,
+                error_message=str(exc),
+            )
+
+    def _dead_letter(
+        self,
+        scope: ProfileScope,
+        exc: BaseException | None,
+        *,
+        reason: str,
+    ) -> None:
+        if not self._dead_letter_path:
+            return
+        import json
+        from pathlib import Path
+        entry = {
+            "profile_id": str(scope.profile_id),
+            "creator_id": str(scope.creator_id),
+            "handle": scope.handle,
+            "platform": scope.platform,
+            "reason": reason,
+            "error": str(exc) if exc else None,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        }
+        Path(self._dead_letter_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(self._dead_letter_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    async def _write_profile_snapshot(
+        self,
+        scope: ProfileScope,
+        posts: list[NormalizedPost],
+        summary: ScrapeRunSummary,
+    ) -> int:
+        # Re-read just-scraped posts (now flagged by flag_outliers) — excluding pinned.
+        # Includes the DB-computed engagement_rate generated column.
+        post_ids = [p.platform_post_id for p in posts]
+        rows_resp = await asyncio.to_thread(
+            lambda: self._sb.table("scraped_content")
+                .select("view_count,is_outlier,engagement_rate")
+                .in_("platform_post_id", post_ids)
+                .eq("profile_id", str(scope.profile_id))
+                .eq("is_pinned", False)
+                .execute()
+        )
+        rows = rows_resp.data or []
+        view_counts = [
+            int(r["view_count"]) for r in rows
+            if r.get("view_count") is not None and int(r["view_count"]) > 0
+        ]
+        outlier_count = sum(1 for r in rows if r.get("is_outlier"))
+        median_views = int(statistics.median(view_counts)) if view_counts else 0
+        engagement_rates = [
+            float(r["engagement_rate"]) for r in rows
+            if r.get("engagement_rate") is not None
+        ]
+        avg_engagement_rate = (
+            sum(engagement_rates) / len(engagement_rates)
+            if engagement_rates else None
+        )
+        summary.outliers_flagged += outlier_count
+
+        prof_resp = await asyncio.to_thread(
+            lambda: self._sb.table("profiles")
+                .select("follower_count")
+                .eq("id", str(scope.profile_id))
+                .eq("workspace_id", str(scope.workspace_id))
+                .single()
+                .execute()
+        )
+        follower_count = (prof_resp.data or {}).get("follower_count")
+
+        snapshot_row = {
+            "profile_id": str(scope.profile_id),
+            "snapshot_date": date.today().isoformat(),
+            "follower_count": follower_count,
+            "median_views": median_views,
+            "outlier_count": outlier_count,
+            "avg_engagement_rate": avg_engagement_rate,
+        }
+        await asyncio.to_thread(
+            lambda: self._sb.table("profile_metrics_snapshots")
+                .upsert(snapshot_row, on_conflict="profile_id,snapshot_date")
+                .execute()
+        )
+        return outlier_count
+
+    async def _mark_profile_scraped(self, scope: ProfileScope, posts: list[NormalizedPost]) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        update_payload = {"last_scraped_at": now}
+        avatar_url = _profile_avatar_from_posts(posts)
+        if avatar_url:
+            update_payload["avatar_url"] = avatar_url
+        await asyncio.to_thread(
+            lambda: self._sb.table("profiles")
+                .update(update_payload)
+                .eq("id", str(scope.profile_id))
+                .eq("workspace_id", str(scope.workspace_id))
+                .execute()
+        )
+
+    async def _record_scrape_run(
+        self,
+        scope: ProfileScope,
+        *,
+        status: str,
+        reason: str | None,
+        posts_fetched: int = 0,
+        posts_upserted: int = 0,
+        outliers_flagged: int = 0,
+        fetch_result: FetchBatchResult | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        row = {
+            "workspace_id": str(scope.workspace_id),
+            "creator_id": str(scope.creator_id),
+            "profile_id": str(scope.profile_id),
+            "platform": scope.platform,
+            "source": "manual_cli",
+            "status": status,
+            "reason": reason,
+            "posts_fetched": posts_fetched,
+            "posts_upserted": posts_upserted,
+            "outliers_flagged": outliers_flagged,
+            "apify_actor_id": fetch_result.actor_id if fetch_result else None,
+            "apify_run_id": fetch_result.apify_run_id if fetch_result else None,
+            "apify_dataset_id": fetch_result.dataset_id if fetch_result else None,
+            "error_message": error_message,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            await asyncio.to_thread(
+                lambda: self._sb.table("scrape_runs").insert(row).execute()
+            )
+        except Exception as exc:
+            _log.warning(
+                "scrape_run_record_failed profile_id=%s status=%s err=%s",
+                scope.profile_id,
+                status,
+                exc,
+            )
+
+
+def _profile_avatar_from_posts(posts: list[NormalizedPost]) -> str | None:
+    for post in posts:
+        metrics_url = post.platform_metrics.author_avatar_url
+        if metrics_url:
+            return metrics_url
+
+        raw = post.raw_apify_payload or {}
+        if post.platform == "instagram":
+            value = _first_string(
+                raw,
+                "profilePicUrlHD",
+                "profilePicUrl",
+                "ownerProfilePicUrlHD",
+                "ownerProfilePicUrl",
+            )
+            if value:
+                return value
+        if post.platform == "tiktok":
+            author = raw.get("authorMeta") or {}
+            value = _first_string(author, "avatar", "avatarLarger", "avatarMedium", "avatarThumb")
+            if value:
+                return value
+
+    return None
+
+
+def _first_string(source: dict, *keys: str) -> str | None:
+    for key in keys:
+        value = source.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None

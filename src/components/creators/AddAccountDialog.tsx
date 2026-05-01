@@ -50,17 +50,43 @@ const ACCOUNT_TYPES = [
   { value: 'other',        label: 'Other' },
 ];
 
-export function AddAccountDialog({ creatorId }: { creatorId: string }) {
+export function AddAccountDialog({
+  creatorId,
+  defaultAccountType = 'social',
+  trigger,
+}: {
+  creatorId: string;
+  defaultAccountType?: string;
+  /**
+   * Optional custom trigger element. If omitted, the dialog renders its
+   * built-in compact "Add manually" link (used by per-section UIs).
+   * Pass a Button for the page-header variant.
+   */
+  trigger?: React.ReactNode;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [platform, setPlatform] = useState('instagram');
-  const [accountType, setAccountType] = useState('social');
+  // Pick a sensible default platform for the chosen account type so the
+  // form opens pre-filled with a coherent platform/type pair.
+  const defaultPlatform = (() => {
+    switch (defaultAccountType) {
+      case 'monetization': return 'onlyfans';
+      case 'link_in_bio': return 'linktree';
+      case 'messaging': return 'telegram_channel';
+      case 'other': return 'other';
+      default: return 'instagram';
+    }
+  })();
+
+  const [platform, setPlatform] = useState(defaultPlatform);
+  const [accountType, setAccountType] = useState(defaultAccountType);
   const [handle, setHandle] = useState('');
   const [url, setUrl] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [runDiscovery, setRunDiscovery] = useState<boolean>(true);
 
   const handlePlatformChange = (val: string | null) => {
     if (!val) return;
@@ -79,6 +105,7 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
       accountType: accountType as Enums<"account_type">,
       url: url.trim() || undefined,
       displayName: displayName.trim() || undefined,
+      runDiscovery,
     });
     setLoading(false);
     if (!result.ok) {
@@ -86,21 +113,29 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
       toast.error("Could not add account", { description: result.error });
       return;
     }
-    toast.success("Account added");
+    toast.success(runDiscovery ? "Account added — discovery queued" : "Account added");
     setOpen(false);
     setHandle('');
     setUrl('');
     setDisplayName('');
-    setPlatform('instagram');
-    setAccountType('social');
+    setPlatform(defaultPlatform);
+    setAccountType(defaultAccountType);
+    setRunDiscovery(true);
     router.refresh();
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors px-2 py-1 rounded hover:bg-muted/40">
-        <Plus className="h-3.5 w-3.5" /> Add manually
-      </DialogTrigger>
+      {trigger ? (
+        // base-ui's Trigger forwards refs/handlers via the `render` prop
+        // (no `asChild`). React.isValidElement narrows the type so the cast
+        // is safe.
+        <DialogTrigger render={trigger as React.ReactElement} />
+      ) : (
+        <DialogTrigger className="inline-flex items-center gap-1 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors px-2 py-1 rounded hover:bg-muted/40">
+          <Plus className="h-3.5 w-3.5" /> Add manually
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Account Manually</DialogTitle>
@@ -167,6 +202,19 @@ export function AddAccountDialog({ creatorId }: { creatorId: string }) {
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
             />
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              id="run-discovery"
+              type="checkbox"
+              checked={runDiscovery}
+              onChange={(e) => setRunDiscovery(e.target.checked)}
+              className="h-4 w-4 rounded border-neutral-700 bg-neutral-900 text-indigo-500 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer"
+            />
+            <label htmlFor="run-discovery" className="text-sm text-neutral-300 cursor-pointer">
+              Run discovery on this account (find network + monetization)
+            </label>
           </div>
 
           {error && <p className="text-xs text-red-500">{error}</p>}

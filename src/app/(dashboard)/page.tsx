@@ -52,7 +52,7 @@ export default async function CommandCenter() {
           </Card>
         </Link>
 
-        <Link href="/content">
+        <Link href="/scraped-content">
           <Card className="bg-card shadow-sm border-border/50 hover:bg-muted/50 transition-colors cursor-pointer h-full">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Posts Ingested</CardTitle>
